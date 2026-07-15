@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "updated": "2026-07-15T17:55:30Z",
+  "updated": "2026-07-15T18:06:58Z",
   "stage": "C1",
   "completed": [
     "C0"
   ],
-  "next_action": "C1b file-dedupe (sha256 exact + page/size fingerprint + sampled-text fuzzy; work_id; cross-drop tier conflicts) -> C1c classify (kind/year/subject) -> C1 classification-table ⛔",
+  "next_action": "C1c classify (kind + paper YEAR from filename + subject) over 99 canonical works -> C1 classification-table ⛔",
   "sources_seen": {},
   "archives": {
     "Papers.zip": {
@@ -26,7 +26,9 @@
   },
   "batches": [],
   "cursors": {
-    "unpack_pdfs": 107
+    "unpack_pdfs": 107,
+    "canonical_works": 99,
+    "scanned_pdfs": 38
   },
   "blocked_on": null,
   "decisions": {

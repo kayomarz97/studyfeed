@@ -35,3 +35,15 @@ Blueprint weights set from MRCP(UK) Part 1 2026 (Cardiology 14, Clinical science
 ## 2026-07-15T17:55:30Z  [C1a]
 
 **C1a unpack done.** 107 PDFs (Papers 55, Qbank 16, Textbook 36), 2 nested RARs expanded, 5.03GB, 0 issues. TRAP: unar 1.10.1 silently truncated 3 PDFs (incl. an Aug-2022 paper) — installed unrar (RARLAB) and made unpack.py prefer it; all 3 recovered full (461/183/201pp). Logged to PLAYBOOK ledger.
+- subagent `` (add29dceeccd2240e) finished — 277 chars -> work/subagent_results.jsonl
+
+_[session ended: other at 2026-07-15T18:03:38Z]_
+
+_[session ended: other at 2026-07-15T18:03:38Z]_
+
+_[session ended: prompt_input_exit at 2026-07-15T18:03:56Z]_
+- subagent `` (a1f864cbabc0ad2d4) finished — 246 chars -> work/subagent_results.jsonl
+
+## 2026-07-15T18:06:58Z  [C1b]
+
+**C1b file-dedupe done.** 107 files -> 99 canonical works. 8 exact-SHA collapses (papers 27-34 loose+nested identical). 0 fingerprint/fuzzy/cross-drop merges. TRAP: past papers are SCANNED (no text) -> pdftotext empty -> all 34 dated papers falsely merged into 2 by empty fingerprint (would erase PYQ signal). Fixed: scanned files (text<30 words) dedup by exact hash only; content dedup deferred to C5. 38 scanned (37 Papers, 1 Textbook). Logged to ledger.

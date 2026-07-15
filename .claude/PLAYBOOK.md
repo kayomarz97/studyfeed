@@ -319,3 +319,13 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   `unrar x -o+ -inul` for `.rar`, falling back to `unar` only if `unrar` is absent. After extracting
   any archive, verify a sample file's on-disk size equals the archive's stated size and that
   `pdfinfo` opens it. (seen 1x)
+
+- **2026-07 · Text-based file-dedup is BLIND to scanned PDFs — never merge text-empty files except by
+  exact hash.** At C1b the past papers are scanned images (0 chars, 0 fonts); `pdftotext` returned
+  empty for every page, so all 34 dated papers shared one identical empty fingerprint and merged into
+  2 "works" — which would have wiped out the entire PYQ signal (the heaviest weight). Sampling
+  *content* pages instead of cover pages did NOT help (still image, still empty).
+  **Fix/prevention:** flag a file `scanned` when sampled text < 30 words; scanned files may be deduped
+  ONLY by exact SHA-256, never by fingerprint or fuzzy Jaccard. Content-level dedup for them is
+  deferred to post-OCR clustering (C5). Check `pdffonts` / a page char-count before trusting any
+  text-based comparison of PDFs. (seen 1x)
