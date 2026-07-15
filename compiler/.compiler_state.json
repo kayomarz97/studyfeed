@@ -1,9 +1,11 @@
 {
   "schema": 1,
-  "updated": "2026-07-15T17:05:29Z",
-  "stage": "C0",
-  "completed": [],
-  "next_action": "spec files (SPEC/schema/manifest/SCORING) + mrcp_part1.yaml + compiler scaffold + 27 agents + CLAUDE.md/INDEX; then C1",
+  "updated": "2026-07-15T17:20:23Z",
+  "stage": "C1",
+  "completed": [
+    "C0"
+  ],
+  "next_action": "C0 GATE: user confirms first push to kayomarz/private + FSRS/blueprint decisions; then C1 unpack->file-dedupe->classify",
   "sources_seen": {},
   "archives": {
     "Papers.zip": {
@@ -24,12 +26,14 @@
   },
   "batches": [],
   "cursors": {},
-  "blocked_on": null,
+  "blocked_on": "C0 approval gate: (1) confirm first push to private GitHub; (2) FSRS lib choice; (3) blueprint weights source",
   "decisions": {
     "git_remote": "kayomarz/private (create + push dev after secret-scan)",
     "drop_mapping": "confirmed: Papers.zip=past_paper T1, Qbank.rar=qbank T2, Textbook.zip=textbook/pearls/ref T3-4",
     "part2_scope": "defer_to_C2 (Passmedicine High-Yield covers Part 1 & 2)",
-    "max_expanded_gb": 25
+    "max_expanded_gb": 25,
+    "fsrs_lib": "PENDING: BUILD_PROMPT suggests vendoring FSRS-Kotlin but docs-research found it broken; recommend io.github.open-spaced-repetition:fsrs:1.0.0 (Java port, MIT, Kotlin-usable)",
+    "blueprint_weights": "PENDING: Federation Part 1 weights not fetched; using uniform fallback (flagged)"
   },
   "token_spend_estimate_usd": 0.0
 }
