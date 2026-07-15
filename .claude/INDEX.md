@@ -35,7 +35,8 @@ imports and renders offline. Everything exam-specific lives in the profile → p
 | `compiler/studyfeed_compiler/state.py` | **Sole writer** of `.compiler_state.json` (atomic) + JOURNAL appender. |
 | `compiler/studyfeed_compiler/config.py` | Loads a profile → typed access + paths + Batch-API model routing. |
 | `compiler/studyfeed_compiler/importance.py` | The scoring engine (deterministic; per SCORING.md). *stub → C9.* |
-| `compiler/studyfeed_compiler/*.py` | Stage modules (unpack, filededupe, scriptfilter, cluster, pyq, graph, dossier, …). *stubs.* |
+| `compiler/studyfeed_compiler/{unpack,filededupe,classify}.py` | **C1 ingest — implemented.** Recursive unpack (prefer `unrar`), file-dedupe (scanned = hash-only), classify (kind/year/subject). |
+| `compiler/studyfeed_compiler/*.py` | Other stage modules (scriptfilter, cluster, pyq, graph, importance, dossier, …). *stubs.* |
 | `compiler/studyfeed_compiler/{ingest,highlights,generators}/` | Extractors / highlight harvest / asset generators. *stubs.* |
 | `compiler/.compiler_state.json` | Machine resume truth: stage, next_action, decisions, archive hashes, batch IDs. Committed. |
 | `.claude/agents/*.md` | 27 subagent defs + model routing (haiku mechanics / sonnet compiles / opus judges). |

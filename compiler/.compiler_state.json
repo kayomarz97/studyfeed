@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "updated": "2026-07-15T18:06:58Z",
+  "updated": "2026-07-15T18:11:34Z",
   "stage": "C1",
   "completed": [
     "C0"
   ],
-  "next_action": "C1c classify (kind + paper YEAR from filename + subject) over 99 canonical works -> C1 classification-table ⛔",
+  "next_action": "C1 GATE: user confirms classification table (exclude Arabic intro; Palliative/Ophthalmology folds; textbook-vs-pearls kinds; reliability=recall). Then C2 zone+extract+OCR.",
   "sources_seen": {},
   "archives": {
     "Papers.zip": {
@@ -28,9 +28,10 @@
   "cursors": {
     "unpack_pdfs": 107,
     "canonical_works": 99,
-    "scanned_pdfs": 38
+    "scanned_pdfs": 38,
+    "classified_works": 99
   },
-  "blocked_on": null,
+  "blocked_on": "C1 classification-table gate: 4 decisions (Arabic file, subject folds, textbook kinds, paper reliability)",
   "decisions": {
     "git_remote": "kayomarz97/studyfeed (private); dev pushed, main is user-merged",
     "drop_mapping": "confirmed: Papers.zip=past_paper T1, Qbank.rar=qbank T2, Textbook.zip=textbook/pearls/ref T3-4",

@@ -47,3 +47,7 @@ _[session ended: prompt_input_exit at 2026-07-15T18:03:56Z]_
 ## 2026-07-15T18:06:58Z  [C1b]
 
 **C1b file-dedupe done.** 107 files -> 99 canonical works. 8 exact-SHA collapses (papers 27-34 loose+nested identical). 0 fingerprint/fuzzy/cross-drop merges. TRAP: past papers are SCANNED (no text) -> pdftotext empty -> all 34 dated papers falsely merged into 2 by empty fingerprint (would erase PYQ signal). Fixed: scanned files (text<30 words) dedup by exact hash only; content dedup deferred to C5. 38 scanned (37 Papers, 1 Textbook). Logged to ledger.
+
+## 2026-07-15T18:11:34Z  [C1c]
+
+**C1c classify done.** 99 works: 47 past_paper (years 2015-2026, 2 undated), 16 qbank (subjects mapped; Palliative->Geriatric, Ophthalmology->Neurology folds flagged), 36 textbook (32 textbook + 4 pearls). Flags: 1-page Arabic intro (مقدمة) to exclude; 'Sample Questions' undated; Jan-2026 recall (recent, has key). At C1 gate.
