@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "updated": "2026-07-15T17:35:11Z",
+  "updated": "2026-07-15T17:55:30Z",
   "stage": "C1",
   "completed": [
     "C0"
   ],
-  "next_action": "C0 GATE: user confirms first push to kayomarz/private + FSRS/blueprint decisions; then C1 unpack->file-dedupe->classify",
+  "next_action": "C1b file-dedupe (sha256 exact + page/size fingerprint + sampled-text fuzzy; work_id; cross-drop tier conflicts) -> C1c classify (kind/year/subject) -> C1 classification-table ⛔",
   "sources_seen": {},
   "archives": {
     "Papers.zip": {
@@ -25,7 +25,9 @@
     }
   },
   "batches": [],
-  "cursors": {},
+  "cursors": {
+    "unpack_pdfs": 107
+  },
   "blocked_on": null,
   "decisions": {
     "git_remote": "kayomarz97/studyfeed (private); dev pushed, main is user-merged",

@@ -310,3 +310,12 @@ Maintained by the **`mistake-tracker`** agent. Entry shape:
 
 Cross-project lessons go to `~/.claude/MISTAKES.md` instead. Any entry reaching `(seen 2x)`
 gets promoted to a one-line rule in this repo's `CLAUDE.md`.
+
+- **2026-07 · Use `unrar` for RAR5 extraction, not `unar`/libarchive.** At C1a, `unar` 1.10.1 (and
+  libarchive) **silently truncated 3 PDFs mid-file** (`unar rc=1: "attempted to read more data than
+  was available"`) — including a recent Aug-2022 past paper — leaving valid-looking but incomplete
+  files. `unar` read the RAR5 *listing* fine at C0, which masked the *extraction* bug.
+  **Fix/prevention:** `apt install unrar` (multiverse, RARLAB reference); `unpack.py` now prefers
+  `unrar x -o+ -inul` for `.rar`, falling back to `unar` only if `unrar` is absent. After extracting
+  any archive, verify a sample file's on-disk size equals the archive's stated size and that
+  `pdfinfo` opens it. (seen 1x)

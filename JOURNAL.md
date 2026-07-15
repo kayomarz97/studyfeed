@@ -23,3 +23,15 @@
 ## 2026-07-15T17:35:11Z  [C0]
 
 Blueprint weights set from MRCP(UK) Part 1 2026 (Cardiology 14, Clinical sciences 25, Clinical pharm 15, Neuro+ophth 18, Haem+onc 15, Geriatric+pall 12, ...; sum=200), cross-checked vs Federation anchors. BUILD_PROMPT FSRS line corrected to java-fsrs 1.0.0.
+
+## 2026-07-15T17:37:14Z  [C0->C1]
+
+**C0 COMPLETE + pushed** (kayomarz97/studyfeed, dev). Foundation: durability (proven), spec contract, validated profile w/ 2026 blueprint weights, compiler scaffold, 27 agents, PLAYBOOK API notes. 9 commits. Ready for C1 (the ranking-critical unpack->dedupe->classify stage).
+- subagent `` (a33e2614a9d25be27) finished — 2 chars -> work/subagent_results.jsonl
+- subagent `secret-scanner` (aec5c8a194eec42c0) finished — 1754 chars -> work/subagent_results.jsonl
+- subagent `` (a23c55b13b02fd4c6) finished — 19 chars -> work/subagent_results.jsonl
+- subagent `` (afecca0c364c9aea0) finished — 255 chars -> work/subagent_results.jsonl
+
+## 2026-07-15T17:55:30Z  [C1a]
+
+**C1a unpack done.** 107 PDFs (Papers 55, Qbank 16, Textbook 36), 2 nested RARs expanded, 5.03GB, 0 issues. TRAP: unar 1.10.1 silently truncated 3 PDFs (incl. an Aug-2022 paper) — installed unrar (RARLAB) and made unpack.py prefer it; all 3 recovered full (461/183/201pp). Logged to PLAYBOOK ledger.

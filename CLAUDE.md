@@ -1,4 +1,4 @@
-# CLAUDE.md — Working Agreement for {{PROJECT_NAME}}
+# CLAUDE.md — Working Agreement for StudyFeed
 
 > The rules Claude Code follows **every session** in this repo. Kept short on purpose: a long
 > file gets half-ignored. This complements the global `~/.claude/CLAUDE.md` (plan-first,
