@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "updated": "2026-07-15T19:42:43Z",
-  "stage": "C2",
+  "updated": "2026-07-15T20:44:56Z",
+  "stage": "C2-done",
   "completed": [
     "C0"
   ],
-  "next_action": "C2 EXTRACTION RUNNING in background (bg task; ~1.5h; checkpointed to compiler/work/extracted/; 15/98 done). RESUME: (1) cd compiler; run `ls work/extracted/*.jsonl | wc -l` vs 98; if <98 AND no 'ingest.extract all' process alive (pgrep -f 'ingest.extract all'), re-run `PYTHONPATH=compiler .venv/bin/python -m studyfeed_compiler.ingest.extract all` (idempotent — skips done works). (2) When 98/98 -> C2a: zone the PROSE sources (pearls+textbook) with bookusage.py (propose body_start_page = roman->arabic flip / 'Chapter 1' / TOC end, §5i front-matter trap; scan back_matter for MCQ banks) -- papers+qbank are pure MCQ, skip prose zoning. ROUTING: papers(46)+qbank(16) -> MCQ-parse (parser-mcqbank); pearls(20)+textbook(16) prose -> atomize (Batch API §10d). Then C3 highlights, C4 atomize+ground(GATE), C5 cluster(GATE), C6 PYQ(GATE), C8 graph(GATE), C9 importance(GATE), C11 gen(BUDGET GATE). Spec: BUILD_PROMPT.md §7.",
+  "next_action": "C2 EXTRACTION COMPLETE (98/98, 43165pp, 70M chars, work/extracted/*.jsonl). NEXT = first TOKEN spend -> BUDGET GATE (§10e). Route: past_paper+qbank -> MCQ-parse (parser-mcqbank, Sonnet); pearls+textbook prose -> atomize (Haiku). Before that: light zoning to skip front-matter of the few real textbooks (Step to MRCP / Essential Revision Notes / The Only MRCP Notes). AWAITING user budget approval for atomization+MCQ-parse. Then C4 ground(GATE), C5 cluster(GATE)...",
   "sources_seen": {},
   "archives": {
     "Papers.zip": {
@@ -32,10 +32,12 @@
     "classified_works": 99,
     "extract_scanned_pages": 8961,
     "extract_workers": 4,
-    "extract_done": 15,
-    "extract_total": 98
+    "extract_done": 98,
+    "extract_total": 98,
+    "total_pages": 43165,
+    "total_chars": 70556580
   },
-  "blocked_on": null,
+  "blocked_on": "BUDGET GATE (§10e): approve token spend for atomization + MCQ-parsing (first paid stage) before it runs",
   "decisions": {
     "git_remote": "kayomarz97/studyfeed (private); dev pushed, main is user-merged",
     "drop_mapping": "confirmed: Papers.zip=past_paper T1, Qbank.rar=qbank T2, Textbook.zip=textbook/pearls/ref T3-4",

@@ -82,3 +82,7 @@ MISTAKE (documented in full, per user request; also in PLAYBOOK ledger, seen 1x)
 - LESSON: same filename != same file across drops. Verify the exact path (not the name); the pipeline is path-qualified, spot-checks must be too.
 
 RESUME PATH: see .compiler_state.json next_action. In short: wait for/confirm extraction 98/98 (re-run idempotently if the bg process died), then C2a zoning of prose sources -> route MCQ sources to MCQ-parse and prose to atomize -> C3..C13 per BUILD_PROMPT §7. All ⛔ gates still apply.
+
+## 2026-07-15T20:44:56Z  [C2-done]
+
+**C2 extraction COMPLETE.** 98/98 works, 43,165 pages (9034 OCR + 34131 text), ~70M chars, 0 empty/failed, 91 script-drop spans. Next is the first token-spending stage (atomize prose + MCQ-parse) -> BUDGET GATE per §10e; awaiting approval.
