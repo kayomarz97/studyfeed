@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-07-15T19:05:39Z",
+  "updated": "2026-07-15T19:37:32Z",
   "stage": "C2",
   "completed": [
     "C0"
@@ -45,8 +45,8 @@
     "subject_taxonomy": "16 subjects — Palliative medicine + Ophthalmology kept SEPARATE; Oncology folded into Haematology (no distinct file); sum=200",
     "paper_reliability": "recall (default); printed keys still get qbank-trust per §5a",
     "textbook_kinds": "accepted: 4 pearls + 32 textbook",
-    "papers_are_pastest": "Papers = Pastest qbank-platform screenshots WITH answers+explanations+peer-stats (~2pp/question, curated keys). User set Tier1 past_paper/recall at C1. NOTE@C9: confirm Tier-1 intent given qbank-platform origin.",
-    "textbook_nsubject_are_qbank": "Textbook 'N-Subject.pdf' files are Passmedicine qbank exports (Q+A), not prose (classified textbook T3). PENDING: reclassify to qbank T2? MCQs extract+key correctly either way (§5a). Impact ~5% S_tier."
+    "papers_are_pastest": "VERIFIED: Papers = Pastest review screenshots WITH answer+explanation (~2pp/Q). Tier 1 past_paper/recall CONFIRMED; key-bearing curated MCQs (§5a qbank key trust).",
+    "textbook_nsubject_are_qbank": "CORRECTED (my earlier smoke conflated same-named Qbank file): Textbook 'N-Subject' files are Passmedicine High-Yield TEXTBOOK (PROSE), NOT qbank. Reclassified textbook->PEARLS (17 High-Yield files). NOT qbank."
   },
   "token_spend_estimate_usd": 0.0
 }

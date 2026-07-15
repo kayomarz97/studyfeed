@@ -130,7 +130,10 @@ def run(cfg: Config) -> dict[str, Any]:
                 flags.append("subject-fold-confirm")
             conf = "high"
         else:  # Textbook — mixed tier 3/4, classify per file
-            kind, conf = _textbook_kind(name)
+            if "high yield" in (c.get("path", "") or "").lower():
+                kind, conf = "pearls", "high"   # Passmedicine High-Yield Textbook = high-yield PROSE (§7 C1c)
+            else:
+                kind, conf = _textbook_kind(name)
             subject, fold = _map_subject(_extract_subject_str(name) or name)
             if fold:
                 flags.append("subject-fold-confirm")

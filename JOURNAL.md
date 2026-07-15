@@ -59,3 +59,8 @@ _[session ended: prompt_input_exit at 2026-07-15T18:03:56Z]_
 ## 2026-07-15T19:05:39Z  [C2]
 
 **C2 smoke PASSED + full extraction launched.** PyMuPDF text + tesseract OCR both clean. Toolchain: pymupdf/pillow/pyyaml in uv venv (py3.14). OCR tuned 16.8->0.77s/pg (fixed-width render + fork ctx + OMP=1). Full run: 98 works, 8961 OCR pages (~2h), 34204 text pages, checkpointed per work. Findings: most content is Passmedicine/Pastest MCQ-format (Q+A+peer-stats) across all drops; flagged tier notes for C9. Extraction running in background.
+- subagent `` (a6a704cffb25cff20) finished — 68 chars -> work/subagent_results.jsonl
+
+## 2026-07-15T19:37:32Z  [C1-fix]
+
+**C1 classification corrected at user's confirm.** (1) VERIFIED: Papers=Pastest MCQs w/ keys, Tier 1 recall stays. (2) I was WRONG re qbank: Textbook 'N-Subject' files are the Passmedicine High-Yield TEXTBOOK (prose: 'Heart sounds: S1...'), 0 question-markers vs Qbank copy's 38. Caught by drop-qualified pdftotext before changing. Reclassified 16 High-Yield files textbook->pearls (consistent w/ combined). Logged to ledger.

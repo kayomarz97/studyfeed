@@ -339,3 +339,12 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   `OMP_THREAD_LIMIT=1` in the subprocess env so N workers = N threads = N cores.
   **Fix/prevention:** fixed-width render + fork context + `OMP_THREAD_LIMIT=1` → 0.77 s/pg on 4 cores
   (from 16.8). (seen 1x)
+
+- **2026-07 · Same filename ≠ same file across drops — verify the SPECIFIC drop's path, not the name.**
+  `16-Clinical Science.pdf` exists in BOTH the Qbank drop (Passmedicine *questions*) and the Textbook
+  drop (Passmedicine High-Yield *Textbook* prose). A name-keyed smoke resolver grabbed the Qbank copy,
+  so I reported the Textbook "N-Subject" files as "qbank exports" and nearly reclassified 16 prose
+  textbook files to qbank (would have corrupted tiers + routed prose to MCQ-parsing).
+  **Fix/prevention:** the pipeline is path-qualified — spot-checks must be too. Before changing a
+  same-named file's classification, `pdftotext` the exact `dedupe_canonicals` path and check for
+  content markers (`Question N of` vs prose). (seen 1x)
