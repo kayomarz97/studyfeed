@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "updated": "2026-07-15T16:57:15Z",
+  "stage": "C0",
+  "completed": [],
+  "next_action": "durability hooks + spec files + scaffold; then C1 unpack/classify",
+  "sources_seen": {},
+  "archives": {
+    "Papers.zip": {
+      "sha256": "721879b8dc0dfa7e50d631237d1d37b624dffa0faa55ffbe1f0da2fc54a90d9c",
+      "size_bytes": 2105951408,
+      "moved_to": "compiler/sources/inbox/Papers.zip"
+    },
+    "Qbank.rar": {
+      "sha256": "877e37e7038c3ba14610b4098d36a2d7b930ac45c61287ba307ccfcd2de0f188",
+      "size_bytes": 608709623,
+      "moved_to": "compiler/sources/inbox/Qbank.rar"
+    },
+    "Textbook.zip": {
+      "sha256": "c37e7b34018ba6b91d63e9db4c7e77b4a0397b281a8b28022bcab67ccc9f3856",
+      "size_bytes": 776530751,
+      "moved_to": "compiler/sources/inbox/Textbook.zip"
+    }
+  },
+  "batches": [],
+  "cursors": {},
+  "blocked_on": null,
+  "decisions": {
+    "git_remote": "kayomarz/private (create + push dev after secret-scan)",
+    "drop_mapping": "confirmed: Papers.zip=past_paper T1, Qbank.rar=qbank T2, Textbook.zip=textbook/pearls/ref T3-4",
+    "part2_scope": "defer_to_C2 (Passmedicine High-Yield covers Part 1 & 2)",
+    "max_expanded_gb": 25
+  },
+  "token_spend_estimate_usd": 0.0
+}
