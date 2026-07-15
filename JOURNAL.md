@@ -86,3 +86,10 @@ RESUME PATH: see .compiler_state.json next_action. In short: wait for/confirm ex
 ## 2026-07-15T20:44:56Z  [C2-done]
 
 **C2 extraction COMPLETE.** 98/98 works, 43,165 pages (9034 OCR + 34131 text), ~70M chars, 0 empty/failed, 91 script-drop spans. Next is the first token-spending stage (atomize prose + MCQ-parse) -> BUDGET GATE per §10e; awaiting approval.
+- subagent `` (a255570c9914a16cb) finished — 33 chars -> work/subagent_results.jsonl
+- subagent `` (adf400ce422863dfb) finished — 23 chars -> work/subagent_results.jsonl
+- subagent `` (a021abc7725725fa0) finished — 18 chars -> work/subagent_results.jsonl
+
+## 2026-07-15T21:06:37Z  [C4]
+
+**Budget gate APPROVED -> LLM ingest started.** User chose Batch API balanced (Haiku atomize / Sonnet MCQ-parse), declined Claude Code tokens. Key in compiler/.env (gitignored, loaded with override). Built llm.py (Batch transport: submit records id BEFORE poll, reconcile by custom_id, cached system prompt, per-request partial-failure). Full eligible: 13802 atomize pages + 6637 answer-bearing mcq pages. Running ~$1 test batch (40 reqs) to verify + measure real cost before full submit.

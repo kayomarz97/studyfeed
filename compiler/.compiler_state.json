@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "updated": "2026-07-15T20:44:56Z",
-  "stage": "C2-done",
+  "updated": "2026-07-15T21:06:37Z",
+  "stage": "C4",
   "completed": [
     "C0"
   ],
-  "next_action": "C2 EXTRACTION COMPLETE (98/98, 43165pp, 70M chars, work/extracted/*.jsonl). NEXT = first TOKEN spend -> BUDGET GATE (§10e). Route: past_paper+qbank -> MCQ-parse (parser-mcqbank, Sonnet); pearls+textbook prose -> atomize (Haiku). Before that: light zoning to skip front-matter of the few real textbooks (Step to MRCP / Essential Revision Notes / The Only MRCP Notes). AWAITING user budget approval for atomization+MCQ-parse. Then C4 ground(GATE), C5 cluster(GATE)...",
+  "next_action": "LLM ingest RUNNING. Test batch bg (40 reqs) -> if PASS auto-submit FULL: ~13802 atomize (Haiku) + ~6637 mcq (Sonnet); Batch SLA ~1h (24h cap). `python -m studyfeed_compiler.llm submit|status|harvest`. Harvest -> work/atoms.jsonl + work/mcqs.jsonl. THEN verify mcq page-coverage (6637 answer-bearing pages — check non-eligible are test-view/nav not missed Qs). Then C5 cluster/corroboration.",
   "sources_seen": {},
   "archives": {
     "Papers.zip": {
@@ -35,9 +35,11 @@
     "extract_done": 98,
     "extract_total": 98,
     "total_pages": 43165,
-    "total_chars": 70556580
+    "total_chars": 70556580,
+    "llm_atomize_reqs": 13802,
+    "llm_mcq_reqs": 6637
   },
-  "blocked_on": "BUDGET GATE (§10e): approve token spend for atomization + MCQ-parsing (first paid stage) before it runs",
+  "blocked_on": null,
   "decisions": {
     "git_remote": "kayomarz97/studyfeed (private); dev pushed, main is user-merged",
     "drop_mapping": "confirmed: Papers.zip=past_paper T1, Qbank.rar=qbank T2, Textbook.zip=textbook/pearls/ref T3-4",
@@ -50,7 +52,8 @@
     "paper_reliability": "recall (default); printed keys still get qbank-trust per §5a",
     "textbook_kinds": "accepted: 4 pearls + 32 textbook",
     "papers_are_pastest": "VERIFIED: Papers = Pastest review screenshots WITH answer+explanation (~2pp/Q). Tier 1 past_paper/recall CONFIRMED; key-bearing curated MCQs (§5a qbank key trust).",
-    "textbook_nsubject_are_qbank": "CORRECTED (my earlier smoke conflated same-named Qbank file): Textbook 'N-Subject' files are Passmedicine High-Yield TEXTBOOK (PROSE), NOT qbank. Reclassified textbook->PEARLS (17 High-Yield files). NOT qbank."
+    "textbook_nsubject_are_qbank": "CORRECTED (my earlier smoke conflated same-named Qbank file): Textbook 'N-Subject' files are Passmedicine High-Yield TEXTBOOK (PROSE), NOT qbank. Reclassified textbook->PEARLS (17 High-Yield files). NOT qbank.",
+    "compute_path": "APPROVED: Batch API — balanced (Haiku atomize, Sonnet MCQ-parse). Key in compiler/.env (gitignored). User declined Claude Code tokens (would risk CC cap)."
   },
   "token_spend_estimate_usd": 0.0
 }
