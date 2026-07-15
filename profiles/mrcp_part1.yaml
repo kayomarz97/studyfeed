@@ -1,7 +1,9 @@
 exam_code: MRCP_PART1
 exam_name: "MRCP(UK) Part 1"
-blueprint_source_url: ""          # TODO(C0): fetch current Federation Part 1 weights; until then weights
-                                  #   are null => uniform fallback (flagged). PYQ+corrob dominate anyway.
+blueprint_source_url: "https://www.thefederation.uk/examinations/part-1/format"   # 2026 blueprint.
+                                  # Counts below via studymrcp mirror, cross-checked against Federation
+                                  # anchors (Clinical sciences 25, Clinical pharmacology 15, big-four 14);
+                                  # sums to exactly 200. Normalized at scoring (S_blueprint, 7%).
 mcq_style: best_of_five
 negative_marking: false
 
@@ -110,23 +112,25 @@ zoning:                            # §5i — the front-matter example trap
 # NOTE(part2_scope): the Passmedicine High-Yield textbook covers MRCP Part 1 AND Part 2.
 #   Decision DEFERRED to C2 (see .compiler_state.json decisions) — show structure, then decide.
 
-subjects:                          # fallback taxonomy; real weights filled from blueprint at C0
-  - {name: "Cardiology", weight: null}
-  - {name: "Clinical sciences", weight: null,
+subjects:                          # weight = MRCP(UK) Part 1 question count (out of 200); sums to 200.
+                                   # Provisional folds (CONFIRM at C1): Oncology 5 -> Haematology;
+                                   # Palliative 4 -> Geriatric medicine; Ophthalmology 4 -> Neurology.
+  - {name: "Cardiology", weight: 14}
+  - {name: "Clinical sciences", weight: 25,
      subtopics: ["clinical anatomy","biochemistry & metabolism","physiology",
                  "cell & molecular biology","genetics","immunology","statistics & EBM"]}
-  - {name: "Clinical pharmacology, therapeutics & toxicology", weight: null}
-  - {name: "Dermatology", weight: null}
-  - {name: "Endocrinology", weight: null}
-  - {name: "Gastroenterology & hepatology", weight: null}
-  - {name: "Geriatric medicine", weight: null}
-  - {name: "Haematology", weight: null}
-  - {name: "Infectious diseases (incl. GUM/HIV)", weight: null}
-  - {name: "Nephrology", weight: null}
-  - {name: "Neurology (incl. ophthalmology)", weight: null}
-  - {name: "Psychiatry", weight: null}
-  - {name: "Respiratory medicine", weight: null}
-  - {name: "Rheumatology", weight: null}
+  - {name: "Clinical pharmacology, therapeutics & toxicology", weight: 15}
+  - {name: "Dermatology", weight: 8}
+  - {name: "Endocrinology", weight: 14}
+  - {name: "Gastroenterology & hepatology", weight: 14}
+  - {name: "Geriatric medicine", weight: 12}          # geriatrics 8 + palliative 4 (provisional)
+  - {name: "Haematology", weight: 15}                 # haematology 10 + oncology 5 (provisional)
+  - {name: "Infectious diseases (incl. GUM/HIV)", weight: 14}
+  - {name: "Nephrology", weight: 14}
+  - {name: "Neurology (incl. ophthalmology)", weight: 18}   # neurology 14 + ophthalmology 4
+  - {name: "Psychiatry", weight: 9}
+  - {name: "Respiratory medicine", weight: 14}
+  - {name: "Rheumatology", weight: 14}
 # Qbank.rar ships 16 subject-wise files. 14 map cleanly (Ophthalmology -> Neurology per taxonomy).
 #   TWO need a human call at C1: "Palliative Medicine" (no distinct Part-1 blueprint subject) and how
 #   granular to keep "Clinical Science"/"Pharmacology". Surfaced at the C1 ⛔ — not guessed here.

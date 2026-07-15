@@ -11,3 +11,15 @@
 ## 2026-07-15T17:20:23Z  [C0]
 
 **C0 scaffold complete.** spec/ contract (schema.sql+SPEC+manifest.schema+SCORING), profiles/mrcp_part1.yaml (validated Σ|w|=1.0), compiler scaffold (config+run DAG+28 module stubs), 27 agents (haiku6/sonnet18/opus3), durability proven, PLAYBOOK API notes recorded. FSRS-Kotlin found broken -> recommend java-fsrs 1.0.0. Blueprint weights on uniform fallback. Next: C0 gate (confirm push) -> C1.
+- subagent `secret-scanner` (afde4cad6defbca19) finished — 6934 chars -> work/subagent_results.jsonl
+
+## 2026-07-15T17:30:29Z  [C0]
+
+**C0 gate approved.** Private remote kayomarz97/studyfeed created; dev pushed (main absent, user-merged). Secret-scan CLEAN (0 secrets, 0 copyrighted artifacts in tree/history). Decisions: FSRS=java-fsrs 1.0.0 (FSRS-Kotlin broken, BUILD_PROMPT line corrected); blueprint=fetch official weights now.
+- subagent `` (a0ab00ad3d08b5b61) finished — 28 chars -> work/subagent_results.jsonl
+- subagent `` (a8c1ffda5c78909ca) finished — 33 chars -> work/subagent_results.jsonl
+- subagent `` (a1686b1640fc22459) finished — 33 chars -> work/subagent_results.jsonl
+
+## 2026-07-15T17:35:11Z  [C0]
+
+Blueprint weights set from MRCP(UK) Part 1 2026 (Cardiology 14, Clinical sciences 25, Clinical pharm 15, Neuro+ophth 18, Haem+onc 15, Geriatric+pall 12, ...; sum=200), cross-checked vs Federation anchors. BUILD_PROMPT FSRS line corrected to java-fsrs 1.0.0.
