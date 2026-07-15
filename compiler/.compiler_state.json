@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "updated": "2026-07-15T16:57:15Z",
+  "updated": "2026-07-15T17:05:29Z",
   "stage": "C0",
   "completed": [],
-  "next_action": "durability hooks + spec files + scaffold; then C1 unpack/classify",
+  "next_action": "spec files (SPEC/schema/manifest/SCORING) + mrcp_part1.yaml + compiler scaffold + 27 agents + CLAUDE.md/INDEX; then C1",
   "sources_seen": {},
   "archives": {
     "Papers.zip": {
