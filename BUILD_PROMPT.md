@@ -940,8 +940,11 @@ Compose Canvas for the concept map, DataStore for settings. No network libs, no 
   - Manifest: **no INTERNET permission**; **no services, no WorkManager/JobScheduler, no boot receiver,
     no alarms, no wake locks.** CI/lint check fails the build if a networking dep/permission or a
     background component appears.
-  - FSRS-6 dep: resolve `io.github.open-spaced-repetition:fsrs` (Maven Central) or vendor
-    `FSRS-Kotlin`; pin the version; one unit test scheduling Again/Hard/Good/Easy.
+  - FSRS-6 dep: use `io.github.open-spaced-repetition:fsrs:1.0.0` (Maven Central — the MIT-licensed
+    Java port, fully usable from Kotlin; verified 2026-07-15). ⚠ Do NOT vendor the `FSRS-Kotlin`
+    repo — it is broken, uncompilable app code (imports classes from an unrelated app). See
+    `.claude/PLAYBOOK.md` API notes. Pin the version; one unit test scheduling Again/Hard/Good/Easy.
+    Java `record` interop: call `result.card()` / `result.reviewLog()` as methods, not properties.
 - **A1 · Pack loading = generic.** Import via SAF; read `pack_manifest` and **build the UI config from
   it** (exam name in app bar, subject filters, tag chips from `tag_defs`). Per-exam progress DB, never
   overwritten. "Switch exam" screen lists imported packs.
