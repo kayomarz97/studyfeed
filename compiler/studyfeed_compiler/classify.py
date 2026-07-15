@@ -25,8 +25,8 @@ _KIND_TIER = {
 
 # subject keyword -> canonical profile subject (+ provisional folds flagged separately)
 _SUBJECT_MAP = [
-    ("cardio", "Cardiology"), ("neuro", "Neurology (incl. ophthalmology)"),
-    ("ophthal", "Neurology (incl. ophthalmology)"),  # fold (provisional)
+    ("cardio", "Cardiology"), ("neuro", "Neurology"),
+    ("ophthal", "Ophthalmology"),  # kept separate (confirmed at C1)
     ("respir", "Respiratory medicine"), ("respi", "Respiratory medicine"), ("rheum", "Rheumatology"),
     ("nephro", "Nephrology"), ("renal", "Nephrology"),
     ("haemat", "Haematology"), ("hemat", "Haematology"), ("oncol", "Haematology"),  # onc fold
@@ -35,13 +35,13 @@ _SUBJECT_MAP = [
     ("endocrin", "Endocrinology"), ("diabet", "Endocrinology"),
     ("infect", "Infectious diseases (incl. GUM/HIV)"), ("gum", "Infectious diseases (incl. GUM/HIV)"),
     ("psychiat", "Psychiatry"), ("geriatr", "Geriatric medicine"),
-    ("palliat", "Geriatric medicine"),  # fold (provisional)
+    ("palliat", "Palliative medicine"),  # kept separate (confirmed at C1)
     ("derma", "Dermatology"), ("pharma", "Clinical pharmacology, therapeutics & toxicology"),
     ("toxic", "Clinical pharmacology, therapeutics & toxicology"),
     ("clinical sci", "Clinical sciences"), ("cli sci", "Clinical sciences"),
     ("clin sci", "Clinical sciences"), ("basic sci", "Clinical sciences"), ("statistic", "Clinical sciences"),
 ]
-_FOLD_KEYWORDS = ("ophthal", "oncol", "palliat")  # provisional folds -> must confirm at C1
+_FOLD_KEYWORDS = ("oncol",)  # only Oncology stays folded (into Haematology; no distinct onc file)
 
 _MONTHS = "jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec"
 _PEARLS_CUES = ("high yield", "high-yield", "highyield", "pearl", "commonly tested", "essential",
@@ -92,12 +92,26 @@ def _textbook_kind(name: str) -> tuple[str, str]:
     return "textbook", "low"
 
 
+def _is_nonlatin_name(name: str) -> bool:
+    """True if the filename is dominated by Arabic/Bengali script (excluded per §5g, confirmed at C1)."""
+    stem = name.rsplit(".", 1)[0]
+    latin = sum(1 for c in stem if c.isascii() and c.isalpha())
+    nonlatin = sum(1 for c in stem if "؀" <= c <= "ۿ" or "ঀ" <= c <= "৿" or "ݐ" <= c <= "ݿ")
+    return nonlatin > 0 and latin < 3
+
+
 def run(cfg: Config) -> dict[str, Any]:
     canon = [json.loads(l) for l in open(WORK_DIR / "dedupe_canonicals.jsonl", encoding="utf-8")]
     rows: list[dict] = []
     for c in canon:
         drop, name = c["drop"], c["name"]
         flags: list[str] = []
+        if _is_nonlatin_name(name):  # excluded per §5g (confirmed at C1) — not atomized
+            rows.append({"work_id": c["work_id"], "drop": drop, "name": name, "pages": c["pages"],
+                         "scanned": c.get("scanned", False), "kind": "excluded", "tier": None,
+                         "tier_weight": None, "reliability": None, "subject": None, "year": None,
+                         "year_source": None, "confidence": "n/a", "flags": ["non-latin-excluded"]})
+            continue
         year, year_src = None, None
         subject, fold = None, False
 

@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "updated": "2026-07-15T18:11:34Z",
-  "stage": "C1",
+  "updated": "2026-07-15T18:34:28Z",
+  "stage": "C2",
   "completed": [
     "C0"
   ],
-  "next_action": "C1 GATE: user confirms classification table (exclude Arabic intro; Palliative/Ophthalmology folds; textbook-vs-pearls kinds; reliability=recall). Then C2 zone+extract+OCR.",
+  "next_action": "C2: uv sync (Docling/PyMuPDF, heavy) -> 1-PDF smoke test -> zone (body_start_page) + mine usage conventions + back-matter MCQ scan (C2a ⛔) -> extract + OCR (scanned papers) + script-filter (C2b ⛔)",
   "sources_seen": {},
   "archives": {
     "Papers.zip": {
@@ -31,14 +31,18 @@
     "scanned_pdfs": 38,
     "classified_works": 99
   },
-  "blocked_on": "C1 classification-table gate: 4 decisions (Arabic file, subject folds, textbook kinds, paper reliability)",
+  "blocked_on": null,
   "decisions": {
     "git_remote": "kayomarz97/studyfeed (private); dev pushed, main is user-merged",
     "drop_mapping": "confirmed: Papers.zip=past_paper T1, Qbank.rar=qbank T2, Textbook.zip=textbook/pearls/ref T3-4",
     "part2_scope": "defer_to_C2 (Passmedicine High-Yield covers Part 1 & 2)",
     "max_expanded_gb": 25,
     "fsrs_lib": "io.github.open-spaced-repetition:fsrs:1.0.0 (Java port, MIT, Kotlin-usable). FSRS-Kotlin repo broken — do not vendor.",
-    "blueprint_weights": "set from 2026 Federation Part 1 blueprint (sum=200); folds Oncology->Haem, Palliative->Geriatric, Ophthalmology->Neuro are PROVISIONAL, confirm at C1"
+    "blueprint_weights": "set from 2026 Federation Part 1 blueprint (sum=200); folds Oncology->Haem, Palliative->Geriatric, Ophthalmology->Neuro are PROVISIONAL, confirm at C1",
+    "arabic_file": "EXCLUDED (مقدمة, 1-page non-latin intro)",
+    "subject_taxonomy": "16 subjects — Palliative medicine + Ophthalmology kept SEPARATE; Oncology folded into Haematology (no distinct file); sum=200",
+    "paper_reliability": "recall (default); printed keys still get qbank-trust per §5a",
+    "textbook_kinds": "accepted: 4 pearls + 32 textbook"
   },
   "token_spend_estimate_usd": 0.0
 }

@@ -51,3 +51,7 @@ _[session ended: prompt_input_exit at 2026-07-15T18:03:56Z]_
 ## 2026-07-15T18:11:34Z  [C1c]
 
 **C1c classify done.** 99 works: 47 past_paper (years 2015-2026, 2 undated), 16 qbank (subjects mapped; Palliative->Geriatric, Ophthalmology->Neurology folds flagged), 36 textbook (32 textbook + 4 pearls). Flags: 1-page Arabic intro (مقدمة) to exclude; 'Sample Questions' undated; Jan-2026 recall (recent, has key). At C1 gate.
+
+## 2026-07-15T18:34:28Z  [C1]
+
+**C1 COMPLETE (gate approved).** Decisions: exclude Arabic intro; Palliative+Ophthalmology kept SEPARATE (16-subject taxonomy, sum=200); textbook kinds accepted (4 pearls/32 textbook); reliability=recall. Final: 98 active works (46 past_paper 2015-2026, 16 qbank, 36 textbook/pearls) + 1 excluded. Next: C2 extract/OCR.

@@ -113,8 +113,8 @@ zoning:                            # §5i — the front-matter example trap
 #   Decision DEFERRED to C2 (see .compiler_state.json decisions) — show structure, then decide.
 
 subjects:                          # weight = MRCP(UK) Part 1 question count (out of 200); sums to 200.
-                                   # Provisional folds (CONFIRM at C1): Oncology 5 -> Haematology;
-                                   # Palliative 4 -> Geriatric medicine; Ophthalmology 4 -> Neurology.
+                                   # Palliative + Ophthalmology kept SEPARATE (confirmed at C1). Oncology 5
+                                   # stays folded into Haematology (no distinct Oncology source file).
   - {name: "Cardiology", weight: 14}
   - {name: "Clinical sciences", weight: 25,
      subtopics: ["clinical anatomy","biochemistry & metabolism","physiology",
@@ -123,11 +123,13 @@ subjects:                          # weight = MRCP(UK) Part 1 question count (ou
   - {name: "Dermatology", weight: 8}
   - {name: "Endocrinology", weight: 14}
   - {name: "Gastroenterology & hepatology", weight: 14}
-  - {name: "Geriatric medicine", weight: 12}          # geriatrics 8 + palliative 4 (provisional)
-  - {name: "Haematology", weight: 15}                 # haematology 10 + oncology 5 (provisional)
+  - {name: "Geriatric medicine", weight: 8}
+  - {name: "Haematology", weight: 15}                 # haematology 10 + oncology 5 (no distinct onc file)
   - {name: "Infectious diseases (incl. GUM/HIV)", weight: 14}
   - {name: "Nephrology", weight: 14}
-  - {name: "Neurology (incl. ophthalmology)", weight: 18}   # neurology 14 + ophthalmology 4
+  - {name: "Neurology", weight: 14}
+  - {name: "Ophthalmology", weight: 4}
+  - {name: "Palliative medicine", weight: 4}
   - {name: "Psychiatry", weight: 9}
   - {name: "Respiratory medicine", weight: 14}
   - {name: "Rheumatology", weight: 14}
