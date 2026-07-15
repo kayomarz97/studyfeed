@@ -1,0 +1,49 @@
+# ── copyrighted source + anything derived from it ──
+# Archives are dropped at the PROJECT ROOT. These patterns MUST exist before the first commit —
+# a zip committed once lives in git history forever and rewriting history later is miserable.
+*.zip
+*.rar
+*.r00
+*.7z
+*.tar
+*.tar.gz
+*.cbz
+*.epub
+*.djvu
+compiler/sources/
+compiler/sources/inbox/
+compiler/work/
+compiler/dist/
+**/quarantine.jsonl
+*.pdf
+
+# ── build artifacts ──
+*.apk
+*.aab
+app/build/
+.gradle/
+local.properties
+
+# ── signing: losing these is bad, committing them is worse ──
+*.jks
+*.keystore
+keystore.properties
+
+# ── env / secrets ──
+.env
+*.env
+**/.anthropic_key
+
+# ── python ──
+__pycache__/
+.venv/
+*.egg-info/
+
+# ── misc ──
+.DS_Store
+Thumbs.db
+# atomic-write temp files for the state file
+compiler/.compiler_state.*.tmp
+
+# keep the state file — it has cursors and hashes, no content
+!compiler/.compiler_state.json
