@@ -93,3 +93,23 @@ RESUME PATH: see .compiler_state.json next_action. In short: wait for/confirm ex
 ## 2026-07-15T21:06:37Z  [C4]
 
 **Budget gate APPROVED -> LLM ingest started.** User chose Batch API balanced (Haiku atomize / Sonnet MCQ-parse), declined Claude Code tokens. Key in compiler/.env (gitignored, loaded with override). Built llm.py (Batch transport: submit records id BEFORE poll, reconcile by custom_id, cached system prompt, per-request partial-failure). Full eligible: 13802 atomize pages + 6637 answer-bearing mcq pages. Running ~$1 test batch (40 reqs) to verify + measure real cost before full submit.
+- subagent `` (a55a881534def4de8) finished — 216 chars -> work/subagent_results.jsonl
+- subagent `` (a296889a62dbb3bc4) finished — 26 chars -> work/subagent_results.jsonl
+
+## 2026-07-15T21:21:53Z  [C4-CHECKPOINT]
+
+**[COMPACTION CHECKPOINT — 2026-07-16] Where I am, what's done, what's running.**
+
+WHERE: stage C4 (bulk LLM ingest). A ~$1 TEST batch (40 reqs) is IN FLIGHT on the Anthropic Batch API; a background poller (task banyuljgg = `python -m studyfeed_compiler.llm test`) is waiting on it and will write PASS/FAIL + real cost to compiler/work/llm_test.log. Nothing is blocked; nothing lost if this compacts.
+
+DONE SO FAR (all committed + pushed to github kayomarz97/studyfeed, branch dev):
+- C0: git, durability (state.py + 4 hooks, proven), spec/ (schema.sql/SPEC/manifest.schema/SCORING), profiles/mrcp_part1.yaml (16 subjects, blueprint sum 200), compiler scaffold, 27 agents, PLAYBOOK (Batch/Docling/FSRS + 5 mistake-ledger entries).
+- C1: unpack 107 PDFs -> 99 canonical works (unrar for RAR5; scanned files hash-dedup only). Classify: 46 past_paper (Pastest recalls, years 2015-2026, Tier1 recall, KEY-BEARING MCQs), 16 qbank (Passmedicine 2025), 20 pearls (incl. 16 Passmedicine High-Yield TEXTBOOK per-subject PROSE), 16 textbook, 1 excluded (Arabic intro).
+- C2: extraction 98/98 works, 43,165 pages (9034 OCR via tesseract@2500px/4cores/OMP=1, 34131 text via PyMuPDF), ~70M chars, 0 failures -> compiler/work/extracted/<wid>__*.jsonl (per-page {page,method,chars,text}).
+- C4 (now): compiler/.venv (py3.14) has pymupdf/pillow/pyyaml/anthropic. llm.py = Batch transport (submit records id BEFORE poll; reconcile by custom_id [must match ^[A-Za-z0-9_-]+$ -> use '_' sep, NOT ':'); cached system prompt) + build_atomize (pearls+textbook prose -> Haiku) + build_mcq (past_paper+qbank answer-bearing pages -> Sonnet) + CLI test/submit/status/harvest. Key verified working.
+
+PATCH 01 (user spec change, applied today): Part A stable_key done in place (see decisions.patch01). C13 PACKAGING IS BLOCKED until the reproducibility test passes (decisions.C13_blocked_on_patch01). Part B (app notes) is Phase 2.
+
+DOCUMENTED MISTAKE (do not repeat): I earlier mis-reported the Textbook 'N-Subject' files as qbank (my smoke's name-keyed resolver grabbed the Qbank drop's same-named file). Verified drop-qualified: Textbook copies are High-Yield TEXTBOOK PROSE (0 'Question N of' markers) -> reclassified to pearls, NOT qbank. Rule in ledger: same filename != same file across drops; verify the exact path.
+
+RESUME: follow .compiler_state.json next_action. Spec = BUILD_PROMPT.md (on disk, authoritative). Do NOT restart; do NOT re-extract; do NOT relaunch the test if banyuljgg still alive (pgrep -f 'llm test').

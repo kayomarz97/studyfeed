@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "updated": "2026-07-15T21:06:37Z",
+  "updated": "2026-07-15T21:21:53Z",
   "stage": "C4",
   "completed": [
     "C0"
   ],
-  "next_action": "LLM ingest RUNNING. Test batch bg (40 reqs) -> if PASS auto-submit FULL: ~13802 atomize (Haiku) + ~6637 mcq (Sonnet); Batch SLA ~1h (24h cap). `python -m studyfeed_compiler.llm submit|status|harvest`. Harvest -> work/atoms.jsonl + work/mcqs.jsonl. THEN verify mcq page-coverage (6637 answer-bearing pages — check non-eligible are test-view/nav not missed Qs). Then C5 cluster/corroboration.",
+  "next_action": "C4 LLM INGEST IN FLIGHT. RUNNING SHELL: bg `python -m studyfeed_compiler.llm test` (poller task banyuljgg) waiting on an Anthropic TEST batch (40 reqs; batch id in state.batches kind=test); in_progress. RESUME: (1) check compiler/work/llm_test.log for 'TEST PASS/FAIL' + extrapolated $; or `cd compiler && PYTHONPATH=compiler .venv/bin/python -m studyfeed_compiler.llm status`. (2) If PASS -> verify mcq coverage (6637 answer-bearing pages; confirm skipped pages are test-view/nav not missed Qs) -> submit FULL: `.venv/bin/python -m studyfeed_compiler.llm submit` (records atomize[Haiku ~13802] + mcq[Sonnet ~6637] batch ids; Batch SLA ~1h/24h) -> poll `status` -> `harvest` (=> work/atoms.jsonl + work/mcqs.jsonl). (3) If FAIL -> read llm_test.log error, fix llm.py, re-test. THEN C5 cluster/corroboration. Run llm via compiler/.venv (py3.14) with SANDBOX OFF (network); key in compiler/.env (gitignored, loaded w/ override).",
   "sources_seen": {},
   "archives": {
     "Papers.zip": {
@@ -24,7 +24,16 @@
       "moved_to": "compiler/sources/inbox/Textbook.zip"
     }
   },
-  "batches": [],
+  "batches": [
+    {
+      "id": "msgbatch_017WY4QJbVvUvCabcUn9KD26",
+      "kind": "test",
+      "stage": "C4-test",
+      "n": 40,
+      "status": "in_progress",
+      "submitted": "2026-07-15T21:07:27Z"
+    }
+  ],
   "cursors": {
     "unpack_pdfs": 107,
     "canonical_works": 99,
@@ -53,7 +62,9 @@
     "textbook_kinds": "accepted: 4 pearls + 32 textbook",
     "papers_are_pastest": "VERIFIED: Papers = Pastest review screenshots WITH answer+explanation (~2pp/Q). Tier 1 past_paper/recall CONFIRMED; key-bearing curated MCQs (§5a qbank key trust).",
     "textbook_nsubject_are_qbank": "CORRECTED (my earlier smoke conflated same-named Qbank file): Textbook 'N-Subject' files are Passmedicine High-Yield TEXTBOOK (PROSE), NOT qbank. Reclassified textbook->PEARLS (17 High-Yield files). NOT qbank.",
-    "compute_path": "APPROVED: Batch API — balanced (Haiku atomize, Sonnet MCQ-parse). Key in compiler/.env (gitignored). User declined Claude Code tokens (would risk CC cap)."
+    "compute_path": "APPROVED: Batch API — balanced (Haiku atomize, Sonnet MCQ-parse). Key in compiler/.env (gitignored). User declined Claude Code tokens (would risk CC cap).",
+    "patch01": "APPLIED 2026-07-16. Part A (stable_key) IN PLACE: spec/schema.sql (stable_key UNIQUE + index on atoms/concepts/mcqs/topic_pages), BUILD_PROMPT §5j (new), §6a x4, §6b retrofit (fsrs_cards/reviews/mistakes/stars/item_tags -> stable_key) + user_notes/user_note_images. Part B (§A8 notes, §11e zip-export) appended to BUILD_PROMPT as 'PATCH 01 — Part B'. SPEC.md progress-schema mirror still stale (item_id) -> update at Phase 2 (BUILD_PROMPT authoritative).",
+    "C13_blocked_on_patch01": "C13 PACKAGING BLOCKED: must not run until (a) stable_key in schema [DONE] AND (b) reproducibility test passes [TODO in pack.py: build pack twice from unchanged inputs -> every stable_key identical; add one source -> pre-existing keys unchanged]. pack.py computes stable_key=sha256(normalize(text)|work_id|page_ref)[:16]; atoms/mcqs jsonl currently store work_id under field name 'source_id' (reconcile naming at packaging)."
   },
   "token_spend_estimate_usd": 0.0
 }

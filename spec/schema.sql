@@ -44,6 +44,7 @@ CREATE TABLE works (                             -- canonical bibliographic work
 -- ── grounded knowledge ──
 CREATE TABLE atoms (
   id INTEGER PRIMARY KEY, subject_id INTEGER, topic_id INTEGER,
+  stable_key TEXT UNIQUE,                         -- content-derived (§5j); survives rebuild. NEVER anchor user data to id.
   statement TEXT, detail_md TEXT,
   source_id INTEGER, page_ref TEXT,              -- grounding (required)
   is_highlighted INTEGER DEFAULT 0, salience REAL DEFAULT 0,
@@ -65,11 +66,13 @@ CREATE TABLE atoms (
   importance_signals_json TEXT,                  -- the "why" breakdown
   figure_id INTEGER NULL
 );
+CREATE INDEX idx_atoms_stable ON atoms(stable_key);
 CREATE TABLE atom_citations (                    -- unioned on merge; source count IS the signal
   atom_id INTEGER, source_id INTEGER, page_ref TEXT
 );
 CREATE TABLE concepts (
   id INTEGER PRIMARY KEY, name TEXT,             -- DISPLAY name: UK spelling, as I'll sit the exam
+  stable_key TEXT UNIQUE,                         -- content-derived (§5j); survives rebuild.
   canonical_key TEXT,                            -- orthographic match key (§5e) — never displayed
   subject_id INTEGER, summary_md TEXT, aliases_json TEXT,
   guideline_sensitive INTEGER DEFAULT 0,         -- 1 = answer may go stale (targets/thresholds/mgmt)
@@ -77,6 +80,7 @@ CREATE TABLE concepts (
   centrality REAL DEFAULT 0, importance INTEGER DEFAULT 1, importance_score REAL DEFAULT 0
 );
 CREATE INDEX idx_concept_canonical ON concepts(canonical_key);
+CREATE INDEX idx_concepts_stable ON concepts(stable_key);
 CREATE TABLE concept_edges (
   id INTEGER PRIMARY KEY, src_concept_id INTEGER, dst_concept_id INTEGER,
   relation TEXT, rationale TEXT, source_id INTEGER
@@ -95,11 +99,13 @@ CREATE TABLE cluster_members ( cluster_id INTEGER, mcq_id INTEGER, source_id INT
 -- ── pre-compiled cross-subject topic dossiers ("read up on X") ──
 CREATE TABLE topic_pages (
   id INTEGER PRIMARY KEY, concept_id INTEGER, title TEXT, aliases_json TEXT,
+  stable_key TEXT UNIQUE,                         -- content-derived (§5j); survives rebuild.
   body_md TEXT,                                  -- full long page, already assembled
   subjects_covered_json TEXT, figure_ids_json TEXT,
   related_mcq_ids_json TEXT, related_flashcard_ids_json TEXT,
   importance INTEGER DEFAULT 1, importance_score REAL DEFAULT 0, importance_signals_json TEXT
 );
+CREATE INDEX idx_topic_pages_stable ON topic_pages(stable_key);
 CREATE TABLE topic_sections (
   id INTEGER PRIMARY KEY, topic_page_id INTEGER, subject_id INTEGER,
   heading TEXT, body_md TEXT, figure_ids_json TEXT, ord INTEGER
@@ -111,6 +117,7 @@ CREATE TABLE flashcards ( id INTEGER PRIMARY KEY, subject_id INTEGER, atom_id IN
   importance INTEGER DEFAULT 1, importance_score REAL DEFAULT 0, importance_signals_json TEXT );
 
 CREATE TABLE mcqs ( id INTEGER PRIMARY KEY, subject_id INTEGER, source_id INTEGER,
+  stable_key TEXT UNIQUE,                         -- content-derived (§5j); survives rebuild.
   origin TEXT,                                   -- curated | generated
   key_trust TEXT,                                -- from the ITEM, not the source tier (§5a)
   content_zone TEXT DEFAULT 'body',              -- body | back_matter. NEVER front_matter (§5i)
@@ -122,6 +129,7 @@ CREATE TABLE mcqs ( id INTEGER PRIMARY KEY, subject_id INTEGER, source_id INTEGE
   correct_idx INTEGER, explanation_md TEXT, cognitive_level TEXT,
   importance INTEGER DEFAULT 1, importance_score REAL DEFAULT 0, importance_signals_json TEXT,
   figure_id INTEGER NULL );
+CREATE INDEX idx_mcqs_stable ON mcqs(stable_key);
 CREATE TABLE mcq_distractors ( mcq_id INTEGER, option_idx INTEGER, why_wrong TEXT );
 
 CREATE TABLE reels ( id INTEGER PRIMARY KEY, subject_id INTEGER, atom_id INTEGER,

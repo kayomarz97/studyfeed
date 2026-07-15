@@ -617,6 +617,28 @@ step 1 removed it.
 **Report at C2**, per book: proposed `body_start_page`, pages excluded as front/back matter, and every
 boilerplate cluster found with its member count. ⛔ I confirm before you atomize anything.
 
+### 5j. Stable keys — anything I own must NOT be anchored to a row id  (PATCH 01)
+
+`pack.db` is rebuilt on every recompile, so row IDs are not stable. Every row a human can attach
+something to therefore carries a `stable_key`, derived from content and provenance:
+
+```
+stable_key = sha256(normalized_text + '|' + work_id + '|' + page_ref)[:16]
+```
+
+- Derive from **content + provenance only** — never from row order, insert sequence, or a counter.
+- **Normalize before hashing** (casefold, collapse whitespace, strip punctuation) so trivial
+  re-extraction differences don't mint a new key.
+- Use **`work_id`, not `source_id`** — the same book re-supplied as a different file must produce the
+  *same* key (§5b).
+- Everything user-owned in `progress.db` — notes, stars, tags, mistakes, FSRS state — anchors to
+  `stable_key`, **never to `id`**.
+- On import, resolve `stable_key` → current `id` once and cache the mapping. A key that no longer
+  resolves means that content left the pack: **keep the row, mark it orphaned, surface it. Never
+  delete my data because the pack changed.**
+- Report at C13: how many stable keys changed vs the previous pack. Large churn means the
+  normalization is too brittle — tell me.
+
 ---
 
 ## 6. Data contracts
@@ -666,6 +688,7 @@ CREATE TABLE works (                             -- canonical bibliographic work
 -- ── grounded knowledge ──
 CREATE TABLE atoms (
   id INTEGER PRIMARY KEY, subject_id INTEGER, topic_id INTEGER,
+  stable_key TEXT UNIQUE,                         -- content-derived (§5j); survives rebuild. NEVER anchor user data to id.
   statement TEXT, detail_md TEXT,
   source_id INTEGER, page_ref TEXT,              -- grounding (required)
   is_highlighted INTEGER DEFAULT 0, salience REAL DEFAULT 0,
@@ -692,6 +715,7 @@ CREATE TABLE atom_citations (                    -- unioned on merge; source cou
 );
 CREATE TABLE concepts (
   id INTEGER PRIMARY KEY, name TEXT,             -- DISPLAY name: UK spelling, as I'll sit the exam
+  stable_key TEXT UNIQUE,                         -- content-derived (§5j); survives rebuild.
   canonical_key TEXT,                            -- orthographic match key (§5e) — never displayed
   subject_id INTEGER, summary_md TEXT, aliases_json TEXT,
   guideline_sensitive INTEGER DEFAULT 0,         -- 1 = answer may go stale (targets/thresholds/mgmt)
@@ -717,6 +741,7 @@ CREATE TABLE cluster_members ( cluster_id INTEGER, mcq_id INTEGER, source_id INT
 -- ── pre-compiled cross-subject topic dossiers ("read up on X") ──
 CREATE TABLE topic_pages (
   id INTEGER PRIMARY KEY, concept_id INTEGER, title TEXT, aliases_json TEXT,
+  stable_key TEXT UNIQUE,                         -- content-derived (§5j); survives rebuild.
   body_md TEXT,                                  -- full long page, already assembled
   subjects_covered_json TEXT, figure_ids_json TEXT,
   related_mcq_ids_json TEXT, related_flashcard_ids_json TEXT,
@@ -733,6 +758,7 @@ CREATE TABLE flashcards ( id INTEGER PRIMARY KEY, subject_id INTEGER, atom_id IN
   importance INTEGER DEFAULT 1, importance_score REAL DEFAULT 0, importance_signals_json TEXT );
 
 CREATE TABLE mcqs ( id INTEGER PRIMARY KEY, subject_id INTEGER, source_id INTEGER,
+  stable_key TEXT UNIQUE,                         -- content-derived (§5j); survives rebuild.
   origin TEXT,                                   -- curated | generated
   key_trust TEXT,                                -- ⇦ from the ITEM, not the source tier (§5a)
                                                  --   a printed key in a textbook = qbank-level trust
@@ -778,22 +804,41 @@ CREATE INDEX idx_feed_pyq        ON feed_items(is_pyq, importance DESC);
 ### 6b. Progress DB — per exam, e.g. `progress_MRCP_PART1.db` (READ-WRITE, survives re-import)
 
 ```sql
-CREATE TABLE fsrs_cards ( item_type TEXT, item_id INTEGER,
+-- PATCH 01 §5j: user-owned rows anchor on stable_key, NEVER a pack row id (ids are not stable).
+CREATE TABLE fsrs_cards ( item_type TEXT, stable_key TEXT,
   stability REAL, difficulty REAL, due TEXT, last_review TEXT, state INTEGER, reps INTEGER,
-  lapses INTEGER, PRIMARY KEY (item_type, item_id) );
-CREATE TABLE reviews ( id INTEGER PRIMARY KEY AUTOINCREMENT, item_type TEXT, item_id INTEGER,
+  lapses INTEGER, PRIMARY KEY (item_type, stable_key) );
+CREATE TABLE reviews ( id INTEGER PRIMARY KEY AUTOINCREMENT, item_type TEXT, stable_key TEXT,
   rating INTEGER, ts TEXT, elapsed_ms INTEGER );
-CREATE TABLE mistakes ( id INTEGER PRIMARY KEY AUTOINCREMENT, item_type TEXT, item_id INTEGER,
+CREATE TABLE mistakes ( id INTEGER PRIMARY KEY AUTOINCREMENT, item_type TEXT, stable_key TEXT,
   subject_id INTEGER, chosen_idx INTEGER, ts TEXT, resolved INTEGER DEFAULT 0 );
-CREATE TABLE stars ( item_type TEXT, item_id INTEGER, ts TEXT, PRIMARY KEY (item_type, item_id) );
-CREATE TABLE item_tags ( item_type TEXT, item_id INTEGER, tag_key TEXT, ts TEXT,
-  PRIMARY KEY (item_type, item_id, tag_key) );
+CREATE TABLE stars ( item_type TEXT, stable_key TEXT, ts TEXT, PRIMARY KEY (item_type, stable_key) );
+CREATE TABLE item_tags ( item_type TEXT, stable_key TEXT, tag_key TEXT, ts TEXT,
+  PRIMARY KEY (item_type, stable_key, tag_key) );
 CREATE TABLE subject_mastery ( subject_id INTEGER PRIMARY KEY, mastery REAL, updated TEXT );
 CREATE TABLE sessions ( id INTEGER PRIMARY KEY AUTOINCREMENT, mode TEXT, started TEXT, ended TEXT,
   seen INTEGER, correct INTEGER );
 CREATE TABLE blob_reads ( blob_id INTEGER PRIMARY KEY, read_at TEXT, quizzed_at TEXT, reread_due TEXT );
 CREATE TABLE feed_state ( key TEXT PRIMARY KEY, value TEXT );
 CREATE TABLE settings ( key TEXT PRIMARY KEY, value TEXT );
+
+-- PATCH 01 §A8/B1: my own notes (text + images), local, anchored by stable_key never id (§5j)
+CREATE TABLE user_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  anchor_kind TEXT,                 -- atom | concept | mcq | topic_page | standalone
+  anchor_stable_key TEXT,           -- NOT a row id. null when standalone
+  subject_id INTEGER,               -- resolved at write time so orphans stay filterable
+  title TEXT, body_md TEXT,
+  created TEXT, updated TEXT,
+  is_orphaned INTEGER DEFAULT 0,    -- anchor vanished on recompile: KEEP IT, flag it, never delete
+  pinned INTEGER DEFAULT 0
+);
+CREATE TABLE user_note_images (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, note_id INTEGER,
+  rel_path TEXT,                    -- app-private storage; not a blob, not a content:// URI
+  caption TEXT, ord INTEGER
+);
+CREATE INDEX idx_note_anchor ON user_notes(anchor_kind, anchor_stable_key);
 ```
 
 The app keeps a registry of imported packs (file + `exam_code` + progress-DB name) so it can list and
@@ -1504,3 +1549,40 @@ are eroded by compaction. **If you ever find yourself unsure what you're buildin
 Build the full product across all three parts. Phases exist only so I can approve as we go — the target
 is the complete, offline, exam-agnostic app plus a first MRCP Part 1 pack, delivered as an installable
 APK, not a stripped-down version. **When in doubt at any point: ask me.**
+
+---
+
+## PATCH 01 — Part B (Phase 2, app) — applied 2026-07-16
+
+> These two amendments belong in **§8 (app build order, as A8 after A7)** and **§11e**. Recorded here
+> verbatim so they are on disk (§10a). Part A (stable keys) is already applied IN PLACE: §5j, §6a
+> `stable_key`×4 (+ indexes in `spec/schema.sql`), §6b retrofit (fsrs_cards/reviews/mistakes/stars/tags
+> → stable_key) + `user_notes`/`user_note_images`. Part B changes nothing in the compiler; it is a hard
+> consumer of `stable_key`.
+
+### §A8 · My own notes — text + images, local (app build order, after A7)
+
+- **Add a note from anywhere:** a note action on every feed card, on a dossier section, and on a
+  concept-map node — plus standalone notes attached to nothing. Store the **`stable_key`** of what it's
+  attached to, **never the row id** (§5j).
+- **Text:** markdown body, rendered like pack content. **Images:** pick via SAF, **copy into
+  app-private storage**, store a relative path — **not** a blob in the DB and **not** a `content://` URI
+  (it dies when the source app clears its cache). **No CAMERA permission** unless in-app capture is
+  later requested; the picker needs none. Still **no INTERNET, no background work, no generation**.
+- **Where they surface:** inline on the card (small affordance, never covering content); as their own
+  section in a dossier; a Notes screen filterable by subject / anchor kind / orphaned; searchable.
+- **⚠ Notes are NOT grounded and MUST NOT touch scoring** — no `importance`, no corroboration, no
+  `S_emphasis`. Render them **visually distinct** from pack content.
+- **Optionally reviewable:** promote a note to a flashcard; it gets FSRS state but stays flagged
+  user-authored.
+- **Survives recompile:** on import, resolve `anchor_stable_key` → current id. Unresolved ⇒
+  `is_orphaned = 1`, surfaced in a "notes needing a home" list with a re-anchor action. **Never delete
+  a note because the pack changed.**
+
+### §11e revision · Progress export/import must be a ZIP (note images live on the filesystem)
+
+- **Export progress** → writes a **zip**: `progress.db` + `note_images/`, to Downloads via SAF (the
+  plain single-file copy would silently lose every note image).
+- **Import progress** → restores both.
+- **Acceptance test 12** now round-trips an **image-bearing note**: export → wipe app data → reinstall →
+  import → the note *and its image* are back.
