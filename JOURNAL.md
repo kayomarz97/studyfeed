@@ -64,3 +64,21 @@ _[session ended: prompt_input_exit at 2026-07-15T18:03:56Z]_
 ## 2026-07-15T19:37:32Z  [C1-fix]
 
 **C1 classification corrected at user's confirm.** (1) VERIFIED: Papers=Pastest MCQs w/ keys, Tier 1 recall stays. (2) I was WRONG re qbank: Textbook 'N-Subject' files are the Passmedicine High-Yield TEXTBOOK (prose: 'Heart sounds: S1...'), 0 question-markers vs Qbank copy's 38. Caught by drop-qualified pdftotext before changing. Reclassified 16 High-Yield files textbook->pearls (consistent w/ combined). Logged to ledger.
+
+## 2026-07-15T19:42:43Z  [CHECKPOINT]
+
+**CHECKPOINT — context near full, pre-compaction. C2 extraction in progress.**
+
+STATUS: Full text extraction RUNNING in background (~1.5h total; checkpointed per-work to compiler/work/extracted/; 15/98 done).
+Toolchain: uv venv (py3.14) + pymupdf/pillow/pyyaml; OCR = tesseract on fixed-width 2500px PyMuPDF render, fork context, OMP_THREAD_LIMIT=1 (~0.77s/pg x 4 cores); text = PyMuPDF; §5g script-filter applied per page. Output: work/extracted/<wid>__<name>.jsonl (per-page {page,method,chars,text}). Extraction is content-only, UNAFFECTED by classification edits.
+
+CLASSIFICATION (final, 98 works): 46 past_paper (scanned Pastest recalls, years 2015-2026, reliability=recall; KEY-BEARING curated MCQs — each ~2 pages/question with answer+explanation+peer-stats; §5a gives their printed keys qbank-level trust); 16 qbank (Passmedicine 2025 subject files, real text MCQs); 20 pearls (16 Passmedicine High-Yield Textbook per-subject PROSE + the combined High-Yield file + '100 commonly tested facts' + 'Essential Revision Notes' + 'Faraz pearls'); 16 textbook (the '(C)'/SKELETON prose series + 'Step to MRCP' scanned + 'The Only MRCP Notes' + 'Oph+Psy' + 'Geriatric Medi Online'); 1 excluded (Arabic 1-page intro). Taxonomy = 16 subjects (Palliative + Ophthalmology standalone), blueprint weights sum 200.
+
+MISTAKE (documented in full, per user request; also in PLAYBOOK ledger, seen 1x):
+- WHAT: During the C2 smoke I reported the Textbook drop's 'N-Subject.pdf' files (e.g. 16-Clinical Science.pdf) as 'Passmedicine QBANK exports' and asked the user to reclassify them textbook->qbank. The user, trusting my description, confirmed 'correct, reclassify'.
+- ROOT CAUSE: 16-Clinical Science.pdf exists in BOTH drops. My smoke's name-keyed resolver (_resolve, first-match-by-name) picked the QBANK drop's copy (which is questions: 'Question 114 of 575... correct answer C5') and I misattributed that content to the TEXTBOOK drop.
+- CATCH: Before making the change I verified drop-qualified via pdftotext on the exact dedupe_canonicals path. Textbook-drop 16-Clinical Science = 0 'Question N of' markers, pure prose ('Textbook index... Heart sounds: S1 is caused by closure of mitral and tricuspid valves...'). Qbank-drop copy = 38 markers. So the Textbook files are the Passmedicine High-Yield TEXTBOOK (prose), NOT qbank.
+- CORRECTION: Did NOT reclassify to qbank (would have corrupted tiers + wrongly routed prose to MCQ-parsing). Instead reclassified the 17 High-Yield files (16 per-subject + combined) textbook->PEARLS (accurate + consistent). Papers (obs 1) verified correct: Tier 1 recall, key-bearing — kept.
+- LESSON: same filename != same file across drops. Verify the exact path (not the name); the pipeline is path-qualified, spot-checks must be too.
+
+RESUME PATH: see .compiler_state.json next_action. In short: wait for/confirm extraction 98/98 (re-run idempotently if the bg process died), then C2a zoning of prose sources -> route MCQ sources to MCQ-parse and prose to atomize -> C3..C13 per BUILD_PROMPT §7. All ⛔ gates still apply.
