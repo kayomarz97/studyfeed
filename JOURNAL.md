@@ -55,3 +55,7 @@ _[session ended: prompt_input_exit at 2026-07-15T18:03:56Z]_
 ## 2026-07-15T18:34:28Z  [C1]
 
 **C1 COMPLETE (gate approved).** Decisions: exclude Arabic intro; Palliative+Ophthalmology kept SEPARATE (16-subject taxonomy, sum=200); textbook kinds accepted (4 pearls/32 textbook); reliability=recall. Final: 98 active works (46 past_paper 2015-2026, 16 qbank, 36 textbook/pearls) + 1 excluded. Next: C2 extract/OCR.
+
+## 2026-07-15T19:05:39Z  [C2]
+
+**C2 smoke PASSED + full extraction launched.** PyMuPDF text + tesseract OCR both clean. Toolchain: pymupdf/pillow/pyyaml in uv venv (py3.14). OCR tuned 16.8->0.77s/pg (fixed-width render + fork ctx + OMP=1). Full run: 98 works, 8961 OCR pages (~2h), 34204 text pages, checkpointed per work. Findings: most content is Passmedicine/Pastest MCQ-format (Q+A+peer-stats) across all drops; flagged tier notes for C9. Extraction running in background.

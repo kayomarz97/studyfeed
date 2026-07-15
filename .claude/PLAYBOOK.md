@@ -329,3 +329,13 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   ONLY by exact SHA-256, never by fingerprint or fuzzy Jaccard. Content-level dedup for them is
   deferred to post-OCR clustering (C5). Check `pdffonts` / a page char-count before trusting any
   text-based comparison of PDFs. (seen 1x)
+
+- **2026-07 · Scanned-page OCR: three gotchas that make it ~20× too slow or crash.** At C2, OCR'ing
+  8,961 scanned pages: (a) the scans have HUGE native page dims (44 MP @150 dpi) — render at a FIXED
+  pixel width (`fitz.Matrix(2500/page.rect.width, …)`), not a DPI, or tesseract takes ~17 s/page; (b)
+  Python 3.14 defaults multiprocessing to `forkserver`, which can't re-import a `<stdin>`/`-m` main and
+  crashes the pool — use `ProcessPoolExecutor(mp_context=mp.get_context('fork'))`; (c) tesseract
+  multithreads by default, so N pool workers each spawn a multithreaded tesseract and thrash — set
+  `OMP_THREAD_LIMIT=1` in the subprocess env so N workers = N threads = N cores.
+  **Fix/prevention:** fixed-width render + fork context + `OMP_THREAD_LIMIT=1` → 0.77 s/pg on 4 cores
+  (from 16.8). (seen 1x)

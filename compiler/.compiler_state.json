@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "updated": "2026-07-15T18:34:28Z",
+  "updated": "2026-07-15T19:05:39Z",
   "stage": "C2",
   "completed": [
     "C0"
   ],
-  "next_action": "C2: uv sync (Docling/PyMuPDF, heavy) -> 1-PDF smoke test -> zone (body_start_page) + mine usage conventions + back-matter MCQ scan (C2a ⛔) -> extract + OCR (scanned papers) + script-filter (C2b ⛔)",
+  "next_action": "C2b full extraction running in background (parallel OCR ~2h) -> then zoning/usage-profile (C2a) + C3 highlights + C4 atomize",
   "sources_seen": {},
   "archives": {
     "Papers.zip": {
@@ -29,7 +29,9 @@
     "unpack_pdfs": 107,
     "canonical_works": 99,
     "scanned_pdfs": 38,
-    "classified_works": 99
+    "classified_works": 99,
+    "extract_scanned_pages": 8961,
+    "extract_workers": 4
   },
   "blocked_on": null,
   "decisions": {
@@ -42,7 +44,9 @@
     "arabic_file": "EXCLUDED (مقدمة, 1-page non-latin intro)",
     "subject_taxonomy": "16 subjects — Palliative medicine + Ophthalmology kept SEPARATE; Oncology folded into Haematology (no distinct file); sum=200",
     "paper_reliability": "recall (default); printed keys still get qbank-trust per §5a",
-    "textbook_kinds": "accepted: 4 pearls + 32 textbook"
+    "textbook_kinds": "accepted: 4 pearls + 32 textbook",
+    "papers_are_pastest": "Papers = Pastest qbank-platform screenshots WITH answers+explanations+peer-stats (~2pp/question, curated keys). User set Tier1 past_paper/recall at C1. NOTE@C9: confirm Tier-1 intent given qbank-platform origin.",
+    "textbook_nsubject_are_qbank": "Textbook 'N-Subject.pdf' files are Passmedicine qbank exports (Q+A), not prose (classified textbook T3). PENDING: reclassify to qbank T2? MCQs extract+key correctly either way (§5a). Impact ~5% S_tier."
   },
   "token_spend_estimate_usd": 0.0
 }
