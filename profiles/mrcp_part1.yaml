@@ -1,0 +1,143 @@
+exam_code: MRCP_PART1
+exam_name: "MRCP(UK) Part 1"
+blueprint_source_url: ""          # TODO(C0): fetch current Federation Part 1 weights; until then weights
+                                  #   are null => uniform fallback (flagged). PYQ+corrob dominate anyway.
+mcq_style: best_of_five
+negative_marking: false
+
+source_tiers:                      # provenance (which drop) is the prior; per-file classify refines it (C1c)
+  past_papers: {tier: 1, tier_weight: 1.00, default_reliability: recall}   # from Papers.zip
+  qbanks:      {tier: 2, tier_weight: 0.75, default_reliability: unknown}  # from Qbank.rar
+  pearls:      {tier: 3, tier_weight: 0.65, default_reliability: unknown,
+                source_salience: 0.75,       # whole book is high-yield by construction (§7 C1c)
+                exempt_noise_ceiling: true}  # do NOT zero it for flagging ~everything — that's correct
+  textbooks:   {tier: 3, tier_weight: 0.60, default_reliability: unknown}
+  references:  {tier: 4, tier_weight: 0.45, default_reliability: unknown}
+
+drops:                             # globs fixed to the ACTUAL dropped filenames (confirmed 2026-07-15)
+  - {glob: "Textbook*.zip", default_kinds: [textbook, pearls, reference], classify: per_file}
+  - {glob: "Qbank*.rar",    default_kinds: [qbank], subject_from: filename,
+     subject_pattern: '^\d+-(?P<subject>.+)\.pdf$'}   # e.g. "1-Cardiology.pdf" (16 subject-wise files)
+  - {glob: "Papers*.zip",   default_kinds: [past_paper], require: year_per_file}
+                                   # nested archives expected: Papers.zip -> Pastest .rar (~34) + loose;
+                                   #   Textbook.zip -> Passmedicine High-Yield .rar (a pearls book)
+
+importance:
+  weights: {pyq: 0.33, corrob: 0.24, freq: 0.07, emphasis: 0.11,
+            blueprint: 0.07, centrality: 0.06, tier: 0.05, trend: 0.07}   # Σ = 1.00
+  emphasis_mix: {my_highlight: 0.6, book_flag: 0.4}   # §5b — both mean "a human marked this"
+  recency_lambda: 0.15             # per-year decay on past-paper hits
+  recent_window_years: 10          # "still live" window — drives the multi-year floor + fading cap
+  thresholds: {five: 0.80, four: 0.62, three: 0.42, two: 0.22}
+  cluster_ambiguous_band: [0.82, 0.92]   # only this cosine band goes to opus adjudication
+  floors:
+    pyq_min_importance: 4
+    multi_year_pyq_forces: 5       # requires >=1 hit inside recent_window_years (see SCORING.md)
+    uncorroborated_max: 3
+    fading_max: 3                  # historically asked, dead since => capped
+
+staleness:
+  enabled: true
+  guideline_sensitive_cues: ["first-line", "target", "threshold", "recommended", "guideline",
+                             "management of", "treatment of", "screening", "cut-off"]
+
+nomenclature:
+  canonicalize_orthography: true   # deterministic ae/oe->e, -ise->-ize, -our->-or (match key only)
+  display_convention: uk           # ALWAYS display UK spelling — that's what the exam is sat in
+  alias_hints:                     # what no rule can derive. Extend as the compiler proposes.
+    # ── the 2003 BAN->rINN switch: older papers predate it ──
+    - [furosemide, frusemide]
+    - [lidocaine, lignocaine]
+    - [amoxicillin, amoxycillin]
+    - [meticillin, methicillin]
+    - [ciclosporin, cyclosporine, cyclosporin]
+    - [colestyramine, cholestyramine]
+    - [chlorphenamine, chlorpheniramine]
+    - [beclometasone, beclomethasone]
+    - [dosulepin, dothiepin]
+    - [thiopental, thiopentone]
+    - [phenobarbital, phenobarbitone]
+    - [sulfasalazine, salazopyrin]
+    # ── the two rINN exceptions: dual-labelled 2004-2025, single-titled from BNF 92 ──
+    - [adrenaline, epinephrine, "adrenaline/epinephrine"]
+    - [noradrenaline, norepinephrine, "noradrenaline/norepinephrine"]
+    # ── UK<->US divergences (bite if any reference book is US-sourced, e.g. Harrison's) ──
+    - [paracetamol, acetaminophen]
+    - [salbutamol, albuterol]
+    - [glibenclamide, glyburide]
+    - [pethidine, meperidine]
+    - [rifampicin, rifampin]
+    - [isoprenaline, isoproterenol]
+    - [oestrogen, estrogen]
+    - [co-trimoxazole, "trimethoprim-sulfamethoxazole", TMP-SMX]
+    # ── common abbreviation <-> full name ──
+    - [glyceryl trinitrate, GTN, nitroglycerin]
+
+scripts:                           # §5g — allowlist, NOT "strip non-ASCII"
+  drop:  [arabic, bengali]         # the arabic block covers Farsi/Persian/Urdu too — no separate block
+  allow: [latin, latin_ext, greek, punctuation, super_subscript, arrows, math_ops, diacritics]
+  drop_threshold: 0.30             # drop a span when >30% of its letters sit in a dropped block
+  ocr_languages: [eng]             # never point OCR at a script you haven't detected first
+  whole_doc_nonlatin: ask          # a predominantly non-Latin PDF => stop and ask, don't skip silently
+
+dedupe:                            # §5b — the same pdf loose AND inside a zip
+  exact_hash: auto_collapse        # sha256 identical => collapse without asking
+  fingerprint: report              # page count + normalized text hash => report, then ask
+  fuzzy_minhash_threshold: 0.90    # >= this => POSSIBLE dup => ASK. never auto-merge
+  editions_of_same_work: ask       # two editions of one work = one voice. ask before deciding
+  cross_drop_tier_conflict: ask    # same pdf in two drops implying different tiers => human decides (C1b)
+
+archives:                          # §7 C1a — nested archives at mixed depth
+  inbox: sources/inbox/            # drop zone; the compiler unpacks, the human never unpacks by hand
+  formats: [zip, rar, 7z, tar]
+  max_depth: 8                     # nested archive recursion limit
+  max_expanded_gb: 25              # LOWERED from spec default 60: only 37 GB free on this box (§C0)
+  on_password: ask                 # never skip a locked archive silently
+  on_corrupt: ask
+  ignore_globs: ["__MACOSX/*", "*.DS_Store", "Thumbs.db", "*.url", "*.lnk"]
+
+zoning:                            # §5i — the front-matter example trap
+  detect_body_start: [roman_to_arabic_pagination, first_chapter_heading, toc_end]
+  confirm_boundaries: ask          # show page numbers per book before atomizing
+  atomize_zones: [body]            # PROSE only. front_matter is read for conventions, never content
+  mcq_scan_zones: [body, back_matter]    # textbook MCQs: end-of-chapter AND appendix question banks
+  confirm_back_matter_exclusion: ask     # show the page range before fencing off any back matter
+  boilerplate_verbatim_threshold: 0.97   # near-identical wording across works…
+  boilerplate_position_window: 30        # …AND within the first N pages of each => boilerplate
+  exclude_boilerplate_from_pack: true    # not 1★ — gone. a demo MCQ has zero study value
+  book_flag_noise_ceiling: 0.60    # a book flagging >60% of itself as high-yield = noise => tell me
+
+# NOTE(part2_scope): the Passmedicine High-Yield textbook covers MRCP Part 1 AND Part 2.
+#   Decision DEFERRED to C2 (see .compiler_state.json decisions) — show structure, then decide.
+
+subjects:                          # fallback taxonomy; real weights filled from blueprint at C0
+  - {name: "Cardiology", weight: null}
+  - {name: "Clinical sciences", weight: null,
+     subtopics: ["clinical anatomy","biochemistry & metabolism","physiology",
+                 "cell & molecular biology","genetics","immunology","statistics & EBM"]}
+  - {name: "Clinical pharmacology, therapeutics & toxicology", weight: null}
+  - {name: "Dermatology", weight: null}
+  - {name: "Endocrinology", weight: null}
+  - {name: "Gastroenterology & hepatology", weight: null}
+  - {name: "Geriatric medicine", weight: null}
+  - {name: "Haematology", weight: null}
+  - {name: "Infectious diseases (incl. GUM/HIV)", weight: null}
+  - {name: "Nephrology", weight: null}
+  - {name: "Neurology (incl. ophthalmology)", weight: null}
+  - {name: "Psychiatry", weight: null}
+  - {name: "Respiratory medicine", weight: null}
+  - {name: "Rheumatology", weight: null}
+# Qbank.rar ships 16 subject-wise files. 14 map cleanly (Ophthalmology -> Neurology per taxonomy).
+#   TWO need a human call at C1: "Palliative Medicine" (no distinct Part-1 blueprint subject) and how
+#   granular to keep "Clinical Science"/"Pharmacology". Surfaced at the C1 ⛔ — not guessed here.
+
+highlight_colors: {yellow: true, green: true, pink: true}
+
+tags:                              # the 1-tap tags the app renders (rename freely)
+  - {key: careless, label: "Careless slip",   color: "#FBBF24", description: "Knew it, misread/misclicked"}
+  - {key: gap,      label: "Knowledge gap",    color: "#EF4444", description: "Didn't know the fact"}
+  - {key: confused, label: "Mixed up options", color: "#8B5CF6", description: "Couldn't discriminate"}
+  - {key: guessed,  label: "Guessed",          color: "#3B82F6", description: "Right/wrong by luck"}
+  - {key: revisit,  label: "Must revisit",     color: "#10B981", description: "High-yield / weak, come back"}
+
+alias_hints: []                    # (legacy key kept for compatibility; use nomenclature.alias_hints)
