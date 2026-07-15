@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://studyfeed/spec/manifest.schema.json",
+  "title": "StudyFeed pack manifest",
+  "description": "The manifest.json shipped beside pack_<EXAM>.db. Redundant human-readable mirror of the pack_manifest DB row plus the subjects/tag_defs tables. The DB row is authoritative; the app may read either.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "pack_version", "exam_code", "exam_name", "built_at", "checksum"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "DB shape version; mirrors PRAGMA user_version in schema.sql. The app refuses a newer major.",
+      "pattern": "^[0-9]+(\\.[0-9]+)*$"
+    },
+    "pack_version": {
+      "type": "string",
+      "description": "Content build version, independent of schema. e.g. MRCP_PART1.0.1",
+      "minLength": 1
+    },
+    "exam_code": {
+      "type": "string",
+      "description": "Machine code, e.g. MRCP_PART1. Namespaces the progress DB.",
+      "pattern": "^[A-Z0-9_]+$"
+    },
+    "exam_name": {
+      "type": "string",
+      "description": "Human label shown in the app bar, e.g. 'MRCP(UK) Part 1'.",
+      "minLength": 1
+    },
+    "built_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC build timestamp.",
+      "format": "date-time"
+    },
+    "checksum": {
+      "type": "string",
+      "description": "sha256 of pack_<EXAM>.db, for integrity + de-dup of imports.",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "feature_flags": {
+      "type": "object",
+      "description": "Optional per-pack toggles the app honors (e.g. has_concept_map, has_figures).",
+      "additionalProperties": { "type": "boolean" }
+    },
+    "counts": {
+      "type": "object",
+      "description": "Row counts per table, for display + sanity checks.",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "importance_weights": {
+      "type": "object",
+      "description": "The calibrated weight vector + thresholds actually used for this build (audit trail).",
+      "properties": {
+        "weights": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pyq", "corrob", "freq", "emphasis", "blueprint", "centrality", "tier", "trend"],
+          "properties": {
+            "pyq": { "type": "number" }, "corrob": { "type": "number" }, "freq": { "type": "number" },
+            "emphasis": { "type": "number" }, "blueprint": { "type": "number" },
+            "centrality": { "type": "number" }, "tier": { "type": "number" }, "trend": { "type": "number" }
+          }
+        },
+        "thresholds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["five", "four", "three", "two"],
+          "properties": {
+            "five": { "type": "number" }, "four": { "type": "number" },
+            "three": { "type": "number" }, "two": { "type": "number" }
+          }
+        },
+        "recency_lambda": { "type": "number" },
+        "recent_window_years": { "type": "integer" }
+      }
+    },
+    "importance_histogram": {
+      "type": "object",
+      "description": "Count of playable items in each 1..5 bucket (degeneracy audit; see SCORING.md §5c).",
+      "additionalProperties": false,
+      "properties": {
+        "1": { "type": "integer", "minimum": 0 }, "2": { "type": "integer", "minimum": 0 },
+        "3": { "type": "integer", "minimum": 0 }, "4": { "type": "integer", "minimum": 0 },
+        "5": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "subjects": {
+      "type": "array",
+      "description": "Subject taxonomy + blueprint weights the app renders as filter chips.",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "type": "integer" }, "name": { "type": "string" },
+          "blueprint_weight": { "type": ["number", "null"] }, "ord": { "type": "integer" }
+        }
+      }
+    },
+    "tag_defs": {
+      "type": "array",
+      "description": "One-tap mistake tags the app renders on every card.",
+      "items": {
+        "type": "object",
+        "required": ["key", "label"],
+        "properties": {
+          "key": { "type": "string" }, "label": { "type": "string" },
+          "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+          "description": { "type": "string" }, "ord": { "type": "integer" }
+        }
+      }
+    }
+  }
+}
