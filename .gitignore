@@ -48,6 +48,16 @@ __pycache__/
 .venv/
 *.egg-info/
 
+# ── Android Studio / IntelliJ ──
+# Generated the moment the project is opened in the IDE. Machine-specific (SDK paths, JDK choice,
+# window layout) — committing them makes the repo depend on one person's IDE setup, which is the
+# opposite of the §8 A0 "buildable from the CLI, no IDE-only config" contract.
+.idea/
+*.iml
+.kotlin/
+captures/
+# local.properties is already ignored above (it holds this machine's sdk.dir).
+
 # ── misc ──
 .DS_Store
 Thumbs.db
