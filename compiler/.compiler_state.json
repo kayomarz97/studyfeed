@@ -1,16 +1,18 @@
 {
   "schema": 1,
-  "updated": "2026-07-16T09:27:53Z",
-  "stage": "C9",
+  "updated": "2026-07-16T10:37:34Z",
+  "stage": "C10",
   "completed": [
     "C0",
+    "C3",
     "C4",
     "C5",
     "C6",
     "C7",
-    "C8"
+    "C8",
+    "C9"
   ],
-  "next_action": "C9 importance scoring (importance.py stub). Deterministic 1-5 per SCORING.md: weights pyq 0.33, corrob 0.24, freq 0.07, emphasis 0.11, blueprint 0.07, centrality 0.06, tier 0.05, trend 0.07. Consumes atoms_merged.jsonl (distinct_work_count), mcq_corrob.jsonl, mcq_pyq.jsonl, concepts.jsonl (centrality), + hard floors (PYQ multi-year->5). Then post-C8 staleness (key_conflict on guideline_sensitive concepts vs newest tier-3/4).",
+  "next_action": "C10 topic dossiers (dossier.py stub): per canonical concept, gather all alias-resolved atoms across subjects -> one long body_md, link MCQs/flashcards/graph edges, importance=max of constituent atoms. Also pending: post-C8 staleness (key_conflict on guideline_sensitive concepts vs newest tier-3/4); optional opus importance-scorer recalibration (concept 71pct 1star); C3 highlights to light up emphasis (11pct).",
   "sources_seen": {},
   "archives": {
     "Papers.zip": {
@@ -177,7 +179,53 @@
     "investigated_by_swapped": 1414,
     "c8_graph_cost_usd": 6.0,
     "c8_audit_correct_pct": 75,
-    "c8_audit_supported_pct": 97
+    "c8_audit_supported_pct": 97,
+    "c9_mcqs_scored": 12489,
+    "c9_mcq_hist": {
+      "5": 389,
+      "4": 3668,
+      "3": 282,
+      "2": 2828,
+      "1": 5322
+    },
+    "c9_floors_multi_year": 389,
+    "c9_floors_pyq_min": 3582,
+    "c9_floors_fading": 282,
+    "c9_atoms_scored": 86702,
+    "c9_concepts_scored": 38013,
+    "c9_atoms_concept_linked": 54788,
+    "c9_concept_pyq_matched": 3719,
+    "c9_atom_hist": {
+      "5": 16,
+      "4": 6527,
+      "3": 22685,
+      "2": 21464,
+      "1": 36010
+    },
+    "c9_concept_hist": {
+      "5": 2626,
+      "4": 1017,
+      "3": 102,
+      "2": 7222,
+      "1": 27046
+    },
+    "c3_flagged_pages": 9965,
+    "c3_flagged_pearls": 8256,
+    "c3_flagged_textbook": 1572,
+    "c9_atom_hist_with_emphasis": {
+      "5": 121,
+      "4": 9230,
+      "3": 20695,
+      "2": 39221,
+      "1": 17435
+    },
+    "c9_mcq_hist_with_emphasis": {
+      "5": 389,
+      "4": 3668,
+      "3": 282,
+      "2": 3731,
+      "1": 4419
+    }
   },
   "blocked_on": null,
   "decisions": {
@@ -203,7 +251,9 @@
     "skeleton_mcq_parse": "DONE 2026-07-16: SsAcademy SKELETON qbank (14 textbook-kind subject slices=canonical work 80) parsed. 2913 answer-keyed MCQs (100% parse, printed keys). Kept kind=textbook (atoms preserved) + added MCQs via llm._mcq_units_textbook (section-aware Q<->A pairing). mcqs 9576->12489. cluster.py+adjudicate.py now apply workgroups.canonical_map (was required by C5 decision, never implemented). C5 re-run: 9135 clusters, multi_work 638->2695, cross_pub 77->2119. C6: pyq 4266->4339. Cost ~$12.3 (mcq $11.53 + adj $0.61 + test $0.20).",
     "c7_dedupe": "DONE 2026-07-16: C7 atom dedupe/merge implemented (dedupe.py, was stub). 133027 atoms -> 86702 merged (collapsed 46325). fastembed + hnswlib ANN + LEADER clustering (NOT single-linkage union-find). Dual gate: cosine>=0.95 AND idf_jaccard>=0.5. WHY: cosine alone over-merged short template-siblings (\"X causes prolonged PR\") into 74-member false clusters that LAUNDER corroboration (5b/364); idf-entity gate + leader clustering (join vs cluster LEADER, never intermediate) fixed it -> largest cluster 74->30 and all genuine same-fact. distinct_work_count canonicalised (workgroups.canonical_map), max 6, no laundering; citations UNIONed. Output work/atoms_merged.jsonl {statement,detail,source_id,page_ref,member_count,distinct_work_count,distinct_source_count,distinct_publisher_count,citations[]}. Embeddings cached work/atom_vecs.npy (204MB, gitignored). multi_work_atoms=20149 -> S_corrob input for C9.",
     "c8_compute": "C8 concept graph: Haiku Batch API for bulk triple extraction (86,702 atoms, ~$5-9, BYOK key) + SONNET SUBAGENT (Claude Code usage, model=sonnet, NOT the billable API key) to audit ambiguous/reversed edges post-build. Terse pipe format N|s|r|o (JSON was 2x tokens -> full Sonnet would have been ~$69, over the ~$34 approved). User: ping on completion.",
-    "c8_done": "C8 COMPLETE 2026-07-16: alias.py (deterministic canonical_key + synonym map, 16/16 5e checks) + graph.py (Haiku Batch triple extraction, terse N|s|r|o, ~$6). 86,702 atoms -> 75,716 triples -> 38,013 concepts (alias-folded) + 68,091 typed grounded edges + PageRank centrality (top: rheumatoid arthritis, AKI, asthma, SLE, hypertension, COPD). guideline_sensitive=1651. Sonnet SUBAGENT audit (CC usage, 114-edge sample): 75% correct, 97% SUPPORTED (only 3 hallucinated) -> SHIP-READY for centrality/C9. Applied audit #1 fix: deterministic investigated_by disease->test swap (1414 edges). RESIDUAL for C11-interlink: complication_of direction (~4/8 reversed), drug-direction on treats/first_line_for, associated_with overuse (28% of edges). GATE: 726 novel-alias proposals in dist/alias_proposals.yaml for user review (add real synonyms to profile.nomenclature.alias_hints, then re-fold)."
+    "c8_done": "C8 COMPLETE 2026-07-16: alias.py (deterministic canonical_key + synonym map, 16/16 5e checks) + graph.py (Haiku Batch triple extraction, terse N|s|r|o, ~$6). 86,702 atoms -> 75,716 triples -> 38,013 concepts (alias-folded) + 68,091 typed grounded edges + PageRank centrality (top: rheumatoid arthritis, AKI, asthma, SLE, hypertension, COPD). guideline_sensitive=1651. Sonnet SUBAGENT audit (CC usage, 114-edge sample): 75% correct, 97% SUPPORTED (only 3 hallucinated) -> SHIP-READY for centrality/C9. Applied audit #1 fix: deterministic investigated_by disease->test swap (1414 edges). RESIDUAL for C11-interlink: complication_of direction (~4/8 reversed), drug-direction on treats/first_line_for, associated_with overuse (28% of edges). GATE: 726 novel-alias proposals in dist/alias_proposals.yaml for user review (add real synonyms to profile.nomenclature.alias_hints, then re-fold).",
+    "c9_done": "C9 COMPLETE 2026-07-16: importance.py implemented (deterministic 1-5 per SCORING.md, all signals computed not LLM-rated). Scored all 3 item types: MCQs 12489 (5:389/4:3668/3:282/2:2828/1:5322), concepts 38013 (5:2626/4:1017/3:102/2:7222/1:27046), atoms 86702 (5:16/4:6527/3:22685/2:21464/1:36010). Linkages built: concept corrob=distinct canonical works per concept from graph_edges_raw; concept PYQ=approx match multi-word concept names in PYQ MCQ stems (3719 matched); atom<->concept via rationale (54788/86702 linked) -> atoms inherit centrality + PYQ. Floors correct: multi_year_pyq->5 is CONCEPT/MCQ-only (top 5star concepts=RA,coeliac,SLE,AKI,Addisons - correct high-yield). Bug found+fixed: multi_year floor wrongly applied to atoms (union of concept years) gave degenerate 33pct 5star -> removed (atoms get PYQ as inherited SIGNAL only). CAVEATS: emphasis(11pct)=0 (C3 highlights skipped); concept 71pct 1star (noisy 38k concept set -> candidate for pruning/opus recalibration); MCQ 3star thin (bimodal, PYQ-floor-driven). Outputs mcq/concept/atom_importance.jsonl.",
+    "c3_done": "C3 COMPLETE 2026-07-16 (backfilled; build had skipped C0->C4). bookusage.py implemented. Digital annotations = 0 (probed all 107 source PDFs -> zero highlight annots; distributed materials, not annotated copies) => is_highlighted=0 (no USER highlights); colour-mask skipped (Pastest/PassMed screenshots = UI colour, not highlights). book_flagged from: (a) whole-source salience pearls=0.75 (profile source_tiers.pearls, exempt noise ceiling); (b) per-topic markers in extracted text - SKELETON 🎤/▶️ (0.85), key point (0.7), pearl (0.6); high-yield/important EXCLUDED as noise. 9965 flagged pages (pearls 8256 whole-source + textbook 1572 markers + 137 qbank/paper). work/emphasis.jsonl. Wired S_emphasis into importance.py (my_highlight=0 so emphasis=0.4*book_salience) + rescored C9: atoms 1star 41.5->20.1pct (book-flagged content lifted), BUT 2star now 45.2pct (>45pct degenerate) - whole-book-high-yield sources (Essential Revision 17.8k atoms) boost uniformly -> pile-up at 1->2 boundary. Deterministic + correct; smoothing = opus importance-scorer recalibration (documented follow-up), NOT hand-tuned thresholds."
   },
   "token_spend_estimate_usd": 115.4
 }
