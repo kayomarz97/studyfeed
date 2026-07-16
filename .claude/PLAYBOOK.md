@@ -500,3 +500,14 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   `profile.nomenclature.alias_hints` (explicit, verified). A one-entity-one-node merge is irreversible
   corruption, so adjudicate near-identical names with domain knowledge; default to KEEP-SEPARATE when a
   letter/number/qualifier distinguishes them. (seen 1x)
+
+- **2026-07 · `sorted(set(...))` with a NON-TOTAL key is not reproducible across processes — string hash
+  randomization reorders ties.** C10 dossiers built byte-differently on two runs: connections were
+  `sorted(set(conns), key=lambda x: (-sources, relation, other))`, and two edges tying on all three but
+  differing in *direction* fell back to `set` iteration order — which depends on `PYTHONHASHSEED` (strings
+  are salted per process), so the page text changed run-to-run. Reproducible scoring is a hard
+  non-negotiable, and a per-run diff on the SAME seed would have missed it entirely.
+  **Fix/prevention:** every `sorted()` that feeds output must have a **total** key (append a unique
+  tiebreak — here the direction; elsewhere the row id/index). Test determinism by rebuilding under two
+  DIFFERENT seeds: `PYTHONHASHSEED=1 … && PYTHONHASHSEED=999 … && diff`. Never trust a same-seed re-run to
+  prove reproducibility. (seen 1x)

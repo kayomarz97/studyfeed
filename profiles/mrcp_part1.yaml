@@ -38,6 +38,13 @@ importance:
     uncorroborated_max: 3
     fading_max: 3                  # historically asked, dead since => capped
 
+dossier:                           # §C10 — which canonical concepts get a pre-built "read up on X" page
+  min_atoms: 3                     # build a page when the concept has >= this many constituent atoms ...
+  min_subjects: 2                  # ... OR spans >= this many subjects (cross-subject is the whole point)
+  max_connections: 20             # concept-map edges listed per page (ordered by distinct-source support)
+  max_related_mcqs: 30            # linked questions per page (ordered by MCQ importance)
+  min_name_len: 4                  # ignore concept names shorter than this when phrase-matching MCQ stems
+
 staleness:
   enabled: true
   guideline_sensitive_cues: ["first-line", "target", "threshold", "recommended", "guideline",

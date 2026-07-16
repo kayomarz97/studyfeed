@@ -100,6 +100,10 @@ class Config:
         return self.raw.get("nomenclature", {})
 
     @property
+    def dossier(self) -> dict[str, Any]:
+        return self.raw.get("dossier", {})
+
+    @property
     def subjects(self) -> list[dict[str, Any]]:
         return self.raw.get("subjects", [])
 
