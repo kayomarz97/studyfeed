@@ -471,3 +471,19 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   Verify: `distinct_work_count` canonicalised (§5b), largest cluster small + genuine, all atoms conserved.
   Precision-first — tuning has an irreducible inversion (a heavily-reworded TRUE pair can score below a
   template FALSE pair). (seen 1x)
+
+- **2026-07 · Item-type-specific FLOORS must not be applied across item types.** At C9 the
+  multi-year-PYQ→5★ floor is CONCEPT/MCQ-only per SCORING.md, but I applied it to atoms via the UNION of
+  their linked concepts' PYQ years — an atom mentioning 2+ separately-PYQ'd concepts trivially hit "≥2
+  years" and force-promoted, giving a degenerate 33% of atoms at 5★.
+  **Fix/prevention:** read the floor's SUBJECT in SCORING.md (MCQ / concept / atom) — atoms get PYQ only
+  as an inherited SIGNAL, never the concept multi-year floor. Sanity-check every score pass with a bucket
+  histogram; any bucket >45% or an unexpectedly fat 5★ band ⇒ a floor is mis-firing. (seen 1x)
+
+- **2026-07 · Never quote an output-heavy LLM cost from an assumed format — MEASURE on a real sample.**
+  At C8 I estimated ~$34 for Sonnet concept extraction; the measured cost was ~$104 (3×), because output
+  tokens (Sonnet $15/M, the dominant term) were far higher than my JSON-format guess. The gate approval
+  was for the wrong number.
+  **Fix/prevention:** before any budget-gate quote, run the real prompt on a ≥100-item sample and
+  extrapolate from ACTUAL in/out tokens; switching JSON→terse (`N|s|r|o`) cut output ~40%, and Haiku +
+  a Sonnet-subagent audit did the job for ~$6. Output tokens dominate cost — estimate them empirically. (seen 1x)
