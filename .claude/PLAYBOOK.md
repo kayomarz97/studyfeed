@@ -348,3 +348,23 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   **Fix/prevention:** the pipeline is path-qualified — spot-checks must be too. Before changing a
   same-named file's classification, `pdftotext` the exact `dedupe_canonicals` path and check for
   content markers (`Question N of` vs prose). (seen 1x)
+
+- **2026-07 · Read the TEXT block from a model result, never `content[0]` — Sonnet-5/Haiku-4.5 emit a
+  leading `ThinkingBlock`.** At C4 all 40 test-batch requests succeeded server-side, but harvest crashed
+  in `iter_results` with `AttributeError: 'ThinkingBlock' object has no attribute 'text'` — `m.content[0]`
+  was a thinking block, not the answer. This would have broken the ENTIRE harvest of a paid run. (The
+  traceback was a red herring: editing the running `.py` while it crashed mis-rendered the source lines;
+  only the exception *message* was trustworthy.)
+  **Fix/prevention:** `text = "".join(b.text for b in m.content if getattr(b, "type", None) == "text")` —
+  skip thinking/other block types; never index `content[0]`. (seen 1x)
+
+- **2026-07 · Content-selection filters must be SOURCE-aware, and JSON output needs token headroom.** At
+  C4 the MCQ page filter keyed on `correct answer|explanation` — correct for Pastest (self-contained
+  "Explanation" pages) but it missed ~63% of PassMedicine, which states the key in prose / peer-% not the
+  word "explanation" (2358 of ~5396 qbank Qs). Separately, stitched PassMedicine questions have long
+  explanations that overran `max_tokens=1200`, truncating the JSON mid-object → ~35% unparseable (paid,
+  wasted).
+  **Fix/prevention:** make `build_mcq` kind-aware (Pastest = answer-page filter; PassMedicine = `Question
+  N of M` page stitched with its continuation pages); mcq `max_tokens=3000`; demand raw JSON (no ``` ```
+  fences). ALWAYS run a zero-cost coverage audit (matched vs total; sample the SKIPPED set) BEFORE any
+  mass-LLM spend. (seen 1x)

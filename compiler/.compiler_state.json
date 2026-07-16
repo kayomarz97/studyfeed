@@ -1,11 +1,12 @@
 {
   "schema": 1,
-  "updated": "2026-07-15T21:21:53Z",
-  "stage": "C4",
+  "updated": "2026-07-16T01:12:44Z",
+  "stage": "C5",
   "completed": [
-    "C0"
+    "C0",
+    "C4"
   ],
-  "next_action": "C4 LLM INGEST IN FLIGHT. RUNNING SHELL: bg `python -m studyfeed_compiler.llm test` (poller task banyuljgg) waiting on an Anthropic TEST batch (40 reqs; batch id in state.batches kind=test); in_progress. RESUME: (1) check compiler/work/llm_test.log for 'TEST PASS/FAIL' + extrapolated $; or `cd compiler && PYTHONPATH=compiler .venv/bin/python -m studyfeed_compiler.llm status`. (2) If PASS -> verify mcq coverage (6637 answer-bearing pages; confirm skipped pages are test-view/nav not missed Qs) -> submit FULL: `.venv/bin/python -m studyfeed_compiler.llm submit` (records atomize[Haiku ~13802] + mcq[Sonnet ~6637] batch ids; Batch SLA ~1h/24h) -> poll `status` -> `harvest` (=> work/atoms.jsonl + work/mcqs.jsonl). (3) If FAIL -> read llm_test.log error, fix llm.py, re-test. THEN C5 cluster/corroboration. Run llm via compiler/.venv (py3.14) with SANDBOX OFF (network); key in compiler/.env (gitignored, loaded w/ override).",
+  "next_action": "C4 COMPLETE: work/atoms.jsonl (159689 grounded atoms) + work/mcqs.jsonl (9576 MCQs; 9544 with answer letter; 9466 with all 5 options) harvested from 23499 Batch requests (0 errors). Actual cost ~$108 (atomize 6.82M in/6.74M out Haiku; mcq 17.67M in/8.11M out Sonnet; batch 0.5x, EST rates). NEXT = C5 cluster/corroboration = pure Python, ZERO tokens (BUILD_PROMPT): near-dup cluster MCQs (+atoms), count DISTINCT WORKS not files for S_corrob (§5b), flag boilerplate (§5i). Read BUILD_PROMPT C5 + spec/schema.sql (dup_clusters/cluster_members/atom_citations/distinct_work_count). CAVEAT: atoms/mcqs store work_id under field name 'source_id' -> reconcile at C13 stable_key. ~110 MCQs have <5 options + 32 no answer -> handled at C7 grounding / C11 QA; optional mcq null-retry (121 nulls) deferred. Test batches msgbatch_017WY.../msgbatch_01KcJY... were validation-only (harvest skips kind=test).",
   "sources_seen": {},
   "archives": {
     "Papers.zip": {
@@ -32,6 +33,30 @@
       "n": 40,
       "status": "in_progress",
       "submitted": "2026-07-15T21:07:27Z"
+    },
+    {
+      "id": "msgbatch_01KcJY6fQW8bubezPuo9K81z",
+      "kind": "test",
+      "stage": "C4-test",
+      "n": 40,
+      "status": "in_progress",
+      "submitted": "2026-07-15T21:54:58Z"
+    },
+    {
+      "id": "msgbatch_012LptK6V5oPQyeEsL9h2aa2",
+      "kind": "atomize",
+      "stage": "C4",
+      "n": 13802,
+      "status": "in_progress",
+      "submitted": "2026-07-16T00:54:17Z"
+    },
+    {
+      "id": "msgbatch_01HMMFjJEx11AFWepnjCKnKK",
+      "kind": "mcq",
+      "stage": "C4",
+      "n": 9697,
+      "status": "in_progress",
+      "submitted": "2026-07-16T00:54:21Z"
     }
   ],
   "cursors": {
@@ -46,7 +71,20 @@
     "total_pages": 43165,
     "total_chars": 70556580,
     "llm_atomize_reqs": 13802,
-    "llm_mcq_reqs": 6637
+    "llm_mcq_reqs": 9697,
+    "llm_mcq_note": "kind-aware post-fix: 4279 pastest answer-pages + 5418 passmed stitched units (was 6637 pre-fix)",
+    "atoms_rows": 159689,
+    "mcqs_rows": 9576,
+    "mcqs_with_answer": 9544,
+    "mcqs_all5opts": 9466,
+    "llm_atomize_ok": 13802,
+    "llm_mcq_ok": 9697,
+    "c4_actual_tokens": {
+      "atomize_in": 6824981,
+      "atomize_out": 6743275,
+      "mcq_in": 17665730,
+      "mcq_out": 8110341
+    }
   },
   "blocked_on": null,
   "decisions": {
@@ -64,7 +102,10 @@
     "textbook_nsubject_are_qbank": "CORRECTED (my earlier smoke conflated same-named Qbank file): Textbook 'N-Subject' files are Passmedicine High-Yield TEXTBOOK (PROSE), NOT qbank. Reclassified textbook->PEARLS (17 High-Yield files). NOT qbank.",
     "compute_path": "APPROVED: Batch API — balanced (Haiku atomize, Sonnet MCQ-parse). Key in compiler/.env (gitignored). User declined Claude Code tokens (would risk CC cap).",
     "patch01": "APPLIED 2026-07-16. Part A (stable_key) IN PLACE: spec/schema.sql (stable_key UNIQUE + index on atoms/concepts/mcqs/topic_pages), BUILD_PROMPT §5j (new), §6a x4, §6b retrofit (fsrs_cards/reviews/mistakes/stars/item_tags -> stable_key) + user_notes/user_note_images. Part B (§A8 notes, §11e zip-export) appended to BUILD_PROMPT as 'PATCH 01 — Part B'. SPEC.md progress-schema mirror still stale (item_id) -> update at Phase 2 (BUILD_PROMPT authoritative).",
-    "C13_blocked_on_patch01": "C13 PACKAGING BLOCKED: must not run until (a) stable_key in schema [DONE] AND (b) reproducibility test passes [TODO in pack.py: build pack twice from unchanged inputs -> every stable_key identical; add one source -> pre-existing keys unchanged]. pack.py computes stable_key=sha256(normalize(text)|work_id|page_ref)[:16]; atoms/mcqs jsonl currently store work_id under field name 'source_id' (reconcile naming at packaging)."
+    "C13_blocked_on_patch01": "C13 PACKAGING BLOCKED: must not run until (a) stable_key in schema [DONE] AND (b) reproducibility test passes [TODO in pack.py: build pack twice from unchanged inputs -> every stable_key identical; add one source -> pre-existing keys unchanged]. pack.py computes stable_key=sha256(normalize(text)|work_id|page_ref)[:16]; atoms/mcqs jsonl currently store work_id under field name 'source_id' (reconcile naming at packaging).",
+    "auto_submit_on_test_pass": "AUTHORIZED by user 2026-07-16 (they went to sleep): if the C4 TEST batch => PASS, DO NOT stop at the budget gate. Auto-proceed WITHOUT waking user: (1) MCQ-coverage sanity check; (2) submit FULL run; (3) poll to completion; (4) harvest -> work/atoms.jsonl + work/mcqs.jsonl; (5) checkpoint+commit; then C5. If TEST => FAIL: read log error, fix llm.py, re-test, NO full spend.",
+    "mcq_coverage_fix": "C4 coverage bug FOUND+FIXED (2026-07-16). Narrow mcq filter `correct answer|explanation` was kind-blind and under-covered QBANK (PassMedicine) by ~63%: PassMedicine answer pages seldom print 'explanation' (106 pp) and state the key only in prose or as the peak peer-response %. Capture was ~2358 of ~5396 qbank Qs. FIX (kind-aware build_mcq via new _mcq_units): past_paper(Pastest)=per-page pages matching 'correct answer|explanation' (4279 self-contained answer pages; duplicate bare-question halves skipped); qbank(PassMedicine)=one UNIT per question = the 'Question N of M' page STITCHED with following continuation pages up to the next header (~5418 units; full stem+options+explanation+topic notes). qof_pages>=M per work => clean segmentation (at most minor over-split -> null, never under-merge). New mcq total ~9697 (was 6637). MCQ_SYS prompt updated: infer the answer letter from explanation prose; ignore peer-% as key; strip PassMed UI. _run_test now strided-samples across BOTH kinds so it validates qbank stitched-unit parsing + re-extrapolates cost.",
+    "c4_full_submit": "FULL C4 LLM ingest submitted 2026-07-16 per user authorization (skip budget gate). Pipeline validated: kind-aware mcq selection (9697 units = 4279 Pastest answer-pages + 5418 PassMedicine stitched questions) + atomize (13802 units). Three bugs found+fixed+validated: (1) iter_results ThinkingBlock - Sonnet-5/Haiku-4.5 emit a leading thinking block, so join text blocks and skip thinking; (2) mcq JSON truncation - max_tokens 1200->3000 (sync test 14/15 parse, MAX_out=1478, qbank 8/8, no truncation); (3) prompt now demands raw JSON only. LOCKED cost est ~$105 (mcq ~$88 Sonnet + atomize ~$16 Haiku, batch 0.5x, EST rates - real likely $90-105). Residual ~7% mcq return unparseable JSON edge cases -> harden _parse_mcq during batch wait; harvest-time only, no extra spend."
   },
-  "token_spend_estimate_usd": 0.0
+  "token_spend_estimate_usd": 108.0
 }

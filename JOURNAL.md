@@ -113,3 +113,27 @@ PATCH 01 (user spec change, applied today): Part A stable_key done in place (see
 DOCUMENTED MISTAKE (do not repeat): I earlier mis-reported the Textbook 'N-Subject' files as qbank (my smoke's name-keyed resolver grabbed the Qbank drop's same-named file). Verified drop-qualified: Textbook copies are High-Yield TEXTBOOK PROSE (0 'Question N of' markers) -> reclassified to pearls, NOT qbank. Rule in ledger: same filename != same file across drops; verify the exact path.
 
 RESUME: follow .compiler_state.json next_action. Spec = BUILD_PROMPT.md (on disk, authoritative). Do NOT restart; do NOT re-extract; do NOT relaunch the test if banyuljgg still alive (pgrep -f 'llm test').
+- subagent `` (a8281a03b8550cfb5) finished — 8 chars -> work/subagent_results.jsonl
+
+**[compacted at 2026-07-15T21:23:00Z]** — context compacted; disk state is the truth (§10a).
+- subagent `` (a69f41cb4a94c5c48) finished — 14121 chars -> work/subagent_results.jsonl
+
+## 2026-07-15T21:32:10Z  [C4-AUTH]
+
+**[C4 - user authorized auto-proceed on TEST PASS]** User (going to sleep, 2026-07-16) instructed: if the C4 TEST batch passes, skip the budget gate and continue autonomously through the FULL LLM ingest (submit -> poll -> harvest) without waking them; on FAIL, fix and re-test with no full spend. Recorded as decisions.auto_submit_on_test_pass; next_action updated. A background bash watcher is armed to wake the session when compiler/work/llm_test.log shows TEST PASS/FAIL.
+
+## 2026-07-15T21:43:29Z  [C4-COVERAGE-FIX]
+
+**[C4-COVERAGE-FIX]** A zero-cost pre-submit coverage audit caught a real bug BEFORE any spend: the mcq page filter `correct answer|explanation` was kind-blind and under-covered the PassMedicine QBANK by ~63% (only ~2358 of ~5396 questions). PassMedicine answer pages rarely contain the literal 'explanation' (106 pp) and state the key in prose (e.g. 'X is the correct first-line treatment') or as the peak peer-response %. Verified 3 such 'no-marker' pages (wid=47 p6/p9/p12) are fully self-contained questions. Pastest (past_paper) was already correct: its self-contained 'Explanation' pages (4279) match and the duplicate bare-question halves are rightly skipped. FIX: build_mcq is now kind-aware (new _mcq_units) - past_paper keeps the per-page answer-marker filter; qbank yields one UNIT per question = the 'Question N of M' page stitched with its continuation pages. New mcq total ~9697 (was 6637). Re-testing the NEW selection (strided sample across both kinds) before any full spend, per the user's auto-proceed authorization.
+
+## 2026-07-15T21:55:48Z  [C4-RETEST]
+
+**[C4-RETEST]** Corrected re-test launched (batch msgbatch_01KcJY6fQW8bubezPuo9K81z, bg task bvp1w9bai, log work/llm_retest.log) after the original test batch sat ~50 min at 0 succeeded. It validates the kind-aware mcq selection (PassMedicine prose-answer parsing) + atomize, and re-extrapolates cost for 13802 atomize + 9697 mcq units. The original test (work/llm_test.log) is superseded and disregarded (left running, not killed, per the no-kill rule). On re-test PASS the session auto-submits the full run per decisions.auto_submit_on_test_pass.
+- subagent `` (a0a8a01ee3cb88f51) finished — 33 chars -> work/subagent_results.jsonl
+
+## 2026-07-16T00:53:36Z  [C4-FULL-SUBMIT]
+
+**[C4-FULL-SUBMIT]** Submitted the full C4 LLM ingest per the user's authorization to skip the budget gate. Locked cost ~$105 (mcq ~$88 Sonnet + atomize ~$16 Haiku, batch 0.5x, estimated rates). Validated end-to-end first: the coverage fix (9697 mcq units including 5418 stitched PassMedicine questions) plus three bugs fixed and confirmed - ThinkingBlock result-parsing, mcq JSON truncation (max_tokens 1200->3000; sync test 14/15 parse, qbank 8/8, no truncation at MAX_out=1478), and a JSON-only prompt. Batches run for hours; will poll to completion then harvest to atoms.jsonl + mcqs.jsonl. A residual ~7% of mcqs return unparseable JSON edge cases - hardening _parse_mcq during the batch wait (harvest-time only, no extra spend).
+- subagent `` (a8cb386235bd3f875) finished — 12 chars -> work/subagent_results.jsonl
+- subagent `` (a2bf7245b7e6c1081) finished — 36 chars -> work/subagent_results.jsonl
+- subagent `` (a8afc8da75d9cb2ac) finished — 32 chars -> work/subagent_results.jsonl

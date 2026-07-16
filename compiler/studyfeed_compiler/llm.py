@@ -16,6 +16,7 @@ import json
 import os
 import re
 import time
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -37,13 +38,21 @@ ATOMIZE_SYS = (
 )
 MCQ_SYS = (
     "You parse ONE MRCP(UK) best-of-five MCQ from OCR'd revision text (Pastest/PassMedicine "
-    "screenshots). Return ONE JSON object, or the literal null if there is no question. Object: "
+    "screenshots; the text may span several stitched screenshots of the SAME question). Return ONE JSON "
+    "object, or the literal null if there is no question. Object: "
     "{\"stem\":\"<vignette + lead-in>\",\"options\":{\"A\":\"..\",\"B\":\"..\",\"C\":\"..\",\"D\":\"..\","
-    "\"E\":\"..\"},\"answer\":\"<A-E or null if not shown>\",\"explanation\":\"<if shown, else empty>\"}. "
-    "Transcribe faithfully; fix obvious OCR errors in medical terms only when unambiguous. STRIP all UI "
-    "chrome: 'Question N of M', Pastest, PassMedicine, LOG OUT, Previous/Next Question, Save and Leave, "
-    "Peer Responses, percentages/bar-chart numbers, the Q1 Q2… navigator, timestamps, URLs. Include only "
-    "the options actually present. Output null if the page has no question (stats/index/blank)."
+    "\"E\":\"..\"},\"answer\":\"<A-E, or null only if truly indeterminable>\",\"explanation\":\"<the full "
+    "explanation/teaching text, else empty>\"}. Transcribe faithfully; fix obvious OCR errors in medical "
+    "terms only when unambiguous. The correct answer is frequently NOT labelled with a letter — it is stated "
+    "in the explanation prose (e.g. 'X is the correct/first-line treatment', 'the answer is X') or as a bold "
+    "teaching line; identify that option and map it to its letter. The per-option percentages are peer-response "
+    "stats, NOT the key — never choose the answer from them. STRIP all UI chrome: 'Question N of M', Pastest, "
+    "PassMedicine, LOG OUT, Previous/Next Question, Save and Leave, Peer Responses, 'Important for me', 'Less "
+    "important', 'Discuss (N)', 'Improve', percentages/bar-chart numbers, the Q1 Q2… navigator, timestamps, "
+    "URLs. Include only the options actually present. Output null only if there is genuinely no question "
+    "(stats/index/blank, or an explanation fragment with no stem). Output ONLY the raw JSON value (the "
+    "object, or the word null) with NO markdown code fences (no ```), NO 'json' label, and NO prose before "
+    "or after it. Keep the explanation faithful but not padded."
 )
 
 _CHROME = re.compile(
@@ -105,21 +114,57 @@ def build_atomize(kinds: dict[int, str], limit: int | None = None) -> list[dict]
         body = _clean(text)
         if len(body) < 200:  # skip sparse nav/index pages
             continue
-        reqs.append(_req(f"atom:{wid}:{page}", MODEL_ATOMIZE, ATOMIZE_SYS, body[:12000], 1200))
+        reqs.append(_req(f"atom_{wid}_{page}", MODEL_ATOMIZE, ATOMIZE_SYS, body[:12000], 1200))
         if limit and len(reqs) >= limit:
             break
     return reqs
 
 
+_QOF = re.compile(r"question\s+\d+\s+of\s+\d+", re.I)             # per-question header (Pastest + PassMedicine)
+_PP_ANSWER = re.compile(r"correct answer|\bexplanation\b", re.I)   # Pastest self-contained answer page
+
+
+def _mcq_units(kinds: dict[int, str]) -> Iterator[tuple[int, str, str]]:
+    """Yield (work_id, page_ref, text) MCQ units, kind-aware (§5a).
+
+    past_paper (Pastest): every answer page is self-contained (carries 'Explanation' + the full stem and
+      options); the duplicate bare-question page has neither, so the answer-marker filter keeps exactly one
+      unit per question.
+    qbank (PassMedicine): 'Explanation' is almost never printed and the key often lives only in the
+      explanation prose, so filtering on answer words drops ~63% of questions. Instead each question is one
+      UNIT = its 'Question N of M' page STITCHED with the following continuation pages (rest of the
+      explanation + topic notes) up to the next header. qof_pages>=M per work (one header per question) so
+      the groups segment cleanly — at worst a repeated header over-splits into a stemless fragment (parsed
+      to null downstream), never merges two questions.
+    """
+    for wid, page, text in _pages(kinds, {"past_paper"}):
+        if _PP_ANSWER.search(text):
+            yield wid, str(page), text
+    qbank: dict[int, list[tuple[int, str]]] = defaultdict(list)
+    for wid, page, text in _pages(kinds, {"qbank"}):
+        qbank[wid].append((page, text))
+    for wid in sorted(qbank):
+        head_page: int | None = None
+        buf: list[str] = []
+        for page, text in sorted(qbank[wid], key=lambda pt: pt[0]):
+            if _QOF.search(text):
+                if buf:
+                    yield wid, str(head_page), "\n".join(buf)
+                head_page, buf = page, [text]
+            elif buf:                       # continuation of the current question
+                buf.append(text)
+            # leading non-header pages (before the first question) are dropped
+        if buf:
+            yield wid, str(head_page), "\n".join(buf)
+
+
 def build_mcq(kinds: dict[int, str], limit: int | None = None) -> list[dict]:
     reqs = []
-    for wid, page, text in _pages(kinds, {"past_paper", "qbank"}):
-        if not re.search(r"correct answer|\bexplanation\b", text, re.I):  # answer-bearing pages only
-            continue
+    for wid, page_ref, text in _mcq_units(kinds):
         body = _clean(text)
-        if len(body) < 120:
+        if len(body) < 120:                 # drop blank/nav fragments
             continue
-        reqs.append(_req(f"mcq:{wid}:{page}", MODEL_MCQ, MCQ_SYS, body[:12000], 1200))
+        reqs.append(_req(f"mcq_{wid}_{page_ref}", MODEL_MCQ, MCQ_SYS, body[:12000], 3000))  # long stitched explanations need headroom
         if limit and len(reqs) >= limit:
             break
     return reqs
@@ -140,11 +185,15 @@ def poll(batch_id: str):
 
 
 def iter_results(batch_id: str) -> Iterator[tuple[str, bool, Any, Any]]:
-    """Yield (custom_id, ok, text_or_error, usage). Reconcile by custom_id — order is not guaranteed."""
+    """Yield (custom_id, ok, text_or_error, usage). Reconcile by custom_id — order is not guaranteed.
+
+    content[0] is NOT reliably the answer: Sonnet-5 / Haiku-4.5 can emit a leading ThinkingBlock, so we
+    concatenate every text block and skip thinking/other block types (§10d)."""
     for r in client().messages.batches.results(batch_id):
         if r.result.type == "succeeded":
             m = r.result.message
-            yield r.custom_id, True, m.content[0].text, m.usage
+            text = "".join(b.text for b in m.content if getattr(b, "type", None) == "text")
+            yield r.custom_id, True, text, m.usage
         else:
             yield r.custom_id, False, r.result.type, None
 
@@ -158,7 +207,7 @@ def submit_chunked(requests: list[dict], kind: str, stage: str) -> list[str]:
 
 # ── result processing (reconcile by custom_id -> grounded rows on disk) ──────────────────────────
 def _parse_atoms(cid: str, text: str) -> list[dict]:
-    _, wid, page = cid.split(":")
+    _, wid, page = cid.split("_")
     try:
         arr = json.loads(text[text.index("["):text.rindex("]") + 1])
     except Exception:
@@ -173,7 +222,7 @@ def _parse_atoms(cid: str, text: str) -> list[dict]:
 
 
 def _parse_mcq(cid: str, text: str) -> dict | None:
-    _, wid, page = cid.split(":")
+    _, wid, page = cid.split("_")
     t = text.strip()
     if t.lower().startswith("null") or t == "{}":
         return None
@@ -220,7 +269,9 @@ def _cost(model: str, tin: float, tout: float) -> float:
 
 def _run_test() -> bool:
     kinds = _kinds()
-    a, m = build_atomize(kinds, 20), build_mcq(kinds, 20)
+    a = build_atomize(kinds, 20)
+    all_m = build_mcq(kinds)                          # all units (no API cost); sample a spread below
+    m = all_m[:: max(1, len(all_m) // 20)][:20]       # strided -> spans past_paper AND qbank stitched units
     reqs = a + m
     print(f"TEST: {len(a)} atomize + {len(m)} mcq = {len(reqs)} requests", flush=True)
     bid = submit(reqs, "test", "C4-test")
@@ -237,7 +288,7 @@ def _run_test() -> bool:
         if not ok:
             errs += 1
             continue
-        if cid.startswith("atom:"):
+        if cid.startswith("atom_"):
             ta_i += usage.input_tokens; ta_o += usage.output_tokens
             items = _parse_atoms(cid, payload); atoms += len(items); sa = sa or (items[0] if items else None)
         else:
@@ -245,7 +296,7 @@ def _run_test() -> bool:
             mm = _parse_mcq(cid, payload)
             if mm:
                 mcqs += 1; sm = sm or mm
-    full_a, full_m = len(build_atomize(kinds)), len(build_mcq(kinds))
+    full_a, full_m = len(build_atomize(kinds)), len(all_m)
     ca = _cost(MODEL_ATOMIZE, ta_i / max(1, len(a)) * full_a, ta_o / max(1, len(a)) * full_a)
     cm = _cost(MODEL_MCQ, tm_i / max(1, len(m)) * full_m, tm_o / max(1, len(m)) * full_m)
     print(f"\nTEST DONE. errors={errs} | atoms={atoms} (from {len(a)} pages) | mcqs={mcqs} (from {len(m)} pages)", flush=True)
@@ -281,6 +332,10 @@ if __name__ == "__main__":
             except Exception as e:
                 print(b["id"], "ERR", e, flush=True)
     elif mode == "harvest":
+        for f in ("atoms.jsonl", "mcqs.jsonl"):   # start fresh; process() appends, so a re-run must never double-write
+            p = WORK_DIR / f
+            if p.exists():
+                p.unlink()
         for b in state.read_state().get("batches", []):
             if b["kind"] == "test":
                 continue
