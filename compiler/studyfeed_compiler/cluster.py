@@ -29,6 +29,7 @@ import os
 import re
 from collections import defaultdict
 
+from . import workgroups
 from .config import WORK_DIR
 
 HIGH = 0.92   # >= HIGH  => same question, auto-merge (union-find)
@@ -58,6 +59,17 @@ def _page_int(page_ref) -> int:
 
 def load_mcqs() -> list[dict]:
     return [json.loads(l) for l in open(WORK_DIR / "mcqs.jsonl", encoding="utf-8")]
+
+
+def load_mcqs_canonical() -> list[dict]:
+    """MCQs with source_id mapped to its canonical work (§5b) — the form ALL corroboration counting
+    needs, so the 14 SKELETON subject-slices (80,81,83-92,95,96) collapse to work 80 rather than
+    faking cross-work agreement. Used by both Phase-1 clustering and Phase-2 adjudication rewrite."""
+    mcqs = load_mcqs()
+    cmap = workgroups.canonical_map()
+    for m in mcqs:
+        m["source_id"] = cmap.get(m["source_id"], m["source_id"])
+    return mcqs
 
 
 def load_works() -> dict[int, dict]:
@@ -166,7 +178,7 @@ def write_cluster_outputs(rows: list[dict], corrob: dict[int, dict], n: int) -> 
 
 
 def cluster(_cfg=None) -> dict:
-    mcqs = load_mcqs()
+    mcqs = load_mcqs_canonical()                                   # §5b: sibling slices collapsed to one work
     works = load_works()
     n = len(mcqs)
     norm_stems = [_norm(m.get("stem", ""))[:1000] for m in mcqs]   # cap seq length -> bounds embed memory

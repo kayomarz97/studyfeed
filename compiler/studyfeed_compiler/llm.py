@@ -45,8 +45,11 @@ MCQ_SYS = (
     "explanation/teaching text, else empty>\"}. Transcribe faithfully; fix obvious OCR errors in medical "
     "terms only when unambiguous. The correct answer is frequently NOT labelled with a letter — it is stated "
     "in the explanation prose (e.g. 'X is the correct/first-line treatment', 'the answer is X') or as a bold "
-    "teaching line; identify that option and map it to its letter. The per-option percentages are peer-response "
-    "stats, NOT the key — never choose the answer from them. STRIP all UI chrome: 'Question N of M', Pastest, "
+    "teaching line; identify that option and map it to its letter. When a line explicitly states the key "
+    "(e.g. 'Correct Answer: B- Flecainide' or 'Answer: B'), THAT letter is the answer. The per-option "
+    "percentages are peer-response stats, NOT the key — never choose the answer from them. STRIP all UI "
+    "chrome: 'Question N of M', 'SKELETON of MRCP PART-1', 'System: <subject>' running headers, ▶️/🎤 "
+    "YouTube-link emoji, Pastest, "
     "PassMedicine, LOG OUT, Previous/Next Question, Save and Leave, Peer Responses, 'Important for me', 'Less "
     "important', 'Discuss (N)', 'Improve', percentages/bar-chart numbers, the Q1 Q2… navigator, timestamps, "
     "URLs. Include only the options actually present. Output null only if there is genuinely no question "
@@ -165,6 +168,94 @@ def build_mcq(kinds: dict[int, str], limit: int | None = None) -> list[dict]:
         if len(body) < 120:                 # drop blank/nav fragments
             continue
         reqs.append(_req(f"mcq_{wid}_{page_ref}", MODEL_MCQ, MCQ_SYS, body[:12000], 3000))  # long stitched explanations need headroom
+        if limit and len(reqs) >= limit:
+            break
+    return reqs
+
+
+# ── textbook-embedded qbanks (e.g. SsAcademy 'SKELETON of MRCP') ────────────────────────────────
+# These arrived inside Textbook.zip and are classified `kind=textbook` (their prose is already
+# atomized as the knowledge layer — kept, not relabelled §5b). But they are really question banks:
+# numbered 'Question N' items with A–E options, a printed 'Correct Answer:' key (§5a → qbank trust)
+# and an explanation. C4's MCQ stage only ran past_paper+qbank, so these were never parsed. This
+# path segments ONLY those textbook works and appends new MCQs — the existing corpus is untouched.
+_QHEAD = re.compile(r"(?im)^[ \t]*Question\s+(\d+)\b")   # SKELETON per-question header (captures the number)
+
+
+def _textbook_qbank_wids(kinds: dict[int, str], min_headers: int = 20) -> dict[int, list[tuple[int, str]]]:
+    """textbook-kind works that are really qbanks: >= min_headers 'Question N' headers.
+    Returns {wid: [(page:int, text)] sorted by page}. Prose textbooks (few/no headers) are excluded."""
+    pages: dict[int, list[tuple[int, str]]] = defaultdict(list)
+    for wid, page, text in _pages(kinds, {"textbook"}):
+        pages[wid].append((int(page), text))
+    return {wid: sorted(pts, key=lambda pt: pt[0])
+            for wid, pts in pages.items()
+            if sum(len(_QHEAD.findall(t)) for _, t in pts) >= min_headers}
+
+
+def _mcq_units_textbook(kinds: dict[int, str]) -> Iterator[tuple[int, str, str]]:
+    """Yield (wid, page_ref, text) COMPLETE MCQ units from textbook-embedded qbanks (SsAcademy
+    'SKELETON of MRCP'). Each subject file is laid out as: a small demo (Q1-6, dropped) + a QUESTIONS
+    section (Q1..N: stem+options) + an ANSWERS section (Q1..N: 'Correct Answer' + explanation), N
+    matching. We split the header stream into sections at each question-number RESET, classify each as
+    answers (when 'Correct Answer' dominates) vs questions, then PAIR question K with answer K by
+    number so every emitted unit carries stem+options+key+explanation. page_ref = '<stem-page>-q<N>'
+    — unique per question (several questions share a page); cluster._page_int recovers the page int."""
+    ca = re.compile(r"(?i)correct\s*answer")
+    for wid, pts in _textbook_qbank_wids(kinds).items():
+        chunks, starts, pos = [], [], 0                  # concatenate the work, tracking page offsets
+        for page, text in pts:
+            starts.append((pos, page)); chunks.append(text); pos += len(text) + 1
+        full = "\n".join(chunks)
+
+        def _page_at(off: int, _starts=starts, _first=pts[0][0]) -> int:
+            pg = _first
+            for o, p in _starts:
+                if o <= off:
+                    pg = p
+                else:
+                    break
+            return pg
+
+        heads = [(m.start(), int(m.group(1))) for m in _QHEAD.finditer(full)]
+        if not heads:
+            continue
+        segs = [(qn, _page_at(off), full[off:(heads[i + 1][0] if i + 1 < len(heads) else len(full))])
+                for i, (off, qn) in enumerate(heads)]
+        sections, cur = [], []                           # split at each question-number reset
+        for seg in segs:
+            if cur and seg[0] < cur[-1][0]:
+                sections.append(cur); cur = []
+            cur.append(seg)
+        if cur:
+            sections.append(cur)
+        real = [s for s in sections if len(s) >= 15]     # drop the tiny repeated demo section
+        is_answers = [sum(bool(ca.search(t)) for _, _, t in s) >= len(s) * 0.5 for s in real]
+        answers: dict[int, str] = {}
+        for s, ans in zip(real, is_answers):
+            if ans:
+                for qn, _, txt in s:
+                    answers[qn] = txt
+        seen: set[str] = set()
+        for s, ans in zip(real, is_answers):
+            if ans:
+                continue                                 # answers sections are pairing targets, not units
+            for qn, pg, qtxt in s:                        # questions section -> emit one paired unit each
+                atxt = answers.get(qn, "")
+                ref = f"{pg}-q{qn}"
+                while ref in seen:                        # rare OCR/section dup: keep both, unique custom_id
+                    ref += "b"
+                seen.add(ref)
+                yield wid, ref, (qtxt + "\n" + atxt) if atxt else qtxt
+
+
+def build_mcq_textbook(kinds: dict[int, str], limit: int | None = None) -> list[dict]:
+    reqs = []
+    for wid, page_ref, text in _mcq_units_textbook(kinds):
+        body = _clean(text)
+        if len(body) < 120:                              # drop blank/nav fragments
+            continue
+        reqs.append(_req(f"mcq_{wid}_{page_ref}", MODEL_MCQ, MCQ_SYS, body[:12000], 3000))
         if limit and len(reqs) >= limit:
             break
     return reqs
@@ -313,18 +404,67 @@ def _run_test() -> bool:
     return ok
 
 
+def _run_test_textbook() -> bool:
+    """Validate SKELETON segmentation + parse on a strided sample BEFORE the full spend; re-extrapolate cost."""
+    kinds = _kinds()
+    qwids = _textbook_qbank_wids(kinds)
+    print(f"textbook-qbank works detected ({len(qwids)}): {sorted(qwids)}", flush=True)
+    all_m = build_mcq_textbook(kinds)                     # all units (no API cost)
+    m = all_m[:: max(1, len(all_m) // 20)][:20]           # strided spread across subjects
+    print(f"TEST(textbook): sampling {len(m)} of {len(all_m)} SKELETON mcq units", flush=True)
+    bid = submit(m, "test", "SKELETON-test")
+    print("batch:", bid, "(recorded to state)", flush=True)
+    while True:
+        st, counts = poll(bid)
+        print("  poll:", st, counts, flush=True)
+        if st == "ended":
+            break
+        time.sleep(20)
+    mcqs = errs = tin = tout = 0
+    samples = []
+    for cid, ok, payload, usage in iter_results(bid):
+        if not ok:
+            errs += 1
+            continue
+        tin += usage.input_tokens
+        tout += usage.output_tokens
+        if (mm := _parse_mcq(cid, payload)):
+            mcqs += 1
+            if len(samples) < 5:
+                samples.append(mm)
+    full = len(all_m)
+    cost = _cost(MODEL_MCQ, tin / max(1, len(m)) * full, tout / max(1, len(m)) * full)
+    print(f"\nTEST DONE. errors={errs} | parsed {mcqs}/{len(m)} sampled units", flush=True)
+    print(f"  tokens: {tin}in/{tout}out over {len(m)} units", flush=True)
+    print(f"  FULL: {full} units -> EXTRAPOLATED mcq cost (batch 0.5x, est rates): ${cost:.2f}", flush=True)
+    for s in samples:
+        print(f"  SAMPLE ans={s.get('answer')!s:4} opts={sum(1 for k in 'abcde' if s.get('opt_'+k))} "
+              f"stem={s.get('stem', '')[:110]!r}", flush=True)
+    ok = errs == 0 and mcqs >= len(m) * 0.7
+    print(f"\nTEST {'PASS' if ok else 'FAIL'}", flush=True)
+    state.update_state(cursors={**state.read_state().get("cursors", {}),
+                                "skeleton_full_mcq_units": full, "skeleton_test_est_cost_usd": round(cost, 2)})
+    return ok
+
+
 if __name__ == "__main__":
     import sys
 
     mode = sys.argv[1] if len(sys.argv) > 1 else "test"
     if mode == "test":
         _run_test()
+    elif mode == "test-textbook":
+        _run_test_textbook()
     elif mode == "submit":
         k = _kinds()
         a, m = build_atomize(k), build_mcq(k)
         print(f"submitting {len(a)} atomize + {len(m)} mcq requests", flush=True)
         print("atomize batches:", submit_chunked(a, "atomize", "C4"), flush=True)
         print("mcq batches:", submit_chunked(m, "mcq", "C4"), flush=True)
+    elif mode == "submit-textbook":
+        m = build_mcq_textbook(_kinds())
+        print(f"submitting {len(m)} textbook-qbank (SKELETON) mcq requests", flush=True)
+        print("mcq batches:", submit_chunked(m, "mcq", "SKELETON"), flush=True)
     elif mode == "status":
         for b in state.read_state().get("batches", []):
             try:
@@ -341,3 +481,14 @@ if __name__ == "__main__":
                 continue
             out = WORK_DIR / ("atoms.jsonl" if b["kind"] == "atomize" else "mcqs.jsonl")
             print(b["id"], b["kind"], process(b["id"], b["kind"], out), flush=True)
+    elif mode == "harvest-textbook":
+        # Idempotent APPEND: drop any prior SKELETON rows, keep every other MCQ, then append fresh.
+        wids = set(_textbook_qbank_wids(_kinds()))
+        p = WORK_DIR / "mcqs.jsonl"
+        if p.exists():
+            kept = [l for l in open(p, encoding="utf-8") if json.loads(l).get("source_id") not in wids]
+            p.write_text("".join(kept), encoding="utf-8")
+            print(f"kept {len(kept)} non-SKELETON mcqs; appending SKELETON parse", flush=True)
+        for b in state.read_state().get("batches", []):
+            if b.get("stage") == "SKELETON" and b["kind"] == "mcq":
+                print(b["id"], process(b["id"], b["kind"], p), flush=True)

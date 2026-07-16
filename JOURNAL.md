@@ -154,3 +154,43 @@ RESUME: follow .compiler_state.json next_action. Spec = BUILD_PROMPT.md (on disk
 ## 2026-07-16T04:06:05Z  [C6-COMPLETE]
 
 **[C6-COMPLETE]** PYQ analysis + trend done (free, on the C5 clusters). Per question: is_pyq, pyq_hit_count (distinct past_paper canonical works), pyq_years, pyq_last_year, S_pyq=sum exp(-0.15*(2026-year)), and pyq_trend. 4,266/9,576 MCQs are PYQs (qbank/textbook Qs inherit PYQ credit by clustering with a past_paper question); trend rising 1,658 / steady 1,489 / fading 281 clusters; 125 multi-year clusters (force importance 5); corpus mean paper year 2020.6. Output: work/mcq_pyq.jsonl (feeds C9 scoring). Staleness (key_conflict) deferred to post-C8. Next: C7 atom dedup.
+- subagent `` (a1ce884baba62775b) finished — 16 chars -> work/subagent_results.jsonl
+
+_[session ended: clear at 2026-07-16T04:58:27Z]_
+
+_[session ended: resume at 2026-07-16T04:58:48Z]_
+
+_[session ended: resume at 2026-07-16T04:59:22Z]_
+- subagent `` (a8275145fbdd2c681) finished — 47 chars -> work/subagent_results.jsonl
+- subagent `` (a65c5efada37f32f7) finished — 8 chars -> work/subagent_results.jsonl
+- subagent `` (adac2f5f6fedd18f2) finished — 41 chars -> work/subagent_results.jsonl
+
+## 2026-07-16T06:34:44Z  [SKELETON-COMPLETE]
+
+SKELETON qbank MCQs parsed + C5/C6 re-run. 14 textbook-kind subject files (SsAcademy "SKELETON of MRCP Part 1", canonical work 80) were misfiled as textbook, so C4 never parsed their MCQs. Added llm._mcq_units_textbook: detect textbook works with >=20 Question headers, split into Questions/Answers sections at number resets, PAIR question K with answer K (each unit=stem+options+printed key+explanation). 2913 units, validated offline (100% complete, 0 dup ids, existing 9697-unit path unchanged) + $0.20 sample (20/20). Full batch 2913/2913 parsed, 0 err, ~$11.53. Harvest idempotent-append -> mcqs.jsonl 9576->12489. Wired workgroups.canonical_map into cluster.py+adjudicate.py (14 slices collapse to work 80; 0 non-canonical slices in output). C5 re-cluster: 9135 clusters, multi_work 638->2695, cross_publisher 77->2119; adjudication 74 new pairs $0.61. C6: pyq_mcqs 4266->4339. Kept kind=textbook so the ~40k knowledge-atoms stay. NEXT: build C7 (dedupe.py stub).
+- subagent `` (a94c2629ed0fe8f65) finished — 41 chars -> work/subagent_results.jsonl
+- subagent `` (a3a9ea3a38d248190) finished — 106 chars -> work/subagent_results.jsonl
+- subagent `` (a2feb6cf2e6fe1828) finished — 44 chars -> work/subagent_results.jsonl
+- subagent `` (a42f7428d1f3227fe) finished — 41 chars -> work/subagent_results.jsonl
+
+## 2026-07-16T07:47:08Z  [C7-COMPLETE]
+
+C7 atom dedupe/merge COMPLETE (dedupe.py, was a stub). 133027 atoms -> 86702 (collapsed 46325, 35%). fastembed bge-small embeddings (cached to atom_vecs.npy) + hnswlib ANN. CRITICAL FIX: first pass used cosine-only single-linkage union-find -> catastrophic false merges (74-member cluster fused "digoxin/hypokalaemia/ischaemic... causes prolonged PR interval" = distinct facts sharing a template -> laundered corroboration, 5b/364). Fix = dual gate (cosine>=0.95 AND idf-weighted token overlap>=0.5, the latter keying on rare ENTITY words template-siblings do not share) + LEADER clustering (an atom joins only if it clears both gates vs the cluster LEADER, never a transitive intermediate -> a stray edge cannot chain a template family). Result: largest cluster 74->30, all genuine same-fact; verified members of Huntington-CAG(9m/4w), PCOS-hirsutism(5m/4w), genital-herpes-aciclovir(6m/3w) etc are true corroboration. Conservation OK (all 133027 preserved). distinct_work_count canonicalised (14 SKELETON slices->work 80), max 6, citations UNIONed (never drop a source, 5b). 20149 atoms corroborated by >=2 works. Tuned on 8k sample + specific WPW/PR cases. cluster.py+adjudicate.py also gained load_mcqs_canonical for the same 5b reason.
+- subagent `` (a51638a9b535cbb85) finished — 18 chars -> work/subagent_results.jsonl
+
+## 2026-07-16T07:59:12Z  [FINDINGS-SKELETON-C7]
+
+Consolidated findings from the SKELETON-parse + C7 work (analysis + reusable gotchas, complementing the [SKELETON-COMPLETE]/[C7-COMPLETE] milestones).
+
+(1) TEXTBOOK TRIAGE (free option/answer-signature scan, zero tokens): 14 of 36 textbook/pearls works are MCQ-bearing -- ALL of them the SsAcademy "SKELETON of MRCP Part 1" subject slices (canonical work 80). The other 22 are genuine PROSE (16 PassMedicine High-Yield pearls + Step-to-MRCP, The-Only-MRCP-Notes, Essential-Revision-Notes, Faraz, 100-facts), correctly atomized only. So textbook-MCQ extraction was NOT the near-no-op first hypothesised: ~2,985 printed-key MCQs were recoverable.
+
+(2) SKELETON LAYOUT: each subject file = a 6-item demo (pages 16-19, dropped) + a QUESTIONS section (Q1..N: stem+options) + an ANSWERS section (Q1..N: printed key + explanation), N matching. Question numbers RESET across sections (Q1 appears 3x), so units are paired by (section,number) -- question K with answer K -- to rebuild complete MCQs. A naive per-Question split would have yielded ~3k keyless questions + ~3k wasted orphan answers and cost ~2x.
+
+(3) CORROBORATION EXPLOSION: multi-work clusters 638->2695 (4.2x), cross-publisher 77->2119 (27x). SsAcademy SKELETON is largely the SAME MRCP question pool as Pastest+PassMedicine, so ~1,960 of its 2,913 questions auto-merged (cosine>=0.92) into existing clusters -- genuine 3rd-publisher corroboration (the strongest importance signal), not noise.
+
+(4) C5 CANONICAL-MAP GAP: the [C5b-WORKGROUP] decision stated corroboration MUST apply the canonical map, but it was only ever wired into pyq.py -- cluster.py + adjudicate.py counted RAW source_id. Harmless until now (every pre-SKELETON MCQ-bearing work was already 1:1 canonical), but adding SKELETON forced the fix (new cluster.load_mcqs_canonical, used by both). Verified 0 non-canonical slices in output.
+
+(5) GOTCHA (reusable) -- strided sampling UNDER-COUNTS near-dup merge rate. C7 8k strided sample collapsed 4.9%; the full 133k collapsed 35-39% -- striding scatters duplicate pairs so few co-occur in-sample. Validate merge PRECISION on a sample; never estimate merge RATE/recall from a strided sample. Logged to PLAYBOOK.
+
+(6) GOTCHA (reusable) -- embedding cosine ALONE over-merges short templated facts. "X causes Y" siblings score ~0.95 even when X differs; single-linkage union-find then chains a whole family into one giant FALSE cluster that LAUNDERS corroboration (5b/364; observed a 74-member "prolonged PR interval" cluster fusing digoxin/hypokalaemia/ischaemic/Lyme etc). Fix pattern = dual gate (cosine AND IDF-weighted entity-token overlap) + LEADER clustering (join vs the cluster LEADER, never a transitive intermediate). Threshold tuning has an irreducible inversion (heavily-reworded TRUE pairs e.g. flucloxacillin 0.454 can score BELOW template-sibling FALSE pairs e.g. ischaemic/Lyme 0.463) -> choose precision-first. Logged to PLAYBOOK.
+- subagent `` (aacc1284b7750f6ca) finished — 18 chars -> work/subagent_results.jsonl

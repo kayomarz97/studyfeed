@@ -1,14 +1,15 @@
 {
   "schema": 1,
-  "updated": "2026-07-16T04:06:05Z",
-  "stage": "C7",
+  "updated": "2026-07-16T07:47:08Z",
+  "stage": "C8",
   "completed": [
     "C0",
     "C4",
     "C5",
-    "C6"
+    "C6",
+    "C7"
   ],
-  "next_action": "C6 COMPLETE: PYQ analysis + trend. work/mcq_pyq.jsonl (per-MCQ is_pyq, pyq_hit_count [distinct past_paper canonical works], pyq_years, pyq_last_year, s_pyq=sum exp(-0.15*(2026-yr)), pyq_trend). 4266/9576 MCQs are PYQs; 125 multi-year clusters (force importance 5 per floor); 281 fading (penalty/cap); corpus mean paper year 2020.6. Built on C5 clusters (qbank/textbook Qs inherit PYQ via clustering with a past_paper member). STALENESS deferred to post-C8 (needs guideline_sensitive concepts). NEXT = C7 dedupe/merge atoms (133027 atoms): hnswlib ANN + apply workgroups.canonical_map for atom distinct_work_count + union citations. NOTE cluster.py boilerplate window=10 vs profile boilerplate_position_window=30 — reconcile if boilerplate matters (minimal for past_paper/qbank MCQs).",
+  "next_action": "C8 alias normalization + concept graph (graph.py stub). Reads atoms_merged.jsonl. Run alias-normalizer BEFORE graph (else nodes split); show dist/alias_proposals.yaml; then PageRank centrality; verify a multi-spelling entity resolves to ONE node. Then C9 importance (importance.py stub) consumes atoms_merged distinct_work_count + mcq_corrob + mcq_pyq.",
   "sources_seen": {},
   "archives": {
     "Papers.zip": {
@@ -59,6 +60,22 @@
       "n": 9697,
       "status": "in_progress",
       "submitted": "2026-07-16T00:54:21Z"
+    },
+    {
+      "id": "msgbatch_01QuXSNDzvqfsEi9hzhvgxUA",
+      "kind": "test",
+      "stage": "SKELETON-test",
+      "n": 20,
+      "status": "in_progress",
+      "submitted": "2026-07-16T05:39:52Z"
+    },
+    {
+      "id": "msgbatch_01Tt89xGACc9YsDqB7QfTrnx",
+      "kind": "mcq",
+      "stage": "SKELETON",
+      "n": 2913,
+      "status": "in_progress",
+      "submitted": "2026-07-16T05:43:04Z"
     }
   ],
   "cursors": {
@@ -76,7 +93,7 @@
     "llm_mcq_reqs": 9697,
     "llm_mcq_note": "kind-aware post-fix: 4279 pastest answer-pages + 5418 passmed stitched units (was 6637 pre-fix)",
     "atoms_rows": 133027,
-    "mcqs_rows": 9576,
+    "mcqs_rows": 12489,
     "mcqs_with_answer": 9544,
     "mcqs_all5opts": 9466,
     "llm_atomize_ok": 13802,
@@ -87,18 +104,38 @@
       "mcq_in": 17665730,
       "mcq_out": 8110341
     },
-    "mcq_clusters": 8518,
-    "mcq_multi_work_clusters": 638,
-    "mcq_cross_publisher_clusters": 77,
+    "mcq_clusters": 9135,
+    "mcq_multi_work_clusters": 2695,
+    "mcq_cross_publisher_clusters": 2119,
     "mcq_boilerplate_clusters": 9,
     "c5_adjudicated_pairs": 826,
     "c5_adjudicated_yes": 317,
     "c5_adjudication_cost_usd": 7.42,
     "atoms_dropped_wid79": 26662,
-    "pyq_mcqs": 4266,
+    "pyq_mcqs": 4339,
     "pyq_multi_year_clusters": 125,
     "pyq_fading_clusters": 281,
-    "pyq_corpus_mean_year": 2020.6
+    "pyq_corpus_mean_year": 2020.6,
+    "skeleton_full_mcq_units": 2913,
+    "skeleton_test_est_cost_usd": 12.72,
+    "skeleton_mcqs": 2913,
+    "skeleton_canonical_work": 80,
+    "skeleton_parse_cost_usd": 12.34,
+    "c5_adjudicated_new_pairs": 74,
+    "atoms_in": 133027,
+    "atoms_merged_out": 86702,
+    "atoms_collapsed": 46325,
+    "atom_merge_clusters": 22495,
+    "atom_largest_cluster": 30,
+    "atom_multi_work": 20149,
+    "atom_distinct_work_hist": {
+      "1": 66553,
+      "2": 9970,
+      "3": 6087,
+      "4": 3789,
+      "5": 284,
+      "6": 19
+    }
   },
   "blocked_on": null,
   "decisions": {
@@ -120,7 +157,9 @@
     "auto_submit_on_test_pass": "AUTHORIZED by user 2026-07-16 (they went to sleep): if the C4 TEST batch => PASS, DO NOT stop at the budget gate. Auto-proceed WITHOUT waking user: (1) MCQ-coverage sanity check; (2) submit FULL run; (3) poll to completion; (4) harvest -> work/atoms.jsonl + work/mcqs.jsonl; (5) checkpoint+commit; then C5. If TEST => FAIL: read log error, fix llm.py, re-test, NO full spend.",
     "mcq_coverage_fix": "C4 coverage bug FOUND+FIXED (2026-07-16). Narrow mcq filter `correct answer|explanation` was kind-blind and under-covered QBANK (PassMedicine) by ~63%: PassMedicine answer pages seldom print 'explanation' (106 pp) and state the key only in prose or as the peak peer-response %. Capture was ~2358 of ~5396 qbank Qs. FIX (kind-aware build_mcq via new _mcq_units): past_paper(Pastest)=per-page pages matching 'correct answer|explanation' (4279 self-contained answer pages; duplicate bare-question halves skipped); qbank(PassMedicine)=one UNIT per question = the 'Question N of M' page STITCHED with following continuation pages up to the next header (~5418 units; full stem+options+explanation+topic notes). qof_pages>=M per work => clean segmentation (at most minor over-split -> null, never under-merge). New mcq total ~9697 (was 6637). MCQ_SYS prompt updated: infer the answer letter from explanation prose; ignore peer-% as key; strip PassMed UI. _run_test now strided-samples across BOTH kinds so it validates qbank stitched-unit parsing + re-extrapolates cost.",
     "c4_full_submit": "FULL C4 LLM ingest submitted 2026-07-16 per user authorization (skip budget gate). Pipeline validated: kind-aware mcq selection (9697 units = 4279 Pastest answer-pages + 5418 PassMedicine stitched questions) + atomize (13802 units). Three bugs found+fixed+validated: (1) iter_results ThinkingBlock - Sonnet-5/Haiku-4.5 emit a leading thinking block, so join text blocks and skip thinking; (2) mcq JSON truncation - max_tokens 1200->3000 (sync test 14/15 parse, MAX_out=1478, qbank 8/8, no truncation); (3) prompt now demands raw JSON only. LOCKED cost est ~$105 (mcq ~$88 Sonnet + atomize ~$16 Haiku, batch 0.5x, EST rates - real likely $90-105). Residual ~7% mcq return unparseable JSON edge cases -> harden _parse_mcq during batch wait; harvest-time only, no extra spend.",
-    "work_grouping": "APPLIED 2026-07-16 (user-approved). §5b work-identity fix via work/work_groups.json canonical map. PassMedicine High-Yield (wid 63-78, 16 subject files) -> 1 work (canonical 63); combined copy wid 79 (3506pg, Part1+2) DROPPED -> removed 26662 duplicate/out-of-scope atoms (atoms 159689->133027). SKELETON '(C)'+'(Online)' series (wid 80,81,83-92,95,96; 14 files) -> 1 work (canonical 80). Distinct kept: 82,93,94,97,98 + all past_paper/qbank. 99 files -> 70 canonical works. Corroboration MUST apply the canonical map (cluster.canonical_map) so one book's slices don't fake cross-corroboration. Textbook MCQs still to parse (gated) + recluster."
+    "work_grouping": "APPLIED 2026-07-16 (user-approved). §5b work-identity fix via work/work_groups.json canonical map. PassMedicine High-Yield (wid 63-78, 16 subject files) -> 1 work (canonical 63); combined copy wid 79 (3506pg, Part1+2) DROPPED -> removed 26662 duplicate/out-of-scope atoms (atoms 159689->133027). SKELETON '(C)'+'(Online)' series (wid 80,81,83-92,95,96; 14 files) -> 1 work (canonical 80). Distinct kept: 82,93,94,97,98 + all past_paper/qbank. 99 files -> 70 canonical works. Corroboration MUST apply the canonical map (cluster.canonical_map) so one book's slices don't fake cross-corroboration. Textbook MCQs still to parse (gated) + recluster.",
+    "skeleton_mcq_parse": "DONE 2026-07-16: SsAcademy SKELETON qbank (14 textbook-kind subject slices=canonical work 80) parsed. 2913 answer-keyed MCQs (100% parse, printed keys). Kept kind=textbook (atoms preserved) + added MCQs via llm._mcq_units_textbook (section-aware Q<->A pairing). mcqs 9576->12489. cluster.py+adjudicate.py now apply workgroups.canonical_map (was required by C5 decision, never implemented). C5 re-run: 9135 clusters, multi_work 638->2695, cross_pub 77->2119. C6: pyq 4266->4339. Cost ~$12.3 (mcq $11.53 + adj $0.61 + test $0.20).",
+    "c7_dedupe": "DONE 2026-07-16: C7 atom dedupe/merge implemented (dedupe.py, was stub). 133027 atoms -> 86702 merged (collapsed 46325). fastembed + hnswlib ANN + LEADER clustering (NOT single-linkage union-find). Dual gate: cosine>=0.95 AND idf_jaccard>=0.5. WHY: cosine alone over-merged short template-siblings (\"X causes prolonged PR\") into 74-member false clusters that LAUNDER corroboration (5b/364); idf-entity gate + leader clustering (join vs cluster LEADER, never intermediate) fixed it -> largest cluster 74->30 and all genuine same-fact. distinct_work_count canonicalised (workgroups.canonical_map), max 6, no laundering; citations UNIONed. Output work/atoms_merged.jsonl {statement,detail,source_id,page_ref,member_count,distinct_work_count,distinct_source_count,distinct_publisher_count,citations[]}. Embeddings cached work/atom_vecs.npy (204MB, gitignored). multi_work_atoms=20149 -> S_corrob input for C9."
   },
   "token_spend_estimate_usd": 115.4
 }

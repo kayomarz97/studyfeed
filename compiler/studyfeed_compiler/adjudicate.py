@@ -68,7 +68,7 @@ def _load_cache() -> dict:
 
 
 def _merge_and_rewrite(yes_pairs: list[dict]) -> dict:
-    mcqs, works = C.load_mcqs(), C.load_works()
+    mcqs, works = C.load_mcqs_canonical(), C.load_works()   # §5b: same canonicalisation as Phase-1
     n = len(mcqs)
     norm_stems = [C._norm(m.get("stem", ""))[:1000] for m in mcqs]
     clist = [json.loads(l) for l in open(C.CLUSTERS_OUT, encoding="utf-8")]

@@ -451,3 +451,23 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   N of M` page stitched with its continuation pages); mcq `max_tokens=3000`; demand raw JSON (no ``` ```
   fences). ALWAYS run a zero-cost coverage audit (matched vs total; sample the SKIPPED set) BEFORE any
   mass-LLM spend. (seen 1x)
+
+- **2026-07 · A STRIDED sample under-counts near-dup MERGE RATE — validate precision on it, never recall.**
+  At C7 an 8k *strided* sample of 133k atoms collapsed only 4.9%, so the SIM threshold looked safe; the
+  full run collapsed ~39% and exposed catastrophic over-merges. Striding scatters duplicate pairs so few
+  co-occur in the sample, hiding the true merge rate.
+  **Fix/prevention:** tune/inspect merge PRECISION on a strided sample, but estimate merge RATE and hunt
+  over-merges only on the FULL set (or a CONTIGUOUS slice that keeps dup families together). Cache
+  embeddings (`work/atom_vecs.npy`) so full re-runs are ~2 min, not ~18. (seen 1x)
+
+- **2026-07 · Embedding cosine ALONE over-merges short TEMPLATED facts — use a dual gate + LEADER
+  clustering, not single-linkage union-find.** At C7, `"X causes Y"` atoms score ~0.95 cosine even when X
+  differs; single-linkage chained a whole template family into one 74-member FALSE cluster
+  (digoxin/hypokalaemia/ischaemic… "prolonged PR interval"), which LAUNDERS distinct facts into fake
+  corroboration (§5b/§364) — the exact anti-pattern the spec warns about.
+  **Fix/prevention:** gate a merge on cosine≥0.95 AND IDF-weighted entity-token overlap≥0.5 (keys on the
+  rare words template-siblings do NOT share), and cluster by LEADER (an atom joins only if it clears both
+  gates vs the cluster's LEADER, never a transitive intermediate) so one stray edge can't chain a family.
+  Verify: `distinct_work_count` canonicalised (§5b), largest cluster small + genuine, all atoms conserved.
+  Precision-first — tuning has an irreducible inversion (a heavily-reworded TRUE pair can score below a
+  template FALSE pair). (seen 1x)
