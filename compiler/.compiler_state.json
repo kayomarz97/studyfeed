@@ -1,13 +1,14 @@
 {
   "schema": 1,
-  "updated": "2026-07-16T03:56:10Z",
-  "stage": "C6",
+  "updated": "2026-07-16T04:06:05Z",
+  "stage": "C7",
   "completed": [
     "C0",
     "C4",
-    "C5"
+    "C5",
+    "C6"
   ],
-  "next_action": "C5 COMPLETE: MCQ corroboration clustering. work/mcq_clusters.jsonl (8518 clusters; 638 multi-work = 'asked at >=2 works' corroboration; 77 cross-publisher; 9 boilerplate §5i) + work/mcq_corrob.jsonl (per-MCQ distinct_work_count for C9) + work/mcq_adjudication_verdicts.jsonl (317 yes/509 no, cached by pair-hash, reproducible). Pipeline: fastembed(ONNX) bge-small local embed (batch32/threads2 for the 7.6GB box) -> exact block-wise cosine -> union-find(>=0.92) -> Opus adjudicated 826 pairs>=0.89 (~$7.42). NEXT = C6 PYQ analysis + trend + staleness (detect past_paper items, extract paper YEAR, map to concept, compute trend). hnswlib ANN deferred to C7 atom clustering (159689 atoms). CAVEAT: atoms/mcqs store work_id under field 'source_id' -> reconcile at C13 stable_key.",
+  "next_action": "C6 COMPLETE: PYQ analysis + trend. work/mcq_pyq.jsonl (per-MCQ is_pyq, pyq_hit_count [distinct past_paper canonical works], pyq_years, pyq_last_year, s_pyq=sum exp(-0.15*(2026-yr)), pyq_trend). 4266/9576 MCQs are PYQs; 125 multi-year clusters (force importance 5 per floor); 281 fading (penalty/cap); corpus mean paper year 2020.6. Built on C5 clusters (qbank/textbook Qs inherit PYQ via clustering with a past_paper member). STALENESS deferred to post-C8 (needs guideline_sensitive concepts). NEXT = C7 dedupe/merge atoms (133027 atoms): hnswlib ANN + apply workgroups.canonical_map for atom distinct_work_count + union citations. NOTE cluster.py boilerplate window=10 vs profile boilerplate_position_window=30 — reconcile if boilerplate matters (minimal for past_paper/qbank MCQs).",
   "sources_seen": {},
   "archives": {
     "Papers.zip": {
@@ -93,7 +94,11 @@
     "c5_adjudicated_pairs": 826,
     "c5_adjudicated_yes": 317,
     "c5_adjudication_cost_usd": 7.42,
-    "atoms_dropped_wid79": 26662
+    "atoms_dropped_wid79": 26662,
+    "pyq_mcqs": 4266,
+    "pyq_multi_year_clusters": 125,
+    "pyq_fading_clusters": 281,
+    "pyq_corpus_mean_year": 2020.6
   },
   "blocked_on": null,
   "decisions": {

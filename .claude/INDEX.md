@@ -42,7 +42,8 @@ imports and renders offline. Everything exam-specific lives in the profile → p
 | `compiler/studyfeed_compiler/cluster.py` | **C5 clustering — implemented.** fastembed (ONNX) stem embeddings → exact block-wise cosine → union-find; distinct-**work** counts (§5b) + boilerplate net (§5i). Exposes `finalize_clusters`/`write_cluster_outputs`. hnswlib ANN deferred to C7 (atom scale). |
 | `compiler/studyfeed_compiler/adjudicate.py` | **C5 corroboration Phase 2 — implemented.** Opus judges the ambiguous cosine band (≥0.89), verdicts cached by pair-hash, YES pairs merged into clusters → rewrites `mcq_clusters.jsonl`/`mcq_corrob.jsonl`. |
 | `compiler/studyfeed_compiler/workgroups.py` | **Work-identity grouping (§5b).** Per-subject slices of one book share a canonical work_id (`canonical_map()`); redundant duplicate copies dropped. C5/C7 corroboration MUST apply it so one book's slices don't fake cross-corroboration. |
-| `compiler/studyfeed_compiler/*.py` | Remaining stage modules (pyq, graph, importance, dossier, …). *stubs.* |
+| `compiler/studyfeed_compiler/pyq.py` | **C6 PYQ analysis + trend — implemented.** Per-MCQ `is_pyq`/`pyq_years`/`pyq_last_year`/`S_pyq`/`pyq_trend` from the C5 clusters → `mcq_pyq.jsonl`. Staleness deferred to post-C8. |
+| `compiler/studyfeed_compiler/*.py` | Remaining stage modules (graph, importance, dossier, …). *stubs.* |
 | `compiler/studyfeed_compiler/{ingest,highlights,generators}/` | Extractors / highlight harvest / asset generators. *stubs.* |
 | `compiler/.compiler_state.json` | Machine resume truth: stage, next_action, decisions, archive hashes, batch IDs. Committed. |
 | `.claude/agents/*.md` | 27 subagent defs + model routing (haiku mechanics / sonnet compiles / opus judges). |

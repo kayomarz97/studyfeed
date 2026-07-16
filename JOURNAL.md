@@ -150,3 +150,7 @@ RESUME: follow .compiler_state.json next_action. Spec = BUILD_PROMPT.md (on disk
 ## 2026-07-16T03:56:10Z  [C5b-WORKGROUP]
 
 **[C5b-WORKGROUP]** User caught a work-identity problem: the PassMedicine High-Yield textbook was in the pack twice (16 per-subject files wid 63-78 + a combined Part1+2 copy wid 79) and the SKELETON '(C)' book was 14 per-subject slices — each file counted as a separate 'work', which fakes cross-corroboration (§5b's core trap). Fix (approved): regrouped slices into true works via work/work_groups.json (99 files -> 70 works); kept the 16 PassMedicine subject files, dropped the combined wid 79 -> removed 26,662 duplicate/Part-2 atoms (159,689 -> 133,027). Corroboration now counts real independent sources. Next: parse the textbook MCQs (gated) + re-cluster.
+
+## 2026-07-16T04:06:05Z  [C6-COMPLETE]
+
+**[C6-COMPLETE]** PYQ analysis + trend done (free, on the C5 clusters). Per question: is_pyq, pyq_hit_count (distinct past_paper canonical works), pyq_years, pyq_last_year, S_pyq=sum exp(-0.15*(2026-year)), and pyq_trend. 4,266/9,576 MCQs are PYQs (qbank/textbook Qs inherit PYQ credit by clustering with a past_paper question); trend rising 1,658 / steady 1,489 / fading 281 clusters; 125 multi-year clusters (force importance 5); corpus mean paper year 2020.6. Output: work/mcq_pyq.jsonl (feeds C9 scoring). Staleness (key_conflict) deferred to post-C8. Next: C7 atom dedup.
