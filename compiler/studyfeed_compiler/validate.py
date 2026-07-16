@@ -113,11 +113,13 @@ def audit(cfg: Config | None = None, reproducibility: bool = True) -> dict:
                    f"{len(pyq_mcqs)} PYQ MCQs; {len(pyq_wrong)} wrongly <4*; "
                    f"{len(fading_capped)} fading-dead correctly capped <=3 per SCORING.md"))
 
-    # ── 4. curated keys: never overwritten (§7). Unparseable-at-source keys → quarantine at C13 ─────
-    unkeyed = [i for i, m in enumerate(mcqs) if not str(m.get("answer") or "").strip()]
+    # ── 4. curated keys: never overwritten (§7). No valid gradeable A–E key → quarantine at C13 ──────
+    # (answer empty OR not A–E — e.g. EMQ answers 'G'/'I' with >5 options don't fit best-of-five.)
+    _LET = {"a": 0, "b": 1, "c": 2, "d": 3, "e": 4}
+    unkeyed = [i for i, m in enumerate(mcqs) if _LET.get(str(m.get("answer") or "").strip().lower()) is None]
     checks.append(("Curated MCQ keys preserved (not overwritten)",
                    "pass" if not unkeyed else "warn",
-                   f"{n_mcqs} curated MCQs; 0 keys overwritten; {len(unkeyed)} unparseable at source "
+                   f"{n_mcqs} curated MCQs; 0 keys overwritten; {len(unkeyed)} with no valid A–E key "
                    f"({round(100 * len(unkeyed) / max(1, n_mcqs), 1)}%) -> QUARANTINE at C13, not shipped"))
 
     # ── 5. reproducibility: deterministic re-score is byte-identical ────────────

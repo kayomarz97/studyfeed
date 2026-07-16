@@ -534,3 +534,14 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   verify health early (check the workflow's `subagents/.../` transcript dir shows agents spawned). Run
   independent assets as **separate concurrent workflows** (each gets its own cap-2 pool) to raise effective
   throughput; keep total live agents modest (saw a transient agent reap at higher concurrency). (seen 1x)
+
+- **2026-07 · "Has a key" ≠ "is playable" — quarantine on NO VALID GRADEABLE KEY, not on empty answer.**
+  At C13 the quarantine skipped only curated MCQs with an *empty* answer (32), so two extended-matching
+  questions whose answers were `G`/`I` (>5 options — no fit for a best-of-five `opt_a..e`/`correct_idx 0-4`
+  schema) slipped through with `correct_idx = NULL` → ungradeable cards the app can't score. Only the
+  post-build `correct_idx IS NULL` integrity check caught them.
+  **Fix/prevention:** quarantine = the answer does not map to a valid A–E index (empty OR out-of-range);
+  compute the key index first and exclude when it's `None` (34, not 32). After packaging, always assert the
+  playable invariants on the built DB (`correct_idx` non-null and in range, 0 dangling `feed_items` refs,
+  every playable row `importance ∈ 1..5` + populated signals) — a row can satisfy "has a value" and still be
+  unplayable. (seen 1x)
