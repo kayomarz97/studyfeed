@@ -194,3 +194,18 @@ Consolidated findings from the SKELETON-parse + C7 work (analysis + reusable got
 
 (6) GOTCHA (reusable) -- embedding cosine ALONE over-merges short templated facts. "X causes Y" siblings score ~0.95 even when X differs; single-linkage union-find then chains a whole family into one giant FALSE cluster that LAUNDERS corroboration (5b/364; observed a 74-member "prolonged PR interval" cluster fusing digoxin/hypokalaemia/ischaemic/Lyme etc). Fix pattern = dual gate (cosine AND IDF-weighted entity-token overlap) + LEADER clustering (join vs the cluster LEADER, never a transitive intermediate). Threshold tuning has an irreducible inversion (heavily-reworded TRUE pairs e.g. flucloxacillin 0.454 can score BELOW template-sibling FALSE pairs e.g. ischaemic/Lyme 0.463) -> choose precision-first. Logged to PLAYBOOK.
 - subagent `` (aacc1284b7750f6ca) finished — 18 chars -> work/subagent_results.jsonl
+- subagent `secret-scanner` (a8590a468b7af7151) finished — 3654 chars -> work/subagent_results.jsonl
+- subagent `` (af573d85862e07008) finished — 38 chars -> work/subagent_results.jsonl
+- subagent `` (aae65c5fcff407581) finished — 17 chars -> work/subagent_results.jsonl
+- subagent `` (ae89fc121fb090662) finished — 33 chars -> work/subagent_results.jsonl
+- subagent `` (a67c341849db397db) finished — 33 chars -> work/subagent_results.jsonl
+- subagent `` (a523bcf468589fc26) finished — 31 chars -> work/subagent_results.jsonl
+- subagent `` (aac6507059283aec8) finished — 300 chars -> work/subagent_results.jsonl
+- subagent `` (ad2c702371d0dcd03) finished — 44 chars -> work/subagent_results.jsonl
+- subagent `` (a95e8ea05042a6230) finished — 36 chars -> work/subagent_results.jsonl
+- subagent `general-purpose` (a447accbf39921a50) finished — 7504 chars -> work/subagent_results.jsonl
+
+## 2026-07-16T09:27:36Z  [C8-COMPLETE]
+
+C8 alias normalization + concept graph COMPLETE. NEW alias.py: deterministic canonical_key (ae/oe->e, -ise->-ize, -our->-or, -re->-er; MATCH KEY ONLY, never rewrites UK display) + synonym resolver from profile.nomenclature.alias_hints (2003 BAN->rINN, adrenaline/epinephrine exception, UK/US) -> 16/16 5e checks. NEW graph.py: Haiku Batch API extracts (s,r,o) triples per atom (terse pipe format after JSON measured 2x tokens -> full Sonnet ~$69 > approved; user chose Haiku ~$6 + Sonnet audit). 86,702 atoms -> 75,716 triples -> fold by alias key -> 38,013 concepts + 68,091 deduped typed grounded edges (causes 17917, associated_with 19119, treats 7012, ...); networkx PageRank -> centrality (top: rheumatoid arthritis 1.0, AKI, asthma, SLE, hypertension, COPD - plausible MRCP hubs). guideline_sensitive=1651 (keyword). VERIFY: Sonnet subagent on Claude Code usage (NOT billable API, per user) audited a 114-edge stratified sample -> 75% fully correct, 97% SUPPORTED (3 hallucinated); errors mostly DIRECTION flips concentrated in investigated_by (6/8) + complication_of (4/8), NOT associated_with-by-agreement. Applied the audit top fix: deterministic investigated_by disease->test swap (1414 edges) -> MRI/infective endocarditis now correct hubs. Ship-ready for C9 centrality. RESIDUAL (pre-C11 interlink): complication_of direction, drug-direction on treats/first_line_for, associated_with overuse. GATE: 726 alias proposals -> dist/alias_proposals.yaml for user review.
+- subagent `` (ad1288ea49b608e62) finished — 33 chars -> work/subagent_results.jsonl
