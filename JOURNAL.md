@@ -137,3 +137,11 @@ RESUME: follow .compiler_state.json next_action. Spec = BUILD_PROMPT.md (on disk
 - subagent `` (a8cb386235bd3f875) finished — 12 chars -> work/subagent_results.jsonl
 - subagent `` (a2bf7245b7e6c1081) finished — 36 chars -> work/subagent_results.jsonl
 - subagent `` (a8afc8da75d9cb2ac) finished — 32 chars -> work/subagent_results.jsonl
+- subagent `secret-scanner` (a669007b4aeef7e20) finished — 4151 chars -> work/subagent_results.jsonl
+- subagent `docs-researcher` (a35ce6e3132724302) finished — 5393 chars -> work/subagent_results.jsonl
+- subagent `` (a7b3bcc26465aaa0f) finished — 28 chars -> work/subagent_results.jsonl
+- subagent `` (a028db2b3feae85a1) finished — 319 chars -> work/subagent_results.jsonl
+
+## 2026-07-16T03:22:11Z  [C5-COMPLETE]
+
+**[C5-COMPLETE]** MCQ corroboration clustering done. Embedded 9,576 stems locally (fastembed/ONNX bge-small; batch32+threads2 after a batch=256 OOM on the 7.6GB box), exact block-wise cosine, union-find at cosine>=0.92, then Opus adjudicated the 826 borderline pairs in [0.89,0.92): 317 confirmed reworded-duplicates merged. Result: 8518 clusters, 638 multi-work corroboration clusters (up from 526 exact-match, +21%), 77 cross-publisher (Pastest+PassMedicine), 9 boilerplate (§5i, excluded from counts). Adjudication ~$7.42 (build spend ~$115). Outputs: mcq_clusters.jsonl, mcq_corrob.jsonl (per-MCQ distinct_work_count for C9), mcq_adjudication_verdicts.jsonl (cached, reproducible). hnswlib ANN deferred to C7 (159k atoms). Next: C6 PYQ/trend.

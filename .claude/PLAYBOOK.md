@@ -301,6 +301,89 @@ correctness check.
 
 ---
 
+### fastembed (Qdrant) — local text embeddings, C5 clustering — read 2026-07-16
+
+**Version:** `fastembed` 0.8.0 on PyPI (latest, released 2026-03-23) — matches what's actually
+installed. Requires Python **>=3.10**; classifiers cover 3.10–3.14. Already declared (unpinned,
+on purpose) in `compiler/pyproject.toml` — no `uv add` needed, just `uv lock && uv sync`.
+
+**Bundled automatically** (no separate install): `numpy`, `onnxruntime` (CPU build),
+`huggingface-hub`, `tokenizers`, `pillow`, `loguru`, `tqdm`, `requests`, `mmh3`,
+`py-rust-stemmers`. For Python 3.14 specifically, PyPI pins `numpy>=2.3.0` and
+`onnxruntime>=1.24.2`. Do **not** install `fastembed-gpu` (separate, mutually exclusive package)
+— plain `fastembed` auto-selects `CPUExecutionProvider` with zero flags when no GPU provider is
+present (verified).
+
+**Minimal correct usage** (verified by actually running it end-to-end, not just reading docs):
+```python
+from fastembed import TextEmbedding
+import numpy as np
+
+model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")   # this IS the default; dim=384
+vectors = np.array(list(model.embed(stems, batch_size=256)))  # (n, 384) float32, already L2-normalized
+```
+- Ground truth signature (`fastembed/text/text_embedding.py`):
+  `TextEmbedding.__init__(model_name="BAAI/bge-small-en-v1.5", cache_dir=None, threads=None, providers=None, cuda=Device.AUTO, device_ids=None, lazy_load=False, **kwargs)`.
+- `.embed(documents, batch_size=256, parallel=None, **kwargs) -> Iterable[NumpyArray]` is a
+  **generator** (`yield from`) — nothing runs until you iterate/`list(...)` it.
+- Empirically confirmed on this exact box (Python 3.14.3, 4 cores): each item is
+  `numpy.ndarray`, `dtype=float32`, `shape=(384,)`.
+- Model metadata for `bge-small-en-v1.5` states query/passage prefixes are "not so necessary"
+  (unlike the older non-v1.5 `bge-small-en`) — no need to prepend `"query: "`/`"passage: "` to
+  MCQ stems.
+
+**Normalization — definitive, do not re-normalize:** vectors ARE L2-normalized by fastembed
+itself. Source (`fastembed/common/utils.py::normalize`, called unconditionally from
+`OnnxTextEmbedding._post_process_onnx_output`) does `v / max(||v||_2, 1e-12)`. Empirically
+confirmed on real output: `np.linalg.norm(vec) == 1.0` (± float32 rounding) and
+`np.dot(vec, vec) == 1.0`. **Plain dot product = cosine similarity.**
+
+**Offline / cache — definitive:**
+- Cache dir resolution: `cache_dir=` kwarg > `FASTEMBED_CACHE_PATH` env var > default
+  `<tempdir>/fastembed_cache` (e.g. `/tmp/fastembed_cache` — not persistent across reboots on
+  most distros; **pin `FASTEMBED_CACHE_PATH` explicitly for a build box**). First call downloads
+  ~67 MB from HF repo `qdrant/bge-small-en-v1.5-onnx-q` via `huggingface_hub.snapshot_download`.
+- **v0.8.0 (installed version) newly respects the standard `HF_HUB_OFFLINE=1` env var**
+  ([PR #614](https://github.com/qdrant/fastembed/pull/614), merged 2026-03-23). Empirically
+  confirmed: with the model already cached, setting only `HF_HUB_OFFLINE=1` (no code change, no
+  explicit `local_files_only=`) makes `TextEmbedding(...)` load+embed in ~0.2 s with zero network.
+  **On fastembed <0.8.0 the env var alone was NOT honored** — you had to pass
+  `local_files_only=True` explicitly; that kwarg still works in 0.8.0 too.
+- Gotcha: without `HF_HUB_OFFLINE=1` / `local_files_only=True`, fastembed calls the HF API
+  (`model_info`/`list_repo_tree`) on **every** `TextEmbedding()` construction to verify the cache
+  — "already downloaded" alone does not guarantee zero network. Recommended pattern: warm the
+  cache once with network, then set `HF_HUB_OFFLINE=1` for the actual build run.
+
+**CPU / threading — verified by reproducing a crash, not just reading docs:**
+- `threads=None` (default) leaves onnxruntime's own intra-op threading, which already uses all
+  cores in one process — measured **58 texts/sec single-process** on this box's 4 cores with
+  realistic ~415-char MCQ-stem input (9,576 stems -> 165 s total, well under 3 min). No CPU flag
+  needed.
+- **Do NOT call `.embed(texts, parallel=0)` (or any `parallel>1`) from a plain script/`-m`
+  entrypoint without an `if __name__ == "__main__":` guard.** Reproduced the exact crash class
+  already in this ledger for tesseract: fastembed's `ParallelWorkerPool` hardcodes
+  `"forkserver"` (falling back to `"spawn"`) and **never** `"fork"`
+  (`fastembed/text/onnx_text_model.py::_embed_documents`) — running it unguarded throws
+  `ConnectionResetError [Errno 104]` / "attempt... before bootstrapping phase", same failure
+  mode as the C2 OCR pool, different library. Since single-process already clears the full
+  9,576-stem corpus in ~3 minutes, **use the default `parallel=None` for C5 and skip
+  multiprocessing entirely** — sidesteps the crash class and uses less peak memory (each
+  parallel worker loads its own model+tokenizer copy, non-trivial on a box already low on free
+  RAM). If parallel is ever wanted anyway: fastembed's own workers already pin themselves to
+  `threads=1` internally, so there's no thread-oversubscription risk (unlike tesseract) — only
+  the start-method crash, i.e. a `__main__`-guard problem, not a double-threading one.
+
+**Sources:** [pypi.org/project/fastembed](https://pypi.org/project/fastembed/) (v0.8.0, exact
+`requires_dist` via the PyPI JSON API); GitHub `qdrant/fastembed` source read directly (ground
+truth): `fastembed/text/text_embedding.py`, `fastembed/text/onnx_embedding.py`,
+`fastembed/text/onnx_text_model.py`, `fastembed/common/{utils,onnx_model,model_management,types}.py`;
+[GitHub releases](https://github.com/qdrant/fastembed/releases) (v0.8.0 changelog) and
+[PR #614](https://github.com/qdrant/fastembed/pull/614) (`HF_HUB_OFFLINE` fix); own empirical
+runs in this repo's exact toolchain (`uv run --python 3.14 --with fastembed`, 4-core box) — all
+read/verified 2026-07-16.
+
+---
+
 ## Mistakes ledger (real traps in THIS repo, with the fix)
 
 Maintained by the **`mistake-tracker`** agent. Entry shape:

@@ -1,12 +1,13 @@
 {
   "schema": 1,
-  "updated": "2026-07-16T01:12:44Z",
-  "stage": "C5",
+  "updated": "2026-07-16T03:22:11Z",
+  "stage": "C6",
   "completed": [
     "C0",
-    "C4"
+    "C4",
+    "C5"
   ],
-  "next_action": "C4 COMPLETE: work/atoms.jsonl (159689 grounded atoms) + work/mcqs.jsonl (9576 MCQs; 9544 with answer letter; 9466 with all 5 options) harvested from 23499 Batch requests (0 errors). Actual cost ~$108 (atomize 6.82M in/6.74M out Haiku; mcq 17.67M in/8.11M out Sonnet; batch 0.5x, EST rates). NEXT = C5 cluster/corroboration = pure Python, ZERO tokens (BUILD_PROMPT): near-dup cluster MCQs (+atoms), count DISTINCT WORKS not files for S_corrob (§5b), flag boilerplate (§5i). Read BUILD_PROMPT C5 + spec/schema.sql (dup_clusters/cluster_members/atom_citations/distinct_work_count). CAVEAT: atoms/mcqs store work_id under field name 'source_id' -> reconcile at C13 stable_key. ~110 MCQs have <5 options + 32 no answer -> handled at C7 grounding / C11 QA; optional mcq null-retry (121 nulls) deferred. Test batches msgbatch_017WY.../msgbatch_01KcJY... were validation-only (harvest skips kind=test).",
+  "next_action": "C5 COMPLETE: MCQ corroboration clustering. work/mcq_clusters.jsonl (8518 clusters; 638 multi-work = 'asked at >=2 works' corroboration; 77 cross-publisher; 9 boilerplate §5i) + work/mcq_corrob.jsonl (per-MCQ distinct_work_count for C9) + work/mcq_adjudication_verdicts.jsonl (317 yes/509 no, cached by pair-hash, reproducible). Pipeline: fastembed(ONNX) bge-small local embed (batch32/threads2 for the 7.6GB box) -> exact block-wise cosine -> union-find(>=0.92) -> Opus adjudicated 826 pairs>=0.89 (~$7.42). NEXT = C6 PYQ analysis + trend + staleness (detect past_paper items, extract paper YEAR, map to concept, compute trend). hnswlib ANN deferred to C7 atom clustering (159689 atoms). CAVEAT: atoms/mcqs store work_id under field 'source_id' -> reconcile at C13 stable_key.",
   "sources_seen": {},
   "archives": {
     "Papers.zip": {
@@ -84,7 +85,14 @@
       "atomize_out": 6743275,
       "mcq_in": 17665730,
       "mcq_out": 8110341
-    }
+    },
+    "mcq_clusters": 8518,
+    "mcq_multi_work_clusters": 638,
+    "mcq_cross_publisher_clusters": 77,
+    "mcq_boilerplate_clusters": 9,
+    "c5_adjudicated_pairs": 826,
+    "c5_adjudicated_yes": 317,
+    "c5_adjudication_cost_usd": 7.42
   },
   "blocked_on": null,
   "decisions": {
@@ -107,5 +115,5 @@
     "mcq_coverage_fix": "C4 coverage bug FOUND+FIXED (2026-07-16). Narrow mcq filter `correct answer|explanation` was kind-blind and under-covered QBANK (PassMedicine) by ~63%: PassMedicine answer pages seldom print 'explanation' (106 pp) and state the key only in prose or as the peak peer-response %. Capture was ~2358 of ~5396 qbank Qs. FIX (kind-aware build_mcq via new _mcq_units): past_paper(Pastest)=per-page pages matching 'correct answer|explanation' (4279 self-contained answer pages; duplicate bare-question halves skipped); qbank(PassMedicine)=one UNIT per question = the 'Question N of M' page STITCHED with following continuation pages up to the next header (~5418 units; full stem+options+explanation+topic notes). qof_pages>=M per work => clean segmentation (at most minor over-split -> null, never under-merge). New mcq total ~9697 (was 6637). MCQ_SYS prompt updated: infer the answer letter from explanation prose; ignore peer-% as key; strip PassMed UI. _run_test now strided-samples across BOTH kinds so it validates qbank stitched-unit parsing + re-extrapolates cost.",
     "c4_full_submit": "FULL C4 LLM ingest submitted 2026-07-16 per user authorization (skip budget gate). Pipeline validated: kind-aware mcq selection (9697 units = 4279 Pastest answer-pages + 5418 PassMedicine stitched questions) + atomize (13802 units). Three bugs found+fixed+validated: (1) iter_results ThinkingBlock - Sonnet-5/Haiku-4.5 emit a leading thinking block, so join text blocks and skip thinking; (2) mcq JSON truncation - max_tokens 1200->3000 (sync test 14/15 parse, MAX_out=1478, qbank 8/8, no truncation); (3) prompt now demands raw JSON only. LOCKED cost est ~$105 (mcq ~$88 Sonnet + atomize ~$16 Haiku, batch 0.5x, EST rates - real likely $90-105). Residual ~7% mcq return unparseable JSON edge cases -> harden _parse_mcq during batch wait; harvest-time only, no extra spend."
   },
-  "token_spend_estimate_usd": 108.0
+  "token_spend_estimate_usd": 115.4
 }
