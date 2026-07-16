@@ -511,3 +511,26 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   tiebreak — here the direction; elsewhere the row id/index). Test determinism by rebuilding under two
   DIFFERENT seeds: `PYTHONHASHSEED=1 … && PYTHONHASHSEED=999 … && diff`. Never trust a same-seed re-run to
   prove reproducibility. (seen 1x)
+
+- **2026-07 · A deterministic grounding gate must not drop short tokens or check only the answer field —
+  it false-rejects correct short-answer cards.** At C11 the flashcard grounding validator used
+  `salient(back) & salient(atom)` with a `len(w)>3` token filter. A perfect card — atom "…HLA antigen
+  **DR4**" → back "**HLA-DR4**." — scored ZERO overlap: `DR4`/`HLA`/`p53`/`70-80%` are all ≤3 chars or
+  numeric and were filtered out, and the terse answer alone rarely echoes the statement's long words. 391
+  of 9,511 cards (4.1%) were quarantined as "ungrounded" when only **1** actually was.
+  **Fix/prevention:** keep alphanumeric-with-digit and numeric tokens (`DR4`, `p53`, `B12`, `70`) regardless
+  of length; ground-check the WHOLE card (front+back+why), since a Q/A card's grounding is in the pairing,
+  not the answer. **Always SAMPLE the rejects before trusting a reject rate** — a 4% "hallucination rate"
+  was really a validator bug. (seen 1x)
+
+- **2026-07 · Workflow `args` arrives `undefined` when passed alongside an inline `script`; a 4-core box
+  caps workflow concurrency at 2.** At C11 the first flashcards Workflow died instantly —
+  `undefined is not an object (evaluating 'ids.length')` — because `const {ids}=args` saw `args===undefined`
+  (the recovery hint even re-passed args as a *string*). Separately, `min(16, cores-2)` on this 4-core box
+  means only 2 subagents run at once per workflow, so an 80-chunk fan-out is hours, not the ~1h a big box
+  would give.
+  **Fix/prevention:** for inline-`script` workflows, **embed the data (ids/paths) as `const`s in the script
+  body** instead of relying on `args` threading (or write the script to a file and launch by `scriptPath`);
+  verify health early (check the workflow's `subagents/.../` transcript dir shows agents spawned). Run
+  independent assets as **separate concurrent workflows** (each gets its own cap-2 pool) to raise effective
+  throughput; keep total live agents modest (saw a transient agent reap at higher concurrency). (seen 1x)

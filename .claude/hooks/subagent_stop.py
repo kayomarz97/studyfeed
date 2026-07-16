@@ -2,8 +2,14 @@
 """SubagentStop hook — durability for subagent results (BUILD_PROMPT.md §10b).
 
 A subagent's work should survive the parent dying. Its FULL result (which may contain
-book-derived text) goes ONLY to the gitignored work/ log; the committed JOURNAL.md receives
-metadata only (§11b — nothing derived from the books in a committed file). Never blocks.
+book-derived text) goes ONLY to the gitignored work/ log (work/subagent_results.jsonl).
+Never blocks.
+
+NOTE: we deliberately do NOT append a per-subagent breadcrumb to the committed JOURNAL.md.
+That was pure noise at scale — a single stage (e.g. C11 asset generation) fans out dozens
+of gen-* subagents, which flooded the human milestone log with 170+ "subagent finished" lines
+and raced on concurrent finishes. The durable record already lives in the work/ log; JOURNAL.md
+is for human milestones (written by state.py), not per-subagent metadata.
 """
 
 from __future__ import annotations
@@ -18,8 +24,6 @@ try:
     aid = payload.get("agent_id", "")
     msg = payload.get("last_assistant_message", "") or ""
     H.append_subagent_log({"ts": H.utcnow(), "agent_type": atype, "agent_id": aid, "result": msg})
-    H.append_journal_line(
-        f"- subagent `{atype}` ({aid}) finished — {len(msg)} chars -> work/subagent_results.jsonl")
 except Exception:
     pass
 
