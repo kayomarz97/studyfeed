@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-07-16T03:22:11Z",
+  "updated": "2026-07-16T03:56:10Z",
   "stage": "C6",
   "completed": [
     "C0",
@@ -62,7 +62,7 @@
   ],
   "cursors": {
     "unpack_pdfs": 107,
-    "canonical_works": 99,
+    "canonical_works": 70,
     "scanned_pdfs": 38,
     "classified_works": 99,
     "extract_scanned_pages": 8961,
@@ -74,7 +74,7 @@
     "llm_atomize_reqs": 13802,
     "llm_mcq_reqs": 9697,
     "llm_mcq_note": "kind-aware post-fix: 4279 pastest answer-pages + 5418 passmed stitched units (was 6637 pre-fix)",
-    "atoms_rows": 159689,
+    "atoms_rows": 133027,
     "mcqs_rows": 9576,
     "mcqs_with_answer": 9544,
     "mcqs_all5opts": 9466,
@@ -92,7 +92,8 @@
     "mcq_boilerplate_clusters": 9,
     "c5_adjudicated_pairs": 826,
     "c5_adjudicated_yes": 317,
-    "c5_adjudication_cost_usd": 7.42
+    "c5_adjudication_cost_usd": 7.42,
+    "atoms_dropped_wid79": 26662
   },
   "blocked_on": null,
   "decisions": {
@@ -113,7 +114,8 @@
     "C13_blocked_on_patch01": "C13 PACKAGING BLOCKED: must not run until (a) stable_key in schema [DONE] AND (b) reproducibility test passes [TODO in pack.py: build pack twice from unchanged inputs -> every stable_key identical; add one source -> pre-existing keys unchanged]. pack.py computes stable_key=sha256(normalize(text)|work_id|page_ref)[:16]; atoms/mcqs jsonl currently store work_id under field name 'source_id' (reconcile naming at packaging).",
     "auto_submit_on_test_pass": "AUTHORIZED by user 2026-07-16 (they went to sleep): if the C4 TEST batch => PASS, DO NOT stop at the budget gate. Auto-proceed WITHOUT waking user: (1) MCQ-coverage sanity check; (2) submit FULL run; (3) poll to completion; (4) harvest -> work/atoms.jsonl + work/mcqs.jsonl; (5) checkpoint+commit; then C5. If TEST => FAIL: read log error, fix llm.py, re-test, NO full spend.",
     "mcq_coverage_fix": "C4 coverage bug FOUND+FIXED (2026-07-16). Narrow mcq filter `correct answer|explanation` was kind-blind and under-covered QBANK (PassMedicine) by ~63%: PassMedicine answer pages seldom print 'explanation' (106 pp) and state the key only in prose or as the peak peer-response %. Capture was ~2358 of ~5396 qbank Qs. FIX (kind-aware build_mcq via new _mcq_units): past_paper(Pastest)=per-page pages matching 'correct answer|explanation' (4279 self-contained answer pages; duplicate bare-question halves skipped); qbank(PassMedicine)=one UNIT per question = the 'Question N of M' page STITCHED with following continuation pages up to the next header (~5418 units; full stem+options+explanation+topic notes). qof_pages>=M per work => clean segmentation (at most minor over-split -> null, never under-merge). New mcq total ~9697 (was 6637). MCQ_SYS prompt updated: infer the answer letter from explanation prose; ignore peer-% as key; strip PassMed UI. _run_test now strided-samples across BOTH kinds so it validates qbank stitched-unit parsing + re-extrapolates cost.",
-    "c4_full_submit": "FULL C4 LLM ingest submitted 2026-07-16 per user authorization (skip budget gate). Pipeline validated: kind-aware mcq selection (9697 units = 4279 Pastest answer-pages + 5418 PassMedicine stitched questions) + atomize (13802 units). Three bugs found+fixed+validated: (1) iter_results ThinkingBlock - Sonnet-5/Haiku-4.5 emit a leading thinking block, so join text blocks and skip thinking; (2) mcq JSON truncation - max_tokens 1200->3000 (sync test 14/15 parse, MAX_out=1478, qbank 8/8, no truncation); (3) prompt now demands raw JSON only. LOCKED cost est ~$105 (mcq ~$88 Sonnet + atomize ~$16 Haiku, batch 0.5x, EST rates - real likely $90-105). Residual ~7% mcq return unparseable JSON edge cases -> harden _parse_mcq during batch wait; harvest-time only, no extra spend."
+    "c4_full_submit": "FULL C4 LLM ingest submitted 2026-07-16 per user authorization (skip budget gate). Pipeline validated: kind-aware mcq selection (9697 units = 4279 Pastest answer-pages + 5418 PassMedicine stitched questions) + atomize (13802 units). Three bugs found+fixed+validated: (1) iter_results ThinkingBlock - Sonnet-5/Haiku-4.5 emit a leading thinking block, so join text blocks and skip thinking; (2) mcq JSON truncation - max_tokens 1200->3000 (sync test 14/15 parse, MAX_out=1478, qbank 8/8, no truncation); (3) prompt now demands raw JSON only. LOCKED cost est ~$105 (mcq ~$88 Sonnet + atomize ~$16 Haiku, batch 0.5x, EST rates - real likely $90-105). Residual ~7% mcq return unparseable JSON edge cases -> harden _parse_mcq during batch wait; harvest-time only, no extra spend.",
+    "work_grouping": "APPLIED 2026-07-16 (user-approved). §5b work-identity fix via work/work_groups.json canonical map. PassMedicine High-Yield (wid 63-78, 16 subject files) -> 1 work (canonical 63); combined copy wid 79 (3506pg, Part1+2) DROPPED -> removed 26662 duplicate/out-of-scope atoms (atoms 159689->133027). SKELETON '(C)'+'(Online)' series (wid 80,81,83-92,95,96; 14 files) -> 1 work (canonical 80). Distinct kept: 82,93,94,97,98 + all past_paper/qbank. 99 files -> 70 canonical works. Corroboration MUST apply the canonical map (cluster.canonical_map) so one book's slices don't fake cross-corroboration. Textbook MCQs still to parse (gated) + recluster."
   },
   "token_spend_estimate_usd": 115.4
 }
