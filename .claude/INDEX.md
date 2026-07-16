@@ -24,6 +24,7 @@ imports and renders offline. Everything exam-specific lives in the profile → p
 |---|---|
 | `BUILD_PROMPT.md` | **The authoritative spec. Read before acting.** Verbatim, do not re-save. |
 | `JOURNAL.md` | Human milestone log (prose; counts/decisions only, never book content). |
+| `JOURNAL_APP.md` | Phase 2 (app) human log — **laptop-owned**; records the §0 `build_env` divergence. Never append compiler progress here (`state.py` owns `JOURNAL.md`). |
 | `CLAUDE.md` | Project working agreement (2 sections filled; the rest is global). |
 | `LAPTOP_SETUP.md` | Phase 2 dev-machine bootstrap: paste-into-Claude prompt — installs Claude Code CLI, bootstraps the `claude-master` global rulebook, links Android Studio (plugin 27310), preps SDK/adb, clones the repo on `dev`. App is built on the laptop (needs a screen/device); compiler stays on the box. |
 | `spec/schema.sql` | **Canonical content-pack DDL (source of truth).** `PRAGMA user_version` = schema version. |
@@ -56,13 +57,31 @@ imports and renders offline. Everything exam-specific lives in the profile → p
 | `compiler/studyfeed_compiler/{ingest,highlights,generators}/` | `ingest/extract.py` = C2 (implemented). highlight-harvest lives in `bookusage.py` (C3); asset generation in `generate.py` + `gen-*` agents (C11) — these subdirs are vestigial. |
 | `compiler/studyfeed_compiler/{ingest,highlights,generators}/` | Extractors / highlight harvest / asset generators. *stubs.* |
 | `compiler/.compiler_state.json` | Machine resume truth: stage, next_action, decisions, archive hashes, batch IDs. Committed. |
+| **— Phase 2: the app (A0 done; built on the laptop, not the box — see `JOURNAL_APP.md`) —** | |
+| `app/README.md` | **Read before touching the app.** JAVA_HOME gotcha, build/install commands, the guard, signing + the §11d keystore warning, APK sizes. |
+| `settings.gradle.kts` | Gradle root: `includeBuild("build-logic")` + repos (FAIL_ON_PROJECT_REPOS). Owns `:app` ONLY — `compiler/`+`spec/` are never Gradle modules. |
+| `build.gradle.kts` / `gradle.properties` | Root build (plugin versions, applies nothing) / JVM args. **No `org.gradle.java.home`** — that would hardcode one laptop's path; JAVA_HOME supplies the JDK. |
+| `gradle/libs.versions.toml` | **Every version pinned, never dynamic.** AGP 9.3.0 · Gradle 9.5.0 (AGP's default, not newest) · Kotlin 2.4.10 · Compose BOM 2026.06.01 · fsrs 1.0.0. Rationale + citations: PLAYBOOK "Android build toolchain". |
+| `gradle/wrapper/*` | Committed wrapper, pinned to Gradle 9.5.0 **with `distributionSha256Sum`** (the distro is verified, not trusted). |
+| `build-logic/` | **The offline/no-background guard.** An *included build*, not `buildSrc` — a plugin using AGP's Variant API cannot work from buildSrc's classloader scope (see its settings.gradle.kts). |
+| `build-logic/src/main/kotlin/.../OfflineGuaranteesPlugin.kt` | Wires both checks into every `assemble<Variant>` + `check` → an APK that violates §8 A0 **cannot be built**. |
+| `build-logic/src/main/kotlin/.../CheckMergedManifestTask.kt` | Parses the **merged** manifest (catches library-injected components); fails on network/background permissions, any service/receiver, non-allowlisted providers. Parses XML — never grep (a grep matched our own warning comment). |
+| `build-logic/src/main/kotlin/.../CheckDependencyDenylistTask.kt` | Walks the variant runtime classpath incl. transitives; fails on HTTP clients / WorkManager / Play Services / AI SDKs, naming who pulled them in. Denylist by design (see the class comment). |
+| `app/build.gradle.kts` | compileSdk/targetSdk 36, minSdk 26, `applicationId dev.kayomarz.studyfeed` (**permanent**). Keystore read from outside the repo; absent → release unsigned but debug still builds. No `kotlin-android` plugin: AGP 9 has built-in Kotlin. |
+| `app/src/main/AndroidManifest.xml` | **Zero permissions, one activity — read the comment before editing.** Strips profileinstaller's injected receiver via `tools:node="remove"`; `allowBackup=false` (no cloud copies of progress). |
+| `app/src/main/java/.../MainActivity.kt` | The app's ONLY component; A0 placeholder UI. Feed = A2, pack import = A1 — don't grow it into either. |
+| `app/src/main/java/.../ui/theme/` | AMOLED true-black Material3; dynamic colour deliberately off (colour encodes importance). Full theming = A7. |
+| `app/src/test/java/.../fsrs/FsrsSchedulerTest.kt` | FSRS-6 Again/Hard/Good/Easy + **upstream's regression oracle** (interval sequence must match java-fsrs exactly — catches a bad weight vector on a version bump). |
 | `.claude/agents/*.md` | 27 subagent defs + model routing (haiku mechanics / sonnet compiles / opus judges). |
 | `.claude/hooks/*.py` + `settings.json` | Durability: SessionStart resume injection + PreCompact/SessionEnd/SubagentStop. |
-| `.claude/PLAYBOOK.md` | Verified API notes (Batch API, Docling, FSRS-6) + mistakes ledger. Read on demand. |
+| `.claude/PLAYBOOK.md` | Verified API notes (Batch API, Docling, FSRS-6, **Android build toolchain**) + mistakes ledger. Read on demand — read the Android entry before touching any Gradle file. |
 | `.claude/plans/` | Dated plan docs. |
 
 ## Don't touch / generated
 
+- `C:\Users\kayom\keys\studyfeed\**` — **the release keystore + its passwords. Outside the repo on
+  purpose (§11d).** Never copy in, never commit, never print. Losing it = no in-place upgrade =
+  progress.db wiped. `app/build/`, `.gradle/`, `*.apk` are gitignored; never commit an APK (§11c).
 - `compiler/sources/inbox/**` — **copyrighted archives.** Gitignored; never commit; never hand-unpack.
 - `compiler/work/**`, `compiler/dist/**` — generated + gitignored (extracted text, pack DB, figures, reports).
   Fix the profile/compiler and re-run; never hand-edit outputs. Reports quoting stems stay in `dist/` (ignored).

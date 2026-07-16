@@ -384,6 +384,197 @@ read/verified 2026-07-16.
 
 ---
 
+### Android build toolchain (AGP / Gradle / Kotlin / Compose) — read 2026-07-16
+
+Scaffolding a new Android app on this machine: Windows 11, JBR 21.0.9 bundled with Android
+Studio at `C:\Program Files\Android\Android Studio\jbr` (`java` NOT on PATH), SDK platforms
+android-36/36.1 only, build-tools 36.0.0/36.1.0 only, **no Gradle installed, no `gradle` on
+PATH**. Target compileSdk/targetSdk 36, minSdk 26, Kotlin+Compose(Material3)+Room+DataStore,
+fully offline app.
+
+**Version catalog (`gradle/libs.versions.toml`) — exact strings, verified 2026-07-16:**
+```toml
+[versions]
+agp = "9.3.0"
+kotlin = "2.4.10"
+composeBom = "2026.06.01"
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+
+[libraries]
+compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+# ^ compose-bom 2026.06.01 maps to compose-ui/runtime/foundation/animation 1.11.4, material3 1.4.0
+```
+
+**1. AGP 9.3.0** (released July 2026, "Android Gradle plugin 9.3.0"). Raw compatibility table
+(fetched HTML, not the summarizer — ground truth):
+```
+Gradle          min 9.5.0   default 9.5.0
+SDK Build Tools min 36.0.0  default 36.0.0
+NDK             default 28.2.13676358
+JDK             min 17      default 17
+```
+The table states JDK **17** as both minimum and default — it does **not** explicitly bless JDK
+21. However: (a) the same docs elsewhere say "choose a JDK version that is higher than or equal
+to" the plugin's minimum (`/build/jdks`), i.e. 17 is a floor not a ceiling; (b) Gradle's own
+compatibility matrix states "A JVM version between 17 and 26 is required to execute Gradle" for
+the 9.5.x/9.6.x line; (c) Google's own `android/gradle-recipes` repo, `agp-9.3` branch (the exact
+matching version), ships a working project built with Gradle 9.5.0. **Conclusion: JDK 21.0.9
+(the bundled JBR) satisfies AGP 9.3.0's ≥17 requirement and is within Gradle's supported 17–26
+execution range — this is a sourced inference from the "minimum" semantics + Gradle's own JVM
+range, not an explicit "JDK 21 supported" sentence in the AGP table itself.** AGP 9.3 max API
+level = 37.0.
+Source: [developer.android.com/build/releases/agp-9-3-0-release-notes](https://developer.android.com/build/releases/agp-9-3-0-release-notes) (raw HTML table, read 2026-07-16); [developer.android.com/build/jdks](https://developer.android.com/build/jdks); [docs.gradle.org/current/userguide/compatibility.html](https://docs.gradle.org/current/userguide/compatibility.html).
+
+**2. Gradle 9.6.1** — latest stable, released 2026-06-26; compatible with AGP 9.3.0 (which needs
+≥9.5.0). Gotcha: Gradle's own compatibility page says it is "tested with Android Gradle Plugin
+9.0 through 9.3.0-alpha06" (final 9.3.0 not explicitly named as tested) — a minor gap, but
+Google's `agp-9.3` recipe branch itself pins Gradle 9.5.0, so 9.6.1 (same minor line, newer
+patch) is expected to work; if a build breaks, fall back to `9.5.0` (AGP's own default).
+```properties
+# gradle/wrapper/gradle-wrapper.properties
+distributionUrl=https\://services.gradle.org/distributions/gradle-9.6.1-bin.zip
+```
+Official published SHA-256 for that exact distribution (`gradle-9.6.1-bin.zip.sha256`, fetched
+directly from `services.gradle.org`, read 2026-07-16):
+```
+9c0f7faeeb306cb14e4279a3e084ca6b596894089a0638e68a07c945a32c9e14
+```
+Source: [gradle.org/releases](https://gradle.org/releases/); [services.gradle.org/distributions/gradle-9.6.1-bin.zip.sha256](https://services.gradle.org/distributions/gradle-9.6.1-bin.zip.sha256); [docs.gradle.org/current/userguide/compatibility.html](https://docs.gradle.org/current/userguide/compatibility.html).
+
+**3. Kotlin 2.4.10** (bug-fix release, 2026-07-14; base language release is 2.4.0, 2026-06-03).
+Confirmed: since Kotlin 2.0 the Compose compiler still lives in the Kotlin repo as the
+`org.jetbrains.kotlin.plugin.compose` Gradle plugin, versioned identically to Kotlin itself (no
+separate `kotlinCompilerExtensionVersion` to track). Apply alongside the Kotlin Android plugin:
+```kotlin
+// app/build.gradle.kts
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.compose.compiler)   // org.jetbrains.kotlin.plugin.compose, version == kotlin version
+}
+```
+Source: [kotlinlang.org/docs/releases.html](https://kotlinlang.org/docs/releases.html); [developer.android.com/develop/ui/compose/compiler](https://developer.android.com/develop/ui/compose/compiler).
+
+**4. Compose BOM 2026.06.01** (also `2026.06.00` exists one patch behind). Maps to:
+`compose-ui`/`compose-runtime`/`compose-foundation`/`compose-animation` → `1.11.4`,
+`compose-material3` → `1.4.0`. Since Kotlin 2.0+, the old Compose-to-Kotlin compatibility table
+is superseded — "When you use the Compose Compiler Gradle plugin, you don't have to check
+Compose to Kotlin compatibility" (verbatim from docs).
+Source: [developer.android.com/develop/ui/compose/bom/bom-mapping](https://developer.android.com/develop/ui/compose/bom/bom-mapping); [developer.android.com/jetpack/androidx/releases/compose-kotlin](https://developer.android.com/jetpack/androidx/releases/compose-kotlin).
+
+**5. Merged-manifest verification task — the current, non-deprecated Variant/Artifacts API**
+(verified against Google's own `android/gradle-recipes`, **`agp-9.3` branch** — the exact
+version match — `transformManifest/build-logic/plugins/src/main/kotlin/{CustomPlugin,CheckMergedManifestTask}.kt`,
+read 2026-07-16; no deprecation of any of this API found in
+[gradle-plugin-api-updates](https://developer.android.com/build/releases/gradle-plugin-api-updates)
+through AGP 8.12/9.x):
+```kotlin
+import com.android.build.api.variant.AndroidComponentsExtension
+import com.android.build.api.artifact.SingleArtifact
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+
+abstract class CheckMergedManifestTask : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val mergedManifest: RegularFileProperty   // Provider<RegularFile> target
+
+    @TaskAction
+    fun taskAction() {
+        val text = mergedManifest.get().asFile.readText()
+        // ... fail the build here if a forbidden permission/component is found
+    }
+}
+
+// in your plugin's apply():
+val androidComponents = project.extensions.getByType(AndroidComponentsExtension::class.java)
+androidComponents.onVariants { variant ->
+    val taskName = "check${variant.name.replaceFirstChar { it.titlecase() }}MergedManifest"
+    project.tasks.register<CheckMergedManifestTask>(taskName) {
+        mergedManifest.set(variant.artifacts.get(SingleArtifact.MERGED_MANIFEST))
+    }
+}
+```
+**Key facts:** `variant.artifacts.get(SingleArtifact.MERGED_MANIFEST)` returns a
+`Provider<RegularFile>`; assigning it into a `RegularFileProperty` (`@InputFile`) is what wires
+the implicit task dependency — AGP registers the real producing task under the hood, so there is
+**no hardcoded task-name dependency** (`dependsOn("mergeDebugResources")` etc. is neither needed
+nor idiomatic). `SingleArtifact.MERGED_MANIFEST` is documented as `Replaceable` and
+`Transformable`; for pure *read-only verification* (this use case) only `.get()` is needed, not
+`.use(...).wiredWithFiles(...).toTransform(...)` (that variant is for actually rewriting the
+manifest). No current deprecation of `onVariants`/`AndroidComponentsExtension`/`artifacts.get` —
+the AGP API-updates page's most recent removals stop at AGP 8.0 (old Transform API) and 8.8
+(Resource Configurations DSL), nothing touching this path through 9.x.
+Source: [github.com/android/gradle-recipes, branch `agp-9.3`](https://github.com/android/gradle-recipes/tree/agp-9.3/transformManifest) (official Google-maintained repo, matches our exact AGP version); [developer.android.com/build/releases/gradle-plugin-api-updates](https://developer.android.com/build/releases/gradle-plugin-api-updates).
+
+**6. Dependency denylist check (group:module across transitives), config-cache-safe:**
+Android variant runtime classpath configuration name = **`<variant>RuntimeClasspath`** (e.g.
+`debugRuntimeClasspath`); compile classpath = `<variant>CompileClasspath` (e.g.
+`debugCompileClasspath`) — confirmed via `developer.android.com/build/gradle-dependency-resolution`.
+```kotlin
+abstract class DenylistCheckTask : DefaultTask() {
+    @get:Input
+    abstract val rootComponent: Property<ResolvedComponentResult>
+
+    @TaskAction
+    fun check() {
+        rootComponent.get().dependencies.forEach { dep ->
+            // walk dep (ResolvedDependencyResult) -> dep.selected (ResolvedComponentResult)
+            // -> .moduleVersion (ModuleVersionIdentifier: group/name/version) against denylist
+        }
+    }
+}
+
+// wiring (configuration time):
+tasks.register<DenylistCheckTask>("checkDebugDenylist") {
+    rootComponent.set(
+        configurations.named("debugRuntimeClasspath").get()
+            .incoming.resolutionResult.rootComponent   // Provider<ResolvedComponentResult>
+    )
+}
+```
+**Config-cache gotcha (Gradle official docs, `configuration_cache_requirements.html`):**
+"referencing resolved dependency results is disallowed" if captured eagerly
+(`ArtifactResolutionQuery`, `ResolvedArtifact`, `ArtifactResult` as task fields) — the compatible
+pattern is `resolutionResult.rootComponent`, a **lazy `Provider<ResolvedComponentResult>`** that
+"tracks the producer tasks of this resolution result." Declare it as a `Property<...>` task
+input, never hold the `Configuration` object itself on the task. If you need the resolved *files*
+(not just component identity), declare a `FileCollection` input instead of referencing the
+`Configuration`.
+Source: [docs.gradle.org/current/userguide/graph_resolution.html](https://docs.gradle.org/current/userguide/graph_resolution.html); [docs.gradle.org/current/userguide/configuration_cache_requirements.html](https://docs.gradle.org/current/userguide/configuration_cache_requirements.html); [developer.android.com/build/gradle-dependency-resolution](https://developer.android.com/build/gradle-dependency-resolution).
+
+**7. Bootstrapping the wrapper with NO Gradle installed (this machine's exact situation):**
+Gradle's own docs are explicit that there's no way around installing a Gradle runtime first:
+"Generating the Wrapper files requires an installed version of the Gradle runtime on your
+machine" (`gradle_wrapper.html`). The officially documented manual-install path
+(`docs.gradle.org/current/userguide/installation.html`, which itself uses `gradle-9.6.1` in its
+own worked example):
+1. Download `https://services.gradle.org/distributions/gradle-9.6.1-bin.zip`.
+2. Extract to e.g. `C:\Gradle\gradle-9.6.1` (any folder).
+3. Add `C:\Gradle\gradle-9.6.1\bin` to `PATH` (temporarily, just to bootstrap); verify `gradle -v`.
+4. From the new project root (no `gradlew` yet): `gradle wrapper --gradle-version 9.6.1` — this
+   generates `gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.jar`,
+   `gradle/wrapper/gradle-wrapper.properties`. After this, always use `./gradlew`/`gradlew.bat`;
+   the manually-installed Gradle can be removed from PATH/deleted.
+**Gap — could NOT verify from official docs:** whether Android Studio's own installation bundles
+a directly CLI-invokable Gradle distribution at a stable, documented path. Nothing in
+`docs.gradle.org` or `developer.android.com` states this, so do not assume such a path exists —
+use the manual-zip method above instead, which IS officially documented.
+(Non-official but factual, if a bootstrap shortcut is ever wanted: Google's own
+`android/gradle-recipes` GitHub repo ships pre-generated `gradlew`/`gradle-wrapper.jar` +
+`gradle-wrapper.properties` per sample, checked into git — confirmed present in the `agp-9.3`
+branch — which could be copied instead of running `gradle wrapper` locally, but this is a
+convenience observation, not the documented procedure.)
+Source: [docs.gradle.org/current/userguide/gradle_wrapper.html](https://docs.gradle.org/current/userguide/gradle_wrapper.html); [docs.gradle.org/current/userguide/installation.html](https://docs.gradle.org/current/userguide/installation.html).
+
+---
+
 ## Mistakes ledger (real traps in THIS repo, with the fix)
 
 Maintained by the **`mistake-tracker`** agent. Entry shape:
@@ -545,3 +736,54 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   playable invariants on the built DB (`correct_idx` non-null and in range, 0 dangling `feed_items` refs,
   every playable row `importance ∈ 1..5` + populated signals) — a row can satisfy "has a value" and still be
   unplayable. (seen 1x)
+
+- **2026-07 · AGP 9.0+ has BUILT-IN Kotlin — applying `org.jetbrains.kotlin.android` is a hard
+  error.** Assumed the classic `plugins { alias(libs.plugins.kotlin.android) }` block was still
+  needed; AGP 9 rejects it outright: "The 'org.jetbrains.kotlin.android' plugin is no longer
+  required for Kotlin support since AGP 9.0". Built-in Kotlin replaces `kotlin-android` ONLY — the
+  Compose compiler plugin (`org.jetbrains.kotlin.plugin.compose`) is still applied separately, and
+  `kotlin.compilerOptions.jvmTarget` now defaults from `android.compileOptions.targetCompatibility`
+  (no explicit `kotlin { compilerOptions { jvmTarget } }` block needed). This came from an otherwise
+  well-sourced docs-researcher report that predated/missed the AGP 9 change.
+  **Fix/prevention:** on AGP 9+, drop `kotlin-android` from `plugins{}`, keep only the Compose
+  compiler plugin; the build is the final authority over any research report on version-boundary
+  facts. (seen 1x)
+
+- **2026-07 · A Gradle plugin that touches the AGP Variant/Artifacts API cannot live in
+  `buildSrc`.** With `compileOnly(agp)` in buildSrc the plugin compiled but died at apply time:
+  `NoClassDefFoundError: com/android/build/api/variant/Variant` — buildSrc's jar sits on the root
+  buildscript classpath, a PARENT classloader of the one the app's `plugins{}` block resolves AGP
+  into, and a parent can't see a child's classes. Switching to `implementation(agp)` just changed
+  the failure: "Error resolving plugin [id: 'com.android.application', version: '9.3.0'] ... already
+  on the classpath with an unknown version".
+  **Fix/prevention:** use an INCLUDED BUILD (`pluginManagement { includeBuild("build-logic") }`)
+  with `compileOnly(agp)` for any plugin using the Variant API — never buildSrc. This is the
+  pattern Google's own `android/gradle-recipes` uses. (seen 1x)
+
+- **2026-07 · Never grep a manifest (or any XML/code) for forbidden content — parse it.** A
+  grep-based check for forbidden permissions/components falsely reported INTERNET + a `<service>`
+  in a build that had neither — it matched the warning comment inside our own
+  AndroidManifest.xml that lists the forbidden items as text.
+  **Fix/prevention:** any structural check over XML/code must parse the format (e.g.
+  `javax.xml.parsers.DocumentBuilder`), never regex raw text. A guard that cries wolf gets
+  switched off. (seen 1x)
+
+- **2026-07 · `keytool` defaults to legacy JKS — always pass `-storetype PKCS12`.** Generating an
+  Android signing keystore with `-storetype JKS` triggers "The JKS keystore uses a proprietary
+  format. It is recommended to migrate to PKCS12"; caught before anything was signed and
+  regenerated as PKCS12.
+  **Fix/prevention:** always pass `-storetype PKCS12` when generating a keystore. Also update
+  `.gitignore` in the same step — it covered `*.jks`/`*.keystore` but not `*.p12`, so a format
+  change can silently escape ignore rules. (seen 1x)
+
+- **2026-07 · Windows paths in a `.properties` file need forward slashes, not hand-escaped
+  backslashes.** Writing `keystore.properties`'s `storeFile` via a sed one-liner that escaped
+  backslashes failed with "unterminated `s' command" and silently produced a broken path line.
+  **Fix/prevention:** use forward slashes in `.properties` paths (Java accepts `C:/...` on
+  Windows); never hand-escape a Windows path through sed. (seen 1x)
+
+- **2026-07 · Gradle 9 refuses to bootstrap a wrapper in a directory with no build.** `gradle
+  wrapper` failed with "Run gradle init to create a new Gradle build in this directory" because no
+  settings file existed yet.
+  **Fix/prevention:** write a minimal `settings.gradle.kts` first, then run `gradle wrapper`.
+  (seen 1x)

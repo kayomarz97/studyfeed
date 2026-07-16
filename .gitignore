@@ -27,6 +27,10 @@ local.properties
 # ── signing: losing these is bad, committing them is worse ──
 *.jks
 *.keystore
+# The real keystore is PKCS12 (.p12) and lives OUTSIDE this repo entirely (§11d). These patterns
+# are belt-and-braces for the day someone copies it in "just for a second".
+*.p12
+*.pfx
 keystore.properties
 
 # ── env / secrets ──

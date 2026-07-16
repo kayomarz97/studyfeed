@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  StudyFeed — the manifest IS the offline/no-background contract (BUILD_PROMPT §8 A0, §12).
+
+  DO NOT ADD, EVER, without the user's explicit say-so:
+    * <uses-permission android:name="android.permission.INTERNET" />   ← the app must never reach a network
+    * ACCESS_NETWORK_STATE / ACCESS_WIFI_STATE / WAKE_LOCK
+    * RECEIVE_BOOT_COMPLETED / SCHEDULE_EXACT_ALARM / USE_EXACT_ALARM / FOREGROUND_SERVICE*
+    * any <service>, <receiver> or <provider>                          ← no background execution, ever
+  `./gradlew verifyOfflineGuarantees` reads the MERGED manifest and fails the build on any of these,
+  including ones a library injects behind our back (this is what catches WorkManager). Resurfacing
+  happens in-app on next open — never via an alarm, a job, or a notification.
+
+  There are NO <uses-permission> elements below. That is deliberate, not an oversight.
+  Pack import (A1) uses the Storage Access Framework, which needs no storage permission at all.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.StudyFeed">
+        <!--
+          allowBackup="false" is a deliberate call, not a default.
+          Android's Auto Backup would copy progress.db to the user's Google Drive — which would
+          partially mitigate the §11d keystore risk, but by uploading study data off-device, and
+          this app's whole stance is that data never leaves the phone (§0 runtime:
+          fully_offline_no_tokens). The sanctioned answer to §11d is Settings → Export/Import
+          progress (§11e, lands in A1): a plain local file copy the user controls.
+        -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.StudyFeed">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          androidx.profileinstaller injects this BroadcastReceiver into every AndroidX app whether
+          you ask for it or not (it arrives transitively via Compose). It is exported="true" and
+          listens for shell/system broadcasts (guarded by android.permission.DUMP) to compile
+          baseline profiles.
+
+          It is removed here, deliberately. Its only real consumers are the Play Store's cloud
+          profile delivery and `adb shell` benchmarking — this app is sideloaded and never sees
+          either, so the receiver earns nothing and is pure surface area. The profile still
+          installs at app start via ProfileInstallerInitializer (androidx.startup), so startup
+          performance is unaffected.
+
+          This is what lets `verifyOfflineGuarantees` keep an absolute "zero receivers" rule
+          instead of a softer one with an exception carved out of it. Verified present in the
+          merged manifest before this line was added — it is not hypothetical.
+        -->
+        <receiver
+            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+            tools:node="remove" />
+    </application>
+
+</manifest>

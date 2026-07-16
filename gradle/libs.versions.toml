@@ -1,0 +1,56 @@
+# StudyFeed — version catalog. EVERY version is pinned; never use a dynamic "+" or "latest.release".
+# A reproducible build is not a nicety here: the pack is compiled once and studied from for six
+# weeks, and a silently-drifting dependency is a bug you find on exam eve.
+#
+# Versions below were verified against official sources on 2026-07-16 and recorded, with citations,
+# in .claude/PLAYBOOK.md → "Android build toolchain (AGP / Gradle / Kotlin / Compose)".
+# Read that entry before changing anything here. Do not bump versions from memory.
+
+[versions]
+# AGP 9.3.0 requires Gradle >= 9.5.0 (its own default) and JDK >= 17.
+# The wrapper is pinned to Gradle 9.5.0 — the version Google's own `agp-9.3` recipe branch ships,
+# rather than the newest (9.6.1), which Gradle's compat page only claims tested through
+# AGP 9.3.0-alpha06. Best-tested beats newest for a build we depend on.
+agp = "9.3.0"
+kotlin = "2.4.10"
+# Compose BOM 2026.06.01 -> compose-ui/runtime/foundation/animation 1.11.4, material3 1.4.0.
+# The BOM is what keeps those in lockstep; never pin a Compose artifact version by hand.
+composeBom = "2026.06.01"
+androidxCoreKtx = "1.15.0"
+androidxLifecycle = "2.8.7"
+androidxActivityCompose = "1.9.3"
+# FSRS-6. See PLAYBOOK "FSRS-6 for Kotlin/Android": this is `java-fsrs` (MIT, pure Java, JDK 17+),
+# the ONLY published artifact. Do NOT vendor `FSRS-Kotlin` — it is broken, unlicensed app code.
+fsrs = "1.0.0"
+junit = "4.13.2"
+
+[libraries]
+# Used by buildSrc only, to compile the offline-guarantees plugin against AGP's stable
+# Variant/Artifacts API. Shares the `agp` version so the guard can never be compiled against a
+# different AGP than the one that builds the app.
+android-gradle-api = { group = "com.android.tools.build", name = "gradle-api", version.ref = "agp" }
+
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "androidxCoreKtx" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "androidxLifecycle" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "androidxActivityCompose" }
+
+compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+compose-ui = { group = "androidx.compose.ui", name = "ui" }
+compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
+compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+
+fsrs = { group = "io.github.open-spaced-repetition", name = "fsrs", version.ref = "fsrs" }
+
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+# NOTE: there is deliberately no `kotlin-android` entry. AGP 9.0+ compiles Kotlin itself
+# (built-in Kotlin, on by default) and applying org.jetbrains.kotlin.android on top is a hard
+# error. Built-in Kotlin replaces kotlin-android ONLY — the Compose compiler is still its own
+# plugin, below. See PLAYBOOK "AGP 9 built-in Kotlin".
+# Since Kotlin 2.0 the Compose compiler ships inside the Kotlin repo and is versioned identically
+# to Kotlin — there is no separate kotlinCompilerExtensionVersion to keep in sync any more.
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
