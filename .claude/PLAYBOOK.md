@@ -575,6 +575,190 @@ Source: [docs.gradle.org/current/userguide/gradle_wrapper.html](https://docs.gra
 
 ---
 
+### Android Auto Backup (progress.db cloud backup) — read 2026-07-17
+
+**Context:** offline sideloaded app, minSdk 26 / targetSdk 36, `android:allowBackup="false"`
+currently. Question was whether enabling Google-Drive Auto Backup mitigates "user loses the
+signing keystore." **Verdict: it does NOT.** Restore is signature-gated at the framework level.
+
+**1. THE deciding fact — restore checks the signing certificate, and a from-scratch new key fails it.**
+Not documented in prose on developer.android.com (confirmed absent from `/identity/data/autobackup`,
+`/identity/data/backup`, `/identity/data/keyvaluebackup`, `/reference/.../BackupManager`, and
+`/studio/publish/app-signing` — explicitly checked, none mention it). Ground truth comes from AOSP
+source (frameworks/base), which both key-value and file-based (Auto Backup) restores share via
+`PerformUnifiedRestoreTask`:
+```java
+// services/backup/java/com/android/server/backup/PerformUnifiedRestoreTask.java
+if (!BackupUtils.signaturesMatch(metaInfo.sigHashes, mCurrentPackage, pmi)) {
+    Slog.w(TAG, "Signature mismatch restoring " + packageName);
+    ...
+    executeNextState(UnifiedRestoreState.RUNNING_QUEUE);   // <- restore for THIS package is skipped
+    return;
+}
+```
+```java
+// services/core/java/com/android/server/backup/BackupUtils.java — signaturesMatch()
+// Don't allow unsigned apps on either end...
+final int nStored = storedSigHashes.size();
+if (nStored == 1) {
+    // if the app is only signed with one sig, it's possible it has rotated its key
+    // the checks with signing history are delegated to PackageManager
+    return pmi.isDataRestoreSafe(storedSigHashes.get(0), target.packageName);
+} else { /* multi-signer: require every stored hash present in current signers */ }
+```
+System-partition apps (`FLAG_SYSTEM`) are explicitly exempted — irrelevant here, this app is a
+normal sideloaded app. **Key rotation (APK Signature Scheme v3 lineage) is the only escape hatch**,
+and it requires signing a rotation certificate *with the original key* before it's lost — i.e. you
+must plan ahead while you still have the old keystore. If the keystore is already lost and you sign
+a brand-new, unrelated key, there is no lineage, `isDataRestoreSafe` returns false, restore of that
+package's data is silently skipped (log line only: "Signature mismatch restoring `<pkg>`"), and the
+user gets a clean install with **zero backed-up data** — no error surfaced to the user in the UI.
+**Conclusion: Auto Backup does not solve "lost keystore, need new signature, same applicationId."**
+It only helps for uninstall/reinstall or new-device scenarios where the SAME keystore signs the
+reinstall. If keystore loss is the threat being mitigated, the fix must be an app-level export/import
+of `progress.db` (e.g. Storage Access Framework "Save As" to a user-chosen file/cloud folder), not
+Auto Backup.
+Sources (docs pages checked and found silent on signature/restore):
+[developer.android.com/identity/data/autobackup](https://developer.android.com/identity/data/autobackup),
+[developer.android.com/identity/data/backup](https://developer.android.com/identity/data/backup),
+[developer.android.com/identity/data/keyvaluebackup](https://developer.android.com/identity/data/keyvaluebackup),
+[developer.android.com/studio/publish/app-signing](https://developer.android.com/studio/publish/app-signing).
+Ground truth (AOSP, read 2026-07-17):
+[.../BackupUtils.java](https://github.com/aosp-mirror/platform_frameworks_base/blob/master/services/core/java/com/android/server/backup/BackupUtils.java),
+[.../PerformUnifiedRestoreTask.java](https://github.com/aosp-mirror/platform_frameworks_base/blob/master/services/backup/java/com/android/server/backup/restore/PerformUnifiedRestoreTask.java).
+
+**2. No permission needed; system does the work, not the app.**
+Backup/restore is performed by the OS Backup Manager + Google's transport (`BackupTransportService`
+in GMS), out-of-process from the app. Docs confirm restore happens purely on install: "Data is
+restored whenever the app is installed, whether from the Play Store, during device setup..., or by
+running `adb` install." Nothing in `/identity/data/autobackup`, `/identity/data/backup`, or the
+`<application>` manifest docs requires any manifest `<uses-permission>` for Auto Backup to function —
+INTERNET permission is not required (the app never touches the network; the OS/GMS process does).
+Source: [developer.android.com/identity/data/autobackup](https://developer.android.com/identity/data/autobackup).
+
+**3. Quota: 25 MB per app, per user — unchanged as of this read, and it's an all-or-nothing miss, not partial.**
+> "Every app can allocate up to 25 MB of backup data per app user."
+> "Caution: If the amount of data is over 25 MB, the system calls `onQuotaExceeded()` and doesn't
+> back up data to the cloud."
+> "The system periodically checks whether the amount of data later falls under the 25 MB threshold
+> and continues Auto Backup when it does."
+Implication for this app: **the large imported content-pack `.db` (hundreds of MB) must be
+`<exclude>`d from the backup rules**, or it alone blows the 25 MB quota and the small `progress.db`
+never gets backed up either (whole-app quota, not per-file). Key-value backup (separate, older API)
+has its own, smaller 5 MB/app limit — not relevant here since this app would use Auto Backup (file
+rules), not `BackupAgentHelper` key-value.
+Source: [developer.android.com/identity/data/autobackup](https://developer.android.com/identity/data/autobackup), [developer.android.com/identity/data/backup](https://developer.android.com/identity/data/backup).
+
+**4. Include/exclude XML — BOTH the new and legacy attribute must be declared for minSdk 26.**
+API 31+ (Android 12+) uses `android:dataExtractionRules`; the old `android:fullBackupContent` is
+**ignored** on API 31+ but is still what API ≤30 devices read, so both must be shipped side by side:
+> "When you point to the new XML configuration, the `android:fullBackupContent` attribute that
+> points to the old config is ignored on devices running Android 12 or higher." (the old config
+> "is still required for devices running Android 11 or lower.")
+Manifest:
+```xml
+<application
+    android:allowBackup="true"
+    android:fullBackupContent="@xml/backup_rules"
+    android:dataExtractionRules="@xml/data_extraction_rules">
+```
+`res/xml/data_extraction_rules.xml` (API 31+; note separate `<cloud-backup>` vs `<device-transfer>`
+sections — this app only cares about cloud-backup, but rules typically must exist in both blocks or
+device-transfer defaults to including everything):
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+  <cloud-backup disableIfNoEncryptionCapabilities="true">
+    <exclude domain="database" path="." />
+    <include domain="database" path="progress.db" />
+  </cloud-backup>
+  <device-transfer>
+    <exclude domain="database" path="." />
+    <include domain="database" path="progress.db" />
+  </device-transfer>
+</data-extraction-rules>
+```
+`res/xml/backup_rules.xml` (API ≤30 legacy, `<full-backup-content>` root tag, same include/exclude
+semantics, no cloud-backup/device-transfer split):
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+  <exclude domain="database" path="." />
+  <include domain="database" path="progress.db" />
+</full-backup-content>
+```
+Valid `domain` values confirmed on the canonical schema page: `file`, `database`, `sharedpref`,
+`external`, `root` (the `device_*`-prefixed variants surfaced by one AI-summarized fetch could NOT
+be corroborated on the direct schema quote and should be treated as unverified — don't rely on them).
+The `database` domain corresponds to files under `Context.getDatabasePath(String)` (includes
+Room/SQLite `-wal`/`-shm` sidecar files, since those live alongside the `.db` under the same path).
+`disableIfNoEncryptionCapabilities` is a `<cloud-backup>`-only optional attribute (default false);
+setting `true` skips cloud backup entirely on devices/OS versions that can't guarantee client-side
+encryption of the backup blob — worth setting `true` for FSRS/health-adjacent study data.
+Sources: [developer.android.com/about/versions/12/behavior-changes-12#backup-restore](https://developer.android.com/about/versions/12/behavior-changes-12#backup-restore), [developer.android.com/guide/topics/manifest/application-element](https://developer.android.com/guide/topics/manifest/application-element).
+
+**5. `allowBackup` default is `true` at every API level, unchanged for targetSdk 36; must set explicitly to false to opt out (already done in this app).**
+> "The default value of this attribute is `true`." — the manifest docs make no exception for any
+> current targetSdk. **Gap — could not verify:** no official changelog entry found (checked
+> `/identity/data/autobackup`, manifest docs) describing any Android 13/14/15/16 change to
+> Auto Backup's on/off default or its scheduling; the 24h/idle/Wi-Fi conditions below are stated as
+> current with no version caveat, so treat them as still current for API 36 devices. One
+> manufacturer-specific carve-out is documented: "On devices from some device manufacturers, you
+> can't disable device-to-device migration of your app's files" via `allowBackup="false"` alone —
+> cloud backup can still be disabled by that flag, but D2D migration on some OEM skins may not be.
+Source: [developer.android.com/guide/topics/manifest/application-element](https://developer.android.com/guide/topics/manifest/application-element).
+
+**6. Works for sideloaded/adb-installed apps; requires a Google account + device-level backup toggle on.**
+> "Data is restored whenever the app is installed, whether from the Play Store, during device setup
+> ..., or by running `adb install`." Cloud backup data is stored "in a private folder in the user's
+> Google Drive account" — a signed-in Google account is required by construction (not stated as an
+> explicit precondition in prose, but follows directly from where the data is stored — flagging this
+> inference rather than presenting it as a verbatim quote). Also requires: "The user has enabled
+> backup on the device" (Settings > System > Backup) and idle/Wi-Fi conditions (see #8). D2D
+migration (phone-to-phone Wi-Fi Direct-style transfer during setup) is a **separate transport**
+(`D2dTransport`, tested via a different `bmgr transport`/`backup_enable_d2d_test_mode` flag) from
+the Google Drive cloud transport (`com.google.android.gms/.backup.BackupTransportService`) — same
+manifest rules apply to both, but the question's threat model (new key on new device) fails the
+same signature check under either transport, since both funnel through the same
+`PerformUnifiedRestoreTask`/`BackupUtils.signaturesMatch` code path in AOSP.
+Source: [developer.android.com/identity/data/autobackup](https://developer.android.com/identity/data/autobackup), [developer.android.com/identity/data/testingbackup](https://developer.android.com/identity/data/testingbackup).
+
+**7. SQLite/WAL consistency during backup — Gap: not addressed by official docs.**
+Checked `/identity/data/autobackup`, `/identity/data/backup`, `/identity/data/keyvaluebackup`: none
+discuss WAL/journal files, whether the DB must be closed, or corruption risk for a live SQLite file
+captured mid-write. The `database` domain is documented only as covering files under
+`getDatabasePath(String)` — no consistency guarantee is stated anywhere. **Do not assume atomicity.**
+If this feature is built, treat it like any other file-copy backup of a live SQLite DB: checkpoint
+WAL into the main file (`PRAGMA wal_checkpoint(TRUNCATE)`) and only back up while the DB is closed or
+between transactions to avoid restoring a torn/inconsistent file — this is general SQLite guidance,
+not something the Android backup docs promise for you.
+Source: gap — none of the fetched official pages mention this; flagging rather than guessing.
+
+**8. Backup timing: system-scheduled only; nothing the app can trigger for Auto Backup (file-based).**
+> "Backups occur automatically when all of the following conditions are met: The user has enabled
+> backup on the device... At least 24 hours have elapsed since the last backup... The device is
+> idle... The device is connected to a Wi-Fi network (if the user hasn't opted in to mobile-data
+> backups)." "In practice, these conditions occur roughly every night, but a device might never back
+> up (for example, if it never connects to a network)." This matches the "no background work"
+> constraint — the app does nothing; the system's own daemon runs the pass. `BackupManager.dataChanged()`
+> exists but **explicitly does not apply here** — AOSP javadoc: "Note: This only works if your
+> application is performing Key/Value backups." Auto Backup (file-based, what this app would use) has
+> no app-triggerable "back up now" API in the public SDK; only manual testing hooks (`adb shell bmgr
+> backupnow <pkg>`, requires a debug/dev-enabled `bmgr`) exist, not something shippable in production.
+Sources: [developer.android.com/identity/data/autobackup](https://developer.android.com/identity/data/autobackup) (schedule quotes), AOSP [BackupManager.java `dataChanged()` javadoc](https://github.com/aosp-mirror/platform_frameworks_base/blob/master/core/java/android/app/backup/BackupManager.java) (read 2026-07-17).
+
+**Bottom line for the decision:** Auto Backup is real, free, requires no permissions/network code
+in the app, and can be scoped with include/exclude rules to just `progress.db` while excluding the
+large content-pack `.db` (must exclude it — would blow the 25 MB quota otherwise). But it is
+**useless for the "lost keystore" disaster** because restore is hard-gated on signing-certificate
+match (or a pre-established key-rotation lineage signed with the *old* key before it was lost) — a
+brand-new unrelated key on a same-`applicationId` reinstall gets a clean install with no data
+restored, silently. If keystore-loss recovery is the goal, pair Auto Backup (nice-to-have, covers
+uninstall/reinstall-with-same-key and device-migration cases) with an explicit in-app export/import
+of `progress.db` via Storage Access Framework, which is signature-independent.
+
+---
+
 ## Mistakes ledger (real traps in THIS repo, with the fix)
 
 Maintained by the **`mistake-tracker`** agent. Entry shape:

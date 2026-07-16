@@ -5,6 +5,38 @@ box). This file is owned by the laptop. Never append compiler progress here, and
 never append app progress to `JOURNAL.md` — that split is what keeps the two
 machines from colliding.
 
+## ⛔ STANDING ORDERS FROM THE USER — 2026-07-17. READ FIRST, DO NOT VIOLATE.
+
+**1. `BUILD_PROMPT.md` IS ABOUT TO CHANGE. THE USER WILL UPDATE IT — YOU WILL NOT.**
+The user has remote work to finish first; after that **they** will update `BUILD_PROMPT.md` "and
+everything else" themselves. So:
+- **Never edit `BUILD_PROMPT.md`.** Not §0, not a typo, not to reconcile it with reality.
+- Expect the spec to move under you. If the spec and this repo disagree, that is not necessarily
+  drift to be "fixed" — it may simply be an update that has not arrived yet. **Surface it and ask;
+  never silently reconcile.** (This is the same rule as the §0 `build_env` divergence below, now
+  generalised to the whole file.)
+- After the user's spec update lands, re-read `BUILD_PROMPT.md` from scratch before acting on it.
+  Do not act on any memory of the old text.
+
+**2. NO RESEQUENCING. A1 IS NEXT, IN SPEC ORDER (§8).**
+A proposal to build a synthetic fixture pack first and jump to A2 (so the UI could be seen sooner)
+was **put to the user and DECLINED on 2026-07-17.** Do not revive it, and do not build a fixture
+pack. Follow §8's order: A0 → A1 → A2 → … The reasoning behind the proposal (that A2–A6 all read
+the pack A1 opens, and that no pack exists yet because the compiler is only at C10 of C13) is
+recorded here only so nobody re-derives it and re-proposes it. **The user's sequencing decision
+stands over that reasoning.**
+
+**3. THE USER MAKES THE PACKS AND BUILDS THE APP.**
+The user has said they will produce the content packs and build the app themselves. Do not assume
+you are driving the compiler to C13, and do not invent pack data to work around a pack not existing
+yet.
+
+**4. NOTHING IS PUSHED, AND NOTHING GETS PUSHED WITHOUT AN EXPLICIT ASK.**
+Work is committed to local `dev` only. `origin/dev` (github.com/kayomarz97/studyfeed, private) has
+none of it. The user has explicitly said not to push. §11a stands: ask before any remote operation.
+
+---
+
 ## Known divergence from BUILD_PROMPT — READ THIS BEFORE "FIXING" ANYTHING
 
 **Status: KNOWN, INTENTIONAL, pending a spec amendment at A0. Not a bug. Do not
@@ -113,7 +145,12 @@ wrong FSRS-6 weight vector on a future version bump.
 Release APK verified signed: RSA 4096, `CN=StudyFeed`, APK Signature Scheme v2. Shipped release
 APK contains **no INTERNET permission** (checked with aapt2 on the artifact itself, not the config).
 
-**⛔ KEYSTORE GATE — OPEN. A0 does not close until the user confirms an off-laptop backup.**
+**⛔ KEYSTORE GATE — CLOSED 2026-07-17.** User confirmed the keystore is backed up to Google
+Drive (off-laptop). A0 is therefore complete and A1 may start. Advice given, user's call: the
+`.p12` and `keystore.properties` sit in one folder, so a single account compromise yields both key
+and password — worth splitting the password into a password manager.
+
+Original gate record:
 - `C:\Users\kayom\keys\studyfeed\studyfeed-release.p12` — PKCS12 (NOT legacy JKS), RSA 4096,
   valid to 2053-12-02. Generated once, outside the repo, `CN=StudyFeed, O=StudyFeed` (no personal
   data in the cert).
@@ -128,3 +165,30 @@ APK contains **no INTERNET permission** (checked with aapt2 on the artifact itse
 Six stumbles logged to the PLAYBOOK mistakes ledger (AGP 9 built-in Kotlin; buildSrc-vs-included
 build for AGP plugins; never grep a manifest — parse it; keytool's legacy JKS default; backslashes
 in .properties; Gradle 9 won't bootstrap a wrapper without a settings file).
+
+### Post-A0 notes — 2026-07-17
+
+**Google Drive backup of progress: researched, NOT built, and the headline finding matters.**
+The user asked for it. Full findings + citations in PLAYBOOK "Android Auto Backup". The deciding
+fact: **Auto Backup does NOT survive a signing-key change.** Android's restore path checks the
+app's signature (AOSP `PerformUnifiedRestoreTask` → `BackupUtils.signaturesMatch()`); on mismatch
+the restore is *silently skipped* — clean install, no data, no error. Only APK Signature Scheme v3
+key-rotation lineage forgives it, and that must be established **before** the old key is lost. So
+Auto Backup does nothing for the §11d lost-keystore disaster it was proposed to mitigate; §11e
+export/import remains the only real insurance. It IS still worth having for new-phone / ordinary
+reinstall **while the key is intact**. If built (A1): quota is 25 MB/app and **all-or-nothing**, so
+the imported pack .db MUST be excluded via `dataExtractionRules` (API 31+) *and* legacy
+`fullBackupContent` (minSdk 26 needs both) or it blows the quota and kills progress backup too.
+No INTERNET permission needed — the OS does it out-of-process, so it does not violate §5/§12.
+
+**`gradle/gradle-daemon-jvm.properties` — deleted deliberately, 2026-07-17.** Gradle's own
+`updateDaemonJvm` generated it during a wrapper run (not by intent). It pinned `toolchainVersion=21`
+but also embedded **foojay.io** JDK download URLs for every OS — i.e. a machine without JDK 21 would
+silently fetch a JDK over the network at build time. We don't need it (JAVA_HOME supplies JBR 21 and
+`app/README.md` documents that), and it adds an unreviewed supply-chain dependency. Removed;
+`verifyOfflineGuarantees` re-run afterwards and still green. Regenerate with `./gradlew
+updateDaemonJvm` if it is ever genuinely wanted — that is a decision, not a default.
+
+**Open item for whoever does A1:** §11e export/import must land before the user ever studies real
+progress. Safe to be after A2 ONLY because no real pack exists yet; the moment one does, this is
+urgent.
