@@ -229,3 +229,13 @@ C3 emphasis harvest COMPLETE (backfilled - build had skipped C0->C4). bookusage.
 - subagent `secret-scanner` (a8590a468b7af7151) finished — 2742 chars -> work/subagent_results.jsonl
 - subagent `` (a2450f503792ba3c4) finished — 17 chars -> work/subagent_results.jsonl
 - subagent `` (a655e069894b99be5) finished — 14 chars -> work/subagent_results.jsonl
+- subagent `` (a264938d43859df5a) finished — 17 chars -> work/subagent_results.jsonl
+
+**[compacted at 2026-07-16T12:08:40Z]** — context compacted; disk state is the truth (§10a).
+
+**[compacted at 2026-07-16T12:09:10Z]** — context compacted; disk state is the truth (§10a).
+- subagent `general-purpose` (a9deff7d316839525) finished — 2616 chars -> work/subagent_results.jsonl
+
+## 2026-07-16T12:38:23Z  [ALIAS-VERIFIED]
+
+C8 alias proposals VERIFIED by an Opus subagent (Claude Code usage, no billable API - user asked opus specifically because it knows e.g. acute fever != acute Q fever). Adjudicated all 400 candidate pairs in dist/alias_proposals.yaml: 226 SAME / 174 DIFFERENT. Opus correctly kept separate the near-identical-but-distinct entities a blind edit-distance/plural/hyphen rule would have wrongly merged: Klebsiella pneumonia vs pneumoniae (disease vs bacterial species, 1 letter), diabetic nephropathy vs neuropathy, folic vs folinic acid (leucovorin), calcipotriol vs calcitriol, haemolysis vs haemoptysis, hepatitis B vs C (whole A-E family), hypocalcaemia vs hypokalaemia, elevated LDH vs LDL, loud P2 vs loud S2, melanoma vs melasma, + every type1/2, CKD stage, lupus class, MEN, factor VIII/IX, anti-Ro/La, HLA family. It flagged its own borderline merges (amphotericin~amphotericin B, ciclosporin~ciclosporin A, creatine kinase~creatinine-kinase misnomer). Applied the 226 same-pairs as 203 merge groups (union-find + coalesce) -> profiles/mrcp_part1.yaml nomenclature.alias_hints (Opus-verified, explicit; NOT blind rule-stripping which would over-merge medical homonyms). Verified profile parses + acute fever!=acute Q fever + hepB!=hepC + Addisons merges. Re-folded concept graph (concepts 38013->37795, 218 dup nodes collapsed; proposals 726->487; chest X-ray now a proper investigation hub) and rescored C9. Verdicts cached in work/alias_verdicts.jsonl.

@@ -487,3 +487,16 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   **Fix/prevention:** before any budget-gate quote, run the real prompt on a ≥100-item sample and
   extrapolate from ACTUAL in/out tokens; switching JSON→terse (`N|s|r|o`) cut output ~40%, and Haiku +
   a Sonnet-subagent audit did the job for ~$6. Output tokens dominate cost — estimate them empirically. (seen 1x)
+
+- **2026-07 · Never blind-merge orthographic near-duplicate ENTITY names — medical homonyms differ by one
+  letter.** C8's `alias.canonical_key` didn't normalise plurals / hyphens / underscores / apostrophes, so
+  400+ trivial variants ("absence seizure"/"seizures", "Addison disease"/"Addison's") became alias
+  proposals and split concept nodes. The tempting fix — a blind plural/hyphen strip — would have WRONGLY
+  merged distinct entities: *Klebsiella pneumonia* vs *pneumoniae* (disease vs species), *hepatitis B* vs
+  *C*, *hypocalcaemia* vs *hypokalaemia*, *folic* vs *folinic acid*, *LDH* vs *LDL*, *acute fever* vs
+  *acute Q fever*, and every type/stage/class/laterality family.
+  **Fix/prevention:** an Opus subagent (medical knowledge, Claude Code usage — no API spend) adjudicated
+  all 400 pairs → 226 same / 174 different; only the confirmed-same went into
+  `profile.nomenclature.alias_hints` (explicit, verified). A one-entity-one-node merge is irreversible
+  corruption, so adjudicate near-identical names with domain knowledge; default to KEEP-SEPARATE when a
+  letter/number/qualifier distinguishes them. (seen 1x)

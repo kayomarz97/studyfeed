@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated": "2026-07-16T10:37:34Z",
+  "updated": "2026-07-16T12:38:23Z",
   "stage": "C10",
   "completed": [
     "C0",
@@ -225,7 +225,12 @@
       "3": 282,
       "2": 3731,
       "1": 4419
-    }
+    },
+    "alias_verified_same": 226,
+    "alias_verified_different": 174,
+    "alias_merge_groups": 203,
+    "concepts_after_alias_verify": 37795,
+    "alias_proposals_remaining": 487
   },
   "blocked_on": null,
   "decisions": {
@@ -253,7 +258,8 @@
     "c8_compute": "C8 concept graph: Haiku Batch API for bulk triple extraction (86,702 atoms, ~$5-9, BYOK key) + SONNET SUBAGENT (Claude Code usage, model=sonnet, NOT the billable API key) to audit ambiguous/reversed edges post-build. Terse pipe format N|s|r|o (JSON was 2x tokens -> full Sonnet would have been ~$69, over the ~$34 approved). User: ping on completion.",
     "c8_done": "C8 COMPLETE 2026-07-16: alias.py (deterministic canonical_key + synonym map, 16/16 5e checks) + graph.py (Haiku Batch triple extraction, terse N|s|r|o, ~$6). 86,702 atoms -> 75,716 triples -> 38,013 concepts (alias-folded) + 68,091 typed grounded edges + PageRank centrality (top: rheumatoid arthritis, AKI, asthma, SLE, hypertension, COPD). guideline_sensitive=1651. Sonnet SUBAGENT audit (CC usage, 114-edge sample): 75% correct, 97% SUPPORTED (only 3 hallucinated) -> SHIP-READY for centrality/C9. Applied audit #1 fix: deterministic investigated_by disease->test swap (1414 edges). RESIDUAL for C11-interlink: complication_of direction (~4/8 reversed), drug-direction on treats/first_line_for, associated_with overuse (28% of edges). GATE: 726 novel-alias proposals in dist/alias_proposals.yaml for user review (add real synonyms to profile.nomenclature.alias_hints, then re-fold).",
     "c9_done": "C9 COMPLETE 2026-07-16: importance.py implemented (deterministic 1-5 per SCORING.md, all signals computed not LLM-rated). Scored all 3 item types: MCQs 12489 (5:389/4:3668/3:282/2:2828/1:5322), concepts 38013 (5:2626/4:1017/3:102/2:7222/1:27046), atoms 86702 (5:16/4:6527/3:22685/2:21464/1:36010). Linkages built: concept corrob=distinct canonical works per concept from graph_edges_raw; concept PYQ=approx match multi-word concept names in PYQ MCQ stems (3719 matched); atom<->concept via rationale (54788/86702 linked) -> atoms inherit centrality + PYQ. Floors correct: multi_year_pyq->5 is CONCEPT/MCQ-only (top 5star concepts=RA,coeliac,SLE,AKI,Addisons - correct high-yield). Bug found+fixed: multi_year floor wrongly applied to atoms (union of concept years) gave degenerate 33pct 5star -> removed (atoms get PYQ as inherited SIGNAL only). CAVEATS: emphasis(11pct)=0 (C3 highlights skipped); concept 71pct 1star (noisy 38k concept set -> candidate for pruning/opus recalibration); MCQ 3star thin (bimodal, PYQ-floor-driven). Outputs mcq/concept/atom_importance.jsonl.",
-    "c3_done": "C3 COMPLETE 2026-07-16 (backfilled; build had skipped C0->C4). bookusage.py implemented. Digital annotations = 0 (probed all 107 source PDFs -> zero highlight annots; distributed materials, not annotated copies) => is_highlighted=0 (no USER highlights); colour-mask skipped (Pastest/PassMed screenshots = UI colour, not highlights). book_flagged from: (a) whole-source salience pearls=0.75 (profile source_tiers.pearls, exempt noise ceiling); (b) per-topic markers in extracted text - SKELETON 🎤/▶️ (0.85), key point (0.7), pearl (0.6); high-yield/important EXCLUDED as noise. 9965 flagged pages (pearls 8256 whole-source + textbook 1572 markers + 137 qbank/paper). work/emphasis.jsonl. Wired S_emphasis into importance.py (my_highlight=0 so emphasis=0.4*book_salience) + rescored C9: atoms 1star 41.5->20.1pct (book-flagged content lifted), BUT 2star now 45.2pct (>45pct degenerate) - whole-book-high-yield sources (Essential Revision 17.8k atoms) boost uniformly -> pile-up at 1->2 boundary. Deterministic + correct; smoothing = opus importance-scorer recalibration (documented follow-up), NOT hand-tuned thresholds."
+    "c3_done": "C3 COMPLETE 2026-07-16 (backfilled; build had skipped C0->C4). bookusage.py implemented. Digital annotations = 0 (probed all 107 source PDFs -> zero highlight annots; distributed materials, not annotated copies) => is_highlighted=0 (no USER highlights); colour-mask skipped (Pastest/PassMed screenshots = UI colour, not highlights). book_flagged from: (a) whole-source salience pearls=0.75 (profile source_tiers.pearls, exempt noise ceiling); (b) per-topic markers in extracted text - SKELETON 🎤/▶️ (0.85), key point (0.7), pearl (0.6); high-yield/important EXCLUDED as noise. 9965 flagged pages (pearls 8256 whole-source + textbook 1572 markers + 137 qbank/paper). work/emphasis.jsonl. Wired S_emphasis into importance.py (my_highlight=0 so emphasis=0.4*book_salience) + rescored C9: atoms 1star 41.5->20.1pct (book-flagged content lifted), BUT 2star now 45.2pct (>45pct degenerate) - whole-book-high-yield sources (Essential Revision 17.8k atoms) boost uniformly -> pile-up at 1->2 boundary. Deterministic + correct; smoothing = opus importance-scorer recalibration (documented follow-up), NOT hand-tuned thresholds.",
+    "alias_verify": "C8 ALIAS PROPOSALS VERIFIED 2026-07-16 by OPUS SUBAGENT (Claude Code usage, NOT billable API, per user). Adjudicated all 400 alias_proposals.yaml pairs: 226 SAME (merge) / 174 DIFFERENT (keep separate). Opus caught medical traps a blind plural/hyphen rule would wrongly merge: Klebsiella pneumonia vs pneumoniae (disease vs species), diabetic nephropathy vs neuropathy, folic vs folinic acid, calcipotriol vs calcitriol, haemolysis vs haemoptysis, hepatitis B vs C, hypocalcaemia vs hypokalaemia, LDH vs LDL, loud P2 vs S2, melanoma vs melasma, + all type/stage/class/laterality/antibody families. 226 same-pairs -> 203 merge groups (union-find, coalesced by canonical) appended to profiles/mrcp_part1.yaml nomenclature.alias_hints. Verified: profile loads, acute fever!=acute Q fever, hepB!=hepC, Addison disease==Addisons. Re-folded graph: concepts 38013->37795 (218 dup nodes collapsed), proposals 726->487, guideline_sensitive 1651->1642; rescored C9. Verdicts cached work/alias_verdicts.jsonl. NOTE: the 174 different pairs may re-appear in future proposals (generator does not yet exclude cached rejects)."
   },
   "token_spend_estimate_usd": 115.4
 }
