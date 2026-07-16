@@ -8,9 +8,22 @@ authoritative specification and it must live on disk, because per §10a anything
 conversation is eroded by compaction.
 
 > **If `BUILD_PROMPT.md` already exists at the repo root, you are re-reading it after a restart or
-> compaction.** Skip straight to step 4: read `compiler/.compiler_state.json`, re-poll any batch IDs
-> under `batches`, read the tail of `JOURNAL.md`, and resume at `next_action`. **Do not start over,
-> and do not re-save this file.**
+> compaction.** **Do not start over, and do not re-save this file.**
+>
+> **⚠ AS OF 2026-07-17 (PATCH 02), STEPS 1–4 BELOW ARE HISTORY — PHASE 1 IS COMPLETE.**
+> The compiler is **DONE (C0–C13)** and `dist/pack_MRCP_PART1.db` is built (26,965 playable items,
+> reproducibility gate cleared). §13's kickoff, the archive drops, and the C0 environment checks all
+> **already happened** — do not re-run them, and do not re-do §13.
+>
+> **Where a fresh session actually resumes now:**
+> - **App work (the live front — this is almost certainly you):** you are on the **laptop**. Read
+>   `JOURNAL_APP.md` (the app's human log — laptop-owned) and go to **§8 A1**. A0 is done.
+> - **Compiler work (the box, now dormant):** read `compiler/.compiler_state.json`, re-poll any batch
+>   IDs under `batches`, read the tail of `JOURNAL.md`, resume at `next_action`.
+>
+> **State on disk is the truth, never the transcript** — but note the two machines keep **two
+> journals** (`JOURNAL.md` = compiler/box, written by `state.py`; `JOURNAL_APP.md` = app/laptop).
+> Never cross-write them.
 
 **2. Wire it into my working agreement.** I use a `CLAUDE.md` (auto-loaded every session, deliberately
 short), `.claude/INDEX.md` (codebase map, scanned first), and `.claude/PLAYBOOK.md` (on-demand
@@ -33,6 +46,11 @@ golden loop, non-negotiables, and an **agent routing table**; I already have `mi
 **4. Then begin at §13 (Kickoff).** Git and `.gitignore` come first — my three archives are already
 sitting at the repo root and must be ignored before the first commit. **Ask before assuming (§1).**
 
+> **⚠ Step 4 is COMPLETE (2026-07-17).** Kickoff happened, the archives were ingested, and the
+> compiler ran to C13. **A fresh session must NOT begin at §13** — see the resume box above and go to
+> **§8 A1**. Steps 1–3 remain true (the spec lives on disk; the working agreement and global-rule
+> reconciliation still apply). **Ask before assuming (§1)** still binds.
+
 ---
 
 > **What this is:** one long-lived Claude Code session that spawns subagents and stops at ⛔ approval
@@ -46,7 +64,16 @@ sitting at the repo root and must be ignored before the first commit. **Ask befo
 first_exam:          MRCP(UK) Part 1          # first profile; the app must NOT be hardcoded to it
 include_figures:     true                      # extract images/diagrams, tie to atoms + MCQs + dossiers
 highlight_sources:   both                      # digital PDF annotations AND marker-on-scans (colour mask)
-build_env:           hetzner_headless_claude_code  # Linux, no GUI; Gradle CLI; sideload APK
+build_env:           split_compiler_box_app_laptop  # ⚠ AMENDED 2026-07-17 (PATCH 02) — was
+                                                #   `hetzner_headless_claude_code`. TWO machines now:
+                                                #   COMPILER → Hetzner box (headless Linux, no GUI).
+                                                #   APP      → 16GB laptop: Android Studio + real phone.
+                                                #   The box cannot build the app (OOM: ~2.7GB free, swap
+                                                #   96% spent) and is headless — §8 A2's AMOLED feed
+                                                #   cannot be judged without a real panel.
+                                                #   ⚠ INTENT UNCHANGED: the app MUST still build from the
+                                                #   CLI (`./gradlew assembleDebug`) with NO IDE-only
+                                                #   config. Only "over SSH" is moot. Sideload: `adb`.
 volume:              unbounded                  # 15+ PDFs AND GROWING — never hardcode a count;
                                                 #   glob sources/**, batch, checkpoint, resume
 
@@ -848,6 +875,25 @@ switch exams. Progress is namespaced per `exam_code` and never wiped.
 
 ## 7. Phase 1 build order (compiler) — ⛔ = wait for my go
 
+> ## ✅ PHASE 1 IS COMPLETE — C0 THROUGH C13 ARE DONE (2026-07-16/17).
+>
+> **Everything in §7 below is the historical record of work that has already happened. Do not re-run
+> it, do not re-plan it, and do not treat any ⛔ gate here as pending.** It is kept verbatim because it
+> documents *how* the shipped pack was built (§10a: the spec lives on disk).
+>
+> **What exists now:** `compiler/dist/pack_MRCP_PART1.db` (gitignored — derived from copyrighted
+> sources) — 86,702 atoms · 37,795 concepts + 67,795 edges · 14,455 MCQs (12,455 curated + 2,000
+> generated) · 9,510 flashcards · 3,000 reels · 8,194 topic dossiers · **26,965 playable feed_items**
+> · 147,146 stable_keys. The **PATCH-01 reproducibility gate is CLEARED** (two builds → byte-identical
+> stable_key set + content checksum), so a rebuild never orphans progress or notes (§5j).
+>
+> **Known gaps, flagged not silent:** `text_blobs` / `blob_quizzes` / `interlink_quizzes` / `figures` /
+> `dup_clusters` ship **empty** — those assets were trimmed at C11. **§8 A2's blob and image card types
+> therefore have no data yet**; A2 must degrade gracefully rather than assume they exist.
+>
+> **The live front is Phase 2 (§8), on the laptop.** Details: `JOURNAL.md` tail (compiler history) and
+> `compiler/.compiler_state.json`.
+
 - **C0 · Spec + scaffold.** **FIRST, before anything else: `git init` + commit `.gitignore` (§11b), then
   check the repo root for my three dropped archives** (`textbooks*.zip`, `*mcq*.rar`, `papers*.zip`).
   **`git status` must show them ignored.** If any archive is already tracked, **stop and tell me** — a
@@ -980,8 +1026,20 @@ byte-identical scores and no duplicate rows**.
 Stack: Kotlin, Compose (**Material3**), Room (content DB attached read-only), **FSRS-Kotlin (FSRS-6)**,
 Compose Canvas for the concept map, DataStore for settings. No network libs, no AI SDKs.
 
-- **A0 · Skeleton + offline/no-background guarantees.** ⛔
-  - Buildable headless via `./gradlew assembleDebug` over SSH; document SDK/cmdline setup in README.
+> **Where Phase 2 is built (PATCH 02, 2026-07-17):** on the **laptop** (Android Studio + a physical
+> phone), not the Hetzner box — see §0 `build_env`. The **CLI-buildable intent binds unchanged**:
+> `./gradlew assembleDebug` must work from a terminal with no IDE-only configuration. Only "over SSH"
+> is moot. The app's human log is **`JOURNAL_APP.md`** (never `JOURNAL.md` — that one is the
+> compiler's, written by `state.py` on the box).
+>
+> **Status: A0 ✅ DONE (2026-07-16/17). A1 is next.** Do not re-do A0; do not resequence §8.
+
+- **A0 · Skeleton + offline/no-background guarantees.** ✅ **DONE 2026-07-16/17** — gate closed
+  (keystore generated + backed up off-machine). Details in `JOURNAL_APP.md` + `app/README.md`.
+  - Buildable via `./gradlew assembleDebug` from the laptop CLI; SDK/cmdline setup documented in
+    `app/README.md`. ✅ Enforced by an included build (`build-logic/`): every `assemble<Variant>`
+    depends on a merged-manifest parse + a runtime-classpath denylist, so a violating APK **cannot be
+    produced** — proven by deliberate sabotage (INTERNET, `<service>`, okhttp, retrofit all caught).
   - Manifest: **no INTERNET permission**; **no services, no WorkManager/JobScheduler, no boot receiver,
     no alarms, no wake locks.** CI/lint check fails the build if a networking dep/permission or a
     background component appears.
@@ -990,9 +1048,30 @@ Compose Canvas for the concept map, DataStore for settings. No network libs, no 
     repo — it is broken, uncompilable app code (imports classes from an unrelated app). See
     `.claude/PLAYBOOK.md` API notes. Pin the version; one unit test scheduling Again/Hard/Good/Easy.
     Java `record` interop: call `result.card()` / `result.reviewLog()` as methods, not properties.
-- **A1 · Pack loading = generic.** Import via SAF; read `pack_manifest` and **build the UI config from
-  it** (exam name in app bar, subject filters, tag chips from `tag_defs`). Per-exam progress DB, never
-  overwritten. "Switch exam" screen lists imported packs.
+- **A1 · Pack loading = generic.** ⇦ **NEXT STAGE.** Import via SAF; read `pack_manifest` and **build
+  the UI config from it** (exam name in app bar, subject filters, tag chips from `tag_defs`). Per-exam
+  progress DB, never overwritten. "Switch exam" screen lists imported packs.
+  - **⚠ Nothing exam-specific may enter the app — ever.** The word "MRCP" must not appear in any
+    resource, constant, or layout; every exam-facing label resolves from `pack_manifest` at runtime.
+    This is the §0 `multi_pack` / `first_exam` contract and it is the whole reason the app can play a
+    future pack (MRCP Part 2, USMLE, another subject) **with no code change**. Verified clean at A0 —
+    keep it that way. A single hardcoded string here silently converts a generic player into a
+    single-exam app.
+  - **Schema-version gate (PATCH 02 — required).** On import, read `pack_manifest.schema_version` and
+    the DB's `PRAGMA user_version` (currently **1**) and **verify them before opening anything else**.
+    A pack from a newer/unknown schema must be **refused with a clear message naming both versions** —
+    never a crash, never a partial load, never a silent mis-read of a renamed column. Pin the supported
+    version(s) in one constant. *Why this is not optional:* a future pack built against a bumped schema
+    is the exact case a naive loader corrupts, and it is the failure mode that turns "works with other
+    packs" from a promise into a hope.
+  - **Degrade gracefully on empty tables.** `text_blobs`, `blob_quizzes`, `interlink_quizzes`,
+    `figures` and `dup_clusters` ship **empty** in the current pack (trimmed at C11 — see §7). Absent
+    ≠ broken: a pack missing an asset type must simply not offer it. Do not assume any table is
+    populated; drive availability off `counts_json` / actual rows.
+  - **§11e progress export/import belongs HERE, not at A7** — §11e's own words: *"Treat it as part of
+    A1, not a nice-to-have for later."* Export/import is per-pack, exactly like the progress DB. This
+    is not a resequencing of §8; it is A1 doing what §11e already assigned it. **Now urgent:** a real
+    26,965-item pack exists, so the moment it is studied, progress becomes real and losable (§11d).
 - **A2 · Study Feed (build first, make excellent).** Infinite vertical pager; per-type composables:
   - **Reel** — hook; tap to reveal; swipe; got-it/shaky → FSRS.
   - **Text blob** — passage + read-progress + `est_read_seconds`; on scroll-past, schedule its
@@ -1028,8 +1107,10 @@ Compose Canvas for the concept map, DataStore for settings. No network libs, no 
 - **A7 · Settings + polish.** **AMOLED true-black default** (pure `#000000` surfaces, high-contrast
   text, restrained bright fills; Material3 dark scheme, dynamic-color off); light/dim toggle. Retention
   target, feed intensity/burst, importance-first toggle, re-import/switch pack, optional local
-  FSRS-weight optimization from my own review history. **Export / Import progress (§11e) — required,
-  not optional.** Icon, empty states, **release APK via Gradle CLI**.
+  FSRS-weight optimization from my own review history. **Export / Import progress (§11e) — built at
+  A1** (PATCH 02, per §11e's own "part of A1"); A7 only surfaces its Settings entry points + the
+  post-session export nudge — it must not defer, re-implement, or wait on it. Icon, empty states,
+  **release APK via Gradle CLI**.
 
 **Acceptance (end-to-end):**
 1. Import `pack_MRCP_PART1.db`; app bar shows exam name; filters + tag chips come from the pack.
@@ -1427,13 +1508,19 @@ that's a stop-and-fix, not a note for later.
 
 ### 11c. Deliver the APK
 
-The APK is the point of all this. Build it on the Hetzner box via Gradle CLI (no Android Studio):
+The APK is the point of all this. **⚠ AMENDED 2026-07-17 (PATCH 02):** it is built on the **laptop**
+via Gradle CLI (§0 `build_env`) — *not* on the Hetzner box. The box is headless and OOM-bound and
+never builds the app. Android Studio may be open, but **the build must not depend on it**.
 
 - `./gradlew assembleDebug` during development — debug-signed, sideloads fine, quickest loop.
 - `./gradlew assembleRelease` for what I actually study from — minified and faster.
-- Output the artifact to a **predictable path** and tell me the exact `scp` command to pull it to my
-  phone. I also have Cockpit Navigator on that box, so a path under my home dir works — **ask me which
-  I'd prefer** rather than picking.
+- **Install over USB from the laptop: `adb install -r <apk>`** — direct to the phone, no copy step.
+  ~~scp / Cockpit Navigator~~ are **moot**: those existed only because the APK used to be built on a
+  remote box. There is nothing to ask here anymore — do not re-raise the scp-vs-Cockpit question.
+- **The pack is NOT delivered with the APK.** It moves separately: `scp` the `.db` from the box's
+  `compiler/dist/` to the laptop, then `adb push` it to the phone (or import via SAF). This split is
+  the point — the app is generic and the pack is data (§0 `multi_pack`), so a new pack never needs a
+  new APK.
 - **Never commit the APK.** If I want versioned builds, use GitHub Releases (`gh release create
   app-v0.1.0 ./path/app-release.apk`) so binaries live outside git history — but **ask first**, since
   that uploads a pack-bearing binary to a remote.
@@ -1466,6 +1553,14 @@ Because of §11d, and because phones get lost, the app must let me get my progre
 
 This is cheap to build and it is the difference between "my phone died" being an annoyance and being a
 catastrophe. Treat it as part of A1, not a nice-to-have for later.
+
+> **⚠ A1 OWNS THIS — confirmed 2026-07-17 (PATCH 02).** §8 A1 now names it explicitly and §8 A7 has
+> been reduced to surfacing the Settings entry points, so the spec names exactly one owner.
+> **It is now urgent, not theoretical:** Phase 1 shipped a real 26,965-item pack, so the moment it is
+> studied, progress becomes real and losable. The earlier "safe to defer" reasoning rested on no pack
+> existing — **that premise is dead.**
+> Export is **per-pack** (progress is per-pack), and per the PATCH 01 §11e revision it is a **ZIP**
+> (`progress.db` + `note_images/`), not a bare file copy.
 
 ---
 
@@ -1514,6 +1609,17 @@ catastrophe. Treat it as part of A1, not a nice-to-have for later.
 ---
 
 ## 13. Kickoff — do this now
+
+> ## ✅ KICKOFF IS DONE (2026-07-15/16). §13 IS HISTORY — DO NOT EXECUTE IT.
+>
+> Every numbered step below **already happened**: the repo exists, `.gitignore` landed before the
+> archives, the three drops were ingested and classified, the durability layer + hooks were built and
+> proven, and the compiler ran **C0 → C13**. Re-running any of it would re-ingest archives that are
+> long since processed. Kept verbatim as the historical record (§10a).
+>
+> **A fresh session goes to §8 A1 instead** (see the resume box at the top of this file), reads
+> `JOURNAL_APP.md`, and builds on the laptop. The only line below that still binds is the last one:
+> **when in doubt at any point: ask.**
 
 **Read this file from disk, not from my paste.** I saved it as `BUILD_PROMPT.md` in the repo root, and
 `CLAUDE.md` points at it. That is deliberate: by §10a, instructions that live only in the conversation
@@ -1586,3 +1692,57 @@ APK, not a stripped-down version. **When in doubt at any point: ask me.**
 - **Import progress** → restores both.
 - **Acceptance test 12** now round-trips an **image-bearing note**: export → wipe app data → reinstall →
   import → the note *and its image* are back.
+
+---
+
+## PATCH 02 — Phase 1 closed · app builds on the laptop — applied IN PLACE 2026-07-17
+
+> **Authorised by the user on 2026-07-17**, who directed: *"edit the buildmd and other files to be
+> relevant of the future changes — I will be making the app on the laptop"* and *"I want the app to
+> work with other databases also in future."* This **reverses the 2026-07-16 ruling** that §0
+> `build_env` stays verbatim. Applied **in place** (not appended-only) because the stale text was
+> actively misdirecting fresh sessions; recorded here as the audit trail (§10a).
+>
+> **This patch changes NOTHING about the pack format, the schema, or the decoupling contract**
+> (§2, §6, `spec/schema.sql`). It reconciles the spec with two facts that landed after it was written.
+
+### The two facts
+
+1. **Phase 1 is COMPLETE (C0–C13).** `compiler/dist/pack_MRCP_PART1.db` exists — 26,965 playable
+   items, 147,146 stable_keys, PATCH-01 reproducibility gate cleared. The compiler is dormant.
+2. **The app is built on the laptop** (Android Studio + physical phone), not the Hetzner box, which is
+   headless and OOM-bound. A0 shipped from there on 2026-07-16/17.
+
+### What changed, and why
+
+| § | Was | Now |
+|---|---|---|
+| §0 `build_env` | `hetzner_headless_claude_code` (locked) | **Split**: compiler→box, app→laptop. **CLI-buildable intent unchanged**; only "over SSH" is moot. |
+| START HERE | resume → `.compiler_state.json`, begin at §13 | Phase 1 closed → app sessions read `JOURNAL_APP.md` and resume at **§8 A1**. |
+| §7 | C0–C13 as pending work with live ⛔ gates | Marked **COMPLETE / historical**. Empty-table gaps flagged for A2. |
+| §8 A0 | "buildable headless… **over SSH**" | ✅ **DONE**; "over SSH" dropped, CLI intent kept + build-enforced by `build-logic/`. |
+| §8 A1 | pack loading, generic | + **schema-version gate**, + **degrade on empty tables**, + **§11e**, + explicit no-hardcoded-exam rule. ⇦ next stage. |
+| §8 A7 | "Export/Import — required, not optional" | Built at **A1**; A7 surfaces entry points only (one owner, no duplicate). |
+| §11c | build on the box; `scp`; **ask** scp-vs-Cockpit | **`adb install -r`** over USB from the laptop. The scp/Cockpit question is **moot — do not re-raise it.** Pack ships separately from the APK. |
+| §11e | "part of A1" (contradicted by §8) | **A1 owns it, urgent** — a real pack now exists, so the "safe to defer" premise is dead. |
+| §13 | Kickoff — "do this now" | **History. Do not execute.** |
+
+### On "work with other databases in future" — what it does and does not mean
+
+Clarified with the user 2026-07-17: it means **more exam packs in this same pack format** (MRCP Part 2,
+USMLE, another subject) — **not** foreign/third-party DBs (Anki, CSV). **Do not build an importer or
+adapter layer**; that scope is explicitly out.
+
+This needs **no new architecture** — it *is* §0 `multi_pack: true` + `first_exam` ("the app must NOT be
+hardcoded to it") + §8 A1's "Pack loading = **generic**". Verified 2026-07-17: the app holds **zero**
+exam-specific strings (the only "MRCP" under `app/` is a comment in `strings.xml` forbidding it).
+The contract is **kept, not extended**. Two additions make it safe rather than merely intended:
+
+- **The schema-version gate (§8 A1)** — check `pack_manifest.schema_version` + `PRAGMA user_version`
+  on import; refuse an unsupported pack with a clear message. A future pack on a bumped schema is
+  exactly what a naive loader corrupts.
+- **Empty tables are normal** (§7/§8 A1) — the shipped pack has none of `text_blobs`/`figures`/etc.
+  A pack lacking an asset type must simply not offer it.
+
+**The standing rule that protects all of this:** nothing exam-specific may ever enter the app. One
+hardcoded string turns a generic player into a single-exam app, silently.

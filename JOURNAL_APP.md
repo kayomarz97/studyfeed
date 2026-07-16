@@ -5,84 +5,69 @@ box). This file is owned by the laptop. Never append compiler progress here, and
 never append app progress to `JOURNAL.md` — that split is what keeps the two
 machines from colliding.
 
-## ⛔ STANDING ORDERS FROM THE USER — 2026-07-17. READ FIRST, DO NOT VIOLATE.
+## ⛔ STANDING ORDERS FROM THE USER — READ FIRST, DO NOT VIOLATE.
+*(Originally 2026-07-17. **Revised 2026-07-17 by the user** — see the revision note under each.)*
 
-**1. `BUILD_PROMPT.md` IS ABOUT TO CHANGE. THE USER WILL UPDATE IT — YOU WILL NOT.**
-The user has remote work to finish first; after that **they** will update `BUILD_PROMPT.md` "and
-everything else" themselves. So:
-- **Never edit `BUILD_PROMPT.md`.** Not §0, not a typo, not to reconcile it with reality.
-- Expect the spec to move under you. If the spec and this repo disagree, that is not necessarily
-  drift to be "fixed" — it may simply be an update that has not arrived yet. **Surface it and ask;
-  never silently reconcile.** (This is the same rule as the §0 `build_env` divergence below, now
-  generalised to the whole file.)
-- After the user's spec update lands, re-read `BUILD_PROMPT.md` from scratch before acting on it.
-  Do not act on any memory of the old text.
+**1. ~~`BUILD_PROMPT.md` IS ABOUT TO CHANGE. THE USER WILL UPDATE IT — YOU WILL NOT.~~**
+**↳ REVERSED 2026-07-17 by explicit instruction:** *"edit the buildmd and other files to be relevant
+of the future changes."* The user delegated the spec update rather than doing it themselves, and it
+is **DONE** — see `BUILD_PROMPT.md` **PATCH 02** (applied in place; the patch section at the file's
+end is the audit trail). What still binds from the original order:
+- **Read `BUILD_PROMPT.md` from disk before acting. Never act on a memory of the old text** — large
+  parts of it (§7, §13, START HERE steps 1–4) are now explicitly marked *history, do not execute*.
+- If the spec and the repo disagree, **surface it and ask; never silently reconcile.** A future
+  contradiction is still not automatically yours to "fix" — this one was authorised.
 
-**2. NO RESEQUENCING. A1 IS NEXT, IN SPEC ORDER (§8).**
+**2. NO RESEQUENCING. A1 IS NEXT, IN SPEC ORDER (§8).** ← **STILL BINDS, UNCHANGED.**
 A proposal to build a synthetic fixture pack first and jump to A2 (so the UI could be seen sooner)
 was **put to the user and DECLINED on 2026-07-17.** Do not revive it, and do not build a fixture
-pack. Follow §8's order: A0 → A1 → A2 → … The reasoning behind the proposal (that A2–A6 all read
-the pack A1 opens, and that no pack exists yet because the compiler is only at C10 of C13) is
-recorded here only so nobody re-derives it and re-proposes it. **The user's sequencing decision
-stands over that reasoning.**
+pack. Follow §8's order: A0 → A1 → A2 → …
+- The proposal's reasoning was *"no pack exists yet — the compiler is only at C10 of C13."*
+  **That premise is now dead** (the compiler finished; a real pack exists) — which removes the
+  argument *for* the fixture pack entirely. The decision stands, and now the facts agree with it.
+- ⚠ PATCH 02 moved **§11e export/import into A1**. That is **not** a resequencing — §11e always
+  said *"treat it as part of A1"*; §8's stage list simply disagreed with it, and the contradiction
+  was resolved in §11e's favour. A1's scope grew; §8's order did not change.
 
-**3. THE USER MAKES THE PACKS AND BUILDS THE APP.**
-The user has said they will produce the content packs and build the app themselves. Do not assume
-you are driving the compiler to C13, and do not invent pack data to work around a pack not existing
-yet.
+**3. ~~THE USER MAKES THE PACKS AND BUILDS THE APP.~~ → PACKS ARE DONE; THE APP IS STILL THEIRS.**
+**↳ Half-satisfied 2026-07-16/17:** the user's compiler finished **C0–C13** and produced
+`compiler/dist/pack_MRCP_PART1.db` (26,965 playable items). So: **do not drive the compiler** (it is
+finished and dormant), and **never invent pack data** — a real pack exists; use it. The app remains
+the user's build, on this laptop.
 
-**4. NOTHING IS PUSHED, AND NOTHING GETS PUSHED WITHOUT AN EXPLICIT ASK.**
-Work is committed to local `dev` only. `origin/dev` (github.com/kayomarz97/studyfeed, private) has
-none of it. The user has explicitly said not to push. §11a stands: ask before any remote operation.
+**4. NOTHING GETS PUSHED WITHOUT AN EXPLICIT ASK.** ← **THE RULE STILL BINDS.**
+**↳ 2026-07-17: an explicit ask was given** (*"push my changes on local laptop on github"*) and A0
+was pushed — `origin/dev` now has it (`a457dd0..ea55417`). The *rule* is unchanged: §11a stands,
+**ask before any remote operation.** A past authorisation is not a standing one.
 
 ---
 
-## Known divergence from BUILD_PROMPT — READ THIS BEFORE "FIXING" ANYTHING
+## §0 `build_env` divergence — ✅ RESOLVED 2026-07-17. Historical record only.
 
-**Status: KNOWN, INTENTIONAL, pending a spec amendment at A0. Not a bug. Do not
-re-litigate this every session, and do NOT edit `BUILD_PROMPT.md` to resolve it.**
+**Status: CLOSED. This is no longer a live warning — do not act on it as one.**
+For ~24h this journal carried a deliberate divergence: `BUILD_PROMPT.md` §0 said the app was built on
+the Hetzner box, while it was really built here. **The user amended §0 on 2026-07-17** (PATCH 02),
+reversing their 2026-07-16 ruling that the locked parameter stay verbatim. **Spec and reality now
+agree — there is nothing left to reconcile, and nothing here to "fix".**
 
-`BUILD_PROMPT.md` §0 "Locked parameters" (~line 49) says:
+Kept as the record of *why* the app moved to the laptop (the reasoning still explains the split):
+- The box **cannot** run a Gradle build: ~2.7GB RAM free, swap 96% exhausted. A Gradle daemon plus the
+  Kotlin compile daemon would trip the OOM killer, whose first target is the largest process — a
+  running compiler session.
+- The box is **headless**. §8 A2's feed must be "made excellent" — infinite pager, swipe, tap-to-flip,
+  AMOLED dark. That cannot be judged without a screen and a real AMOLED panel.
+- Disk: the box was at 84% (24GB free), 9GB already in `sources/` + `work/`.
 
-    build_env:  hetzner_headless_claude_code   # Linux, no GUI; Gradle CLI; sideload APK
+What never changed, and still binds:
+- **The CLI-buildable INTENT of §8 A0** — the app must build from a terminal with no IDE-only config.
+  Honoured on the laptop and **enforced by `build-logic/`**, not merely promised. Only "over SSH" was
+  ever moot.
+- **The decoupling contract.** The compiler emits a pack `.db`; the app plays any pack. Untouched by
+  the move and untouched by PATCH 02.
 
-That is no longer where the app is built. As of 2026-07-16 the Android app is built
-on a 16GB Ryzen 5 laptop with Android Studio and a physical phone.
-
-Why the change:
-- The box cannot run a Gradle build. It had ~2.7GB RAM available with swap 96%
-  exhausted; a Gradle daemon plus the Kotlin compile daemon would trip the OOM
-  killer, whose first target is the largest process — a running compiler session.
-- The box is headless. §8 A2 says the Study Feed is to be built first and "made
-  excellent" — infinite pager, swipe, tap-to-flip, AMOLED dark. That cannot be
-  judged without a screen and a real AMOLED panel.
-- Disk: the box was at 84% (24GB free) with 9GB already in `sources/` + `work/`.
-
-What survives unchanged:
-- §8 A0's "buildable headless via `./gradlew assembleDebug`" — the INTENT (the app
-  must build from the CLI and must not depend on IDE-only configuration) is KEPT,
-  and is satisfied by running `./gradlew assembleDebug` from the laptop terminal.
-  Only the "over SSH" clause is moot.
-- §1432 `./gradlew assembleDebug` as the dev loop — still true, different machine.
-- The decoupling contract is untouched. The compiler still runs on the box and still
-  emits a pack `.db`; nothing about the pack format changes.
-
-**DECIDED 2026-07-16 (user, at the A0 gate): §0 `build_env` is NOT amended.** The user is
-building the app on the laptop and has ruled that the locked parameter stays verbatim —
-this journal carries the divergence instead. So `BUILD_PROMPT.md` §0 still reads
-`hetzner_headless_claude_code`, and that is deliberate, not stale. Do not "reconcile" it.
-The INTENT of §8 A0 (CLI-buildable, no IDE-only config, wrapper committed) is what binds,
-and it is honoured on the laptop; only the "over SSH" clause is moot.
-
-Open item for A0 (needs the user's explicit decision):
-- Keystore (listed as an A0 gate in `.claude/plans/2026-07-15-studyfeed-kickoff.md`)
-  is now generated on the laptop. It must be backed up off-machine and must never be
-  committed — `*.jks` and `keystore.properties` are gitignored for exactly this
-  reason ("losing these is bad, committing them is worse").
-
-How the pack reaches this laptop: `scp` from the box's `compiler/dist/` (gitignored —
-it is derived from copyrighted sources and must never enter git), then `adb push` or
-SAF-import onto the phone.
+**How the pack reaches this laptop:** `scp` from the box's `compiler/dist/` (gitignored — derived from
+copyrighted sources, must never enter git), then `adb push` or SAF-import onto the phone. The pack
+travels **separately from the APK** — that separation is the whole point (§0 `multi_pack`).
 
 ## Log
 
@@ -190,5 +175,50 @@ silently fetch a JDK over the network at build time. We don't need it (JAVA_HOME
 updateDaemonJvm` if it is ever genuinely wanted — that is a decision, not a default.
 
 **Open item for whoever does A1:** §11e export/import must land before the user ever studies real
-progress. Safe to be after A2 ONLY because no real pack exists yet; the moment one does, this is
-urgent.
+progress. ~~Safe to be after A2 ONLY because no real pack exists yet~~ — **that premise died on
+2026-07-17: the pack now exists.** See the §11e escalation below; this is now A1 scope, not deferrable.
+
+### 2026-07-17 — pushed to origin, and the spec reconciled to reality
+
+**The two machines met.** Local `dev` was 4 ahead / 3 behind: the box had pushed C11→C13 while the
+laptop's A0 sat unpushed. Rebased the 4 never-pushed local commits onto `origin/dev` (no force-push of
+shared history). One conflict — `.claude/PLAYBOOK.md`, where both machines had appended mistakes-ledger
+entries; resolved by **keeping both** (compiler C11/C13 + Android A0), never by picking a side.
+`.claude/INDEX.md` auto-merged. Verified on the merged tree — a tree that had never existed before —
+with `verifyOfflineGuarantees` + `testDebugUnitTest` **force-rerun** (`--rerun-tasks`; the first run
+reported UP-TO-DATE, which proves nothing): BUILD SUCCESSFUL. `secret-scanner`: CLEAN. Pushed
+`a457dd0..ea55417`. History is now one line: compiler C0–C13, then app A0.
+
+**PHASE 1 IS DONE — this is the fact that moved everything.** `compiler/dist/pack_MRCP_PART1.db`:
+86,702 atoms · 14,455 MCQs · 9,510 flashcards · 3,000 reels · 8,194 dossiers · **26,965 playable
+items** · 147,146 stable_keys, reproducibility gate cleared. **A1 now has a real pack to open** — no
+fixture pack was ever needed, and none must be built.
+
+**`BUILD_PROMPT.md` PATCH 02 — applied in place, authorised by the user.** The user reversed both the
+"I'll update the spec myself" order and the 2026-07-16 "§0 stays verbatim" ruling. §0 `build_env` now
+splits compiler→box / app→laptop; §7 and §13 and START HERE steps 1–4 are marked **history, do not
+execute** (they were actively misdirecting fresh sessions to re-run kickoff on a finished compiler);
+§11c drops the box/`scp`/Cockpit delivery for **`adb install -r`** (that question is dead — do not
+re-raise it). Full table in the patch section at the end of `BUILD_PROMPT.md`.
+
+**"Work with other databases in future" — scoped, and it needs no new architecture.** The user
+clarified it means **other exam packs in the same format** (MRCP Part 2, USMLE, …), **not** foreign
+DBs (Anki/CSV) — no importer/adapter layer is to be built. Multi-pack is already the locked contract
+(§0 `multi_pack`, §8 A1 "generic"), and **A0 is verifiably clean**: the only "MRCP" anywhere under
+`app/` is a comment in `strings.xml` forbidding it. Two things were added to A1 to make the promise
+*safe* rather than merely intended:
+- **Schema-version gate (NEW):** check `pack_manifest.schema_version` + `PRAGMA user_version` (=1) on
+  import; refuse an unsupported pack with a clear message naming both versions. Never crash, never
+  half-load. A pack built on a bumped schema is precisely what a naive loader corrupts — this is the
+  difference between "plays future packs" being a guarantee and a hope.
+- **Degrade gracefully on empty tables:** `text_blobs`/`blob_quizzes`/`interlink_quizzes`/`figures`/
+  `dup_clusters` ship **empty** (trimmed at C11). **⚠ This bites A2, not just A1** — its blob and image
+  card types have no data. Absent ≠ broken: drive availability off actual rows, never assume.
+
+**§11e escalated to A1 and given one owner.** §11e always said "treat it as part of A1" while §8 listed
+it under A7 — a straight contradiction, resolved in §11e's favour (A1 builds it; A7 only surfaces the
+Settings entry points). Not a resequencing: standing order #2 is untouched. Per PATCH 01 it is a **ZIP**
+(`progress.db` + `note_images/`), per-pack like the progress DB itself.
+
+**Still open / next:** **A1**, per §8 order — pack import via SAF, UI config from `pack_manifest`,
+per-exam progress DB, "switch exam" screen, the schema-version gate, and §11e export/import.

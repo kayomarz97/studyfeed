@@ -3,7 +3,10 @@
 > The codebase map Claude scans FIRST — instead of grepping around and burning tokens.
 > One line per entry: what it is and when to touch it. **Update this file in the SAME
 > commit whenever files are added, moved, or repurposed** — a stale map is worse than none.
-> Authoritative spec: `BUILD_PROMPT.md`. Resume truth: `compiler/.compiler_state.json` + `JOURNAL.md`.
+> Authoritative spec: `BUILD_PROMPT.md` (**re-read from disk — PATCH 02, 2026-07-17, rewrote §0/§7/§8
+> A0+A1/§11c/§13 + START HERE**; §7 and §13 are now *history, do not execute*).
+> **STATUS: Phase 1 (compiler) COMPLETE — C0–C13, pack shipped. Phase 2 (app) is live: A0 done, A1 next.**
+> Resume truth: **app/laptop → `JOURNAL_APP.md`** · compiler/box (dormant) → `compiler/.compiler_state.json` + `JOURNAL.md`.
 
 ## How the system works (keep to ~10 lines)
 
@@ -22,9 +25,9 @@ imports and renders offline. Everything exam-specific lives in the profile → p
 
 | Path | What it does / when to touch it |
 |---|---|
-| `BUILD_PROMPT.md` | **The authoritative spec. Read before acting.** Verbatim, do not re-save. |
+| `BUILD_PROMPT.md` | **The authoritative spec. Read before acting.** Do not re-save. **PATCH 02 (2026-07-17) applied IN PLACE** — §0 `build_env` split (compiler→box, app→laptop), §7+§13+START HERE 1–4 marked *history/do-not-execute*, §8 A1 gained a schema-version gate + §11e, §11c → `adb install -r`. The PATCH sections at the end are the audit trail. |
 | `JOURNAL.md` | Human milestone log (prose; counts/decisions only, never book content). |
-| `JOURNAL_APP.md` | Phase 2 (app) human log — **laptop-owned**; records the §0 `build_env` divergence. Never append compiler progress here (`state.py` owns `JOURNAL.md`). |
+| `JOURNAL_APP.md` | Phase 2 (app) human log — **laptop-owned**, and the **resume truth for app work**. Carries the ⛔ standing orders (revised 2026-07-17) + the now-RESOLVED §0 `build_env` divergence (historical). Never append compiler progress here (`state.py` owns `JOURNAL.md`). |
 | `CLAUDE.md` | Project working agreement (2 sections filled; the rest is global). |
 | `LAPTOP_SETUP.md` | Phase 2 dev-machine bootstrap: paste-into-Claude prompt — installs Claude Code CLI, bootstraps the `claude-master` global rulebook, links Android Studio (plugin 27310), preps SDK/adb, clones the repo on `dev`. App is built on the laptop (needs a screen/device); compiler stays on the box. |
 | `spec/schema.sql` | **Canonical content-pack DDL (source of truth).** `PRAGMA user_version` = schema version. |
@@ -57,7 +60,7 @@ imports and renders offline. Everything exam-specific lives in the profile → p
 | `compiler/studyfeed_compiler/{ingest,highlights,generators}/` | `ingest/extract.py` = C2 (implemented). highlight-harvest lives in `bookusage.py` (C3); asset generation in `generate.py` + `gen-*` agents (C11) — these subdirs are vestigial. |
 | `compiler/studyfeed_compiler/{ingest,highlights,generators}/` | Extractors / highlight harvest / asset generators. *stubs.* |
 | `compiler/.compiler_state.json` | Machine resume truth: stage, next_action, decisions, archive hashes, batch IDs. Committed. |
-| **— Phase 2: the app (A0 done; built on the laptop, not the box — see `JOURNAL_APP.md`) —** | |
+| **— Phase 2: the app · THE LIVE FRONT (A0 ✅ done · **A1 next**) · built on the LAPTOP, not the box — see `JOURNAL_APP.md` —** | |
 | `app/README.md` | **Read before touching the app.** JAVA_HOME gotcha, build/install commands, the guard, signing + the §11d keystore warning, APK sizes. |
 | `settings.gradle.kts` | Gradle root: `includeBuild("build-logic")` + repos (FAIL_ON_PROJECT_REPOS). Owns `:app` ONLY — `compiler/`+`spec/` are never Gradle modules. |
 | `build.gradle.kts` / `gradle.properties` | Root build (plugin versions, applies nothing) / JVM args. **No `org.gradle.java.home`** — that would hardcode one laptop's path; JAVA_HOME supplies the JDK. |
