@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"/root/projects/MRCP Gamify/.claude/hooks/session_start.py\"",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/session_start.py\"",
             "timeout": 20
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"/root/projects/MRCP Gamify/.claude/hooks/pre_compact.py\"",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/pre_compact.py\"",
             "timeout": 20
           }
         ]
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"/root/projects/MRCP Gamify/.claude/hooks/session_end.py\"",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/session_end.py\"",
             "timeout": 20
           }
         ]
@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"/root/projects/MRCP Gamify/.claude/hooks/subagent_stop.py\"",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/subagent_stop.py\"",
             "timeout": 20
           }
         ]
