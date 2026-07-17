@@ -17,8 +17,9 @@ subjects/tags/exam label at runtime from the pack manifest. Three decoupled part
 spent at build time only — the shipped app has zero network.
 
 **Status (2026-07-17): Phase 1 COMPLETE** — the compiler is done (C0–C13) and dormant;
-`compiler/dist/pack_MRCP_PART1.db` is built (26,965 playable items). **Phase 2 (the app) is the live
-front: A0 done, `§8 A1` next.** Do not drive the compiler; do not invent pack data — a real pack exists.
+`compiler/dist/pack_MRCP_PART1.db` is built and **imported to this laptop** (32,957 playable feed
+items; checksum-verified against `manifest.json`). **Phase 2 (the app) is the live front: A0 done,
+`§8 A1` next.** Do not drive the compiler; do not invent pack data — a real pack exists, on disk.
 
 **Two machines** (§0 `build_env`, amended by PATCH 02): the **compiler** ran on the headless Hetzner
 box; the **app is built HERE, on the laptop** (Android Studio + a physical phone). The app must still
@@ -29,9 +30,10 @@ build from the CLI with no IDE-only config.
 > now *history — do not execute them* (they would re-run a finished kickoff). A fresh session doing app
 > work goes to **§8 A1**.
 >
-> **Resume truth — two machines, two journals, never cross-write them:**
-> - **App / this laptop → `JOURNAL_APP.md`** (also holds the ⛔ standing orders — read them first).
-> - Compiler / box (dormant) → `compiler/.compiler_state.json` + `JOURNAL.md` (written by `state.py`).
+> **Resume truth — ONE journal (merged 2026-07-17; `JOURNAL_APP.md` is gone):**
+> - **`JOURNAL.md`** — the single human log. Its **⛔ standing orders sit at the top: read them
+>   first.** Then its **Phase 2 — app** section, which is the resume truth for app work.
+> - Machine resume truth for the compiler (dormant) stays `compiler/.compiler_state.json`.
 >
 > **State on disk is the truth, never the transcript.**
 

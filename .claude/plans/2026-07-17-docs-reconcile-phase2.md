@@ -115,3 +115,11 @@ exam. The pack format itself is untouched.
 - Commit separately from the A0 push; stage files **by name**.
 </content>
 </invoke>
+
+---
+
+> **Footnote added 2026-07-17 (after the fact — the plan above is left unedited as the record of
+> what was actually planned at the time).** This document refers to `JOURNAL_APP.md`. That file no
+> longer exists: it was merged into **`JOURNAL.md`** (one log, sectioned "Phase 1 — compiler" /
+> "Phase 2 — app", ⛔ standing orders at the top) and deleted on 2026-07-17, once Phase 1 finished
+> and the two-machines-colliding reason for the split went away. Read `JOURNAL.md` instead.

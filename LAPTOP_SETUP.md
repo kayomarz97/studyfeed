@@ -143,84 +143,47 @@ E4. Final check: start `claude` inside `~/projects/studyfeed` and confirm it loa
     that `.claude/INDEX.md` and `.claude/PLAYBOOK.md` are present from the clone.
 
 
-## PART F — start the app-side journal (and log a known spec divergence)
+## PART F — read the journal, then import the pack
 
-F1. Create `JOURNAL_APP.md` at the repo root. This is the Phase 2 (app) human log, and
-    it is OWNED BY THIS LAPTOP.
+> **Rewritten 2026-07-17.** F1–F5 used to have you CREATE `JOURNAL_APP.md` and record a §0
+> `build_env` divergence. Both are gone: the two journals were merged into a single
+> `JOURNAL.md`, and PATCH 02 amended §0 so the spec and reality agree. There is no
+> divergence left to log and no journal left to create — the clone already has it. If a
+> session ever tells you to "fix" §0 `build_env`, it is working from the old text.
 
-    Why it's a separate file rather than an entry in `JOURNAL.md`: `JOURNAL.md` is
-    appended by the compiler itself — `compiler/studyfeed_compiler/state.py` is its sole
-    writer, running on the other machine. If this laptop also appended to it, every sync
-    would collide on the same lines. Two machines, two journals, one repo, no conflicts.
+F1. Read `JOURNAL.md` — it is the single human log and the resume truth for app work.
+    Read it in this order:
+    - the **⛔ standing orders at the top** — they bind every session, read them FIRST;
+    - the **Phase 2 — app** section at the bottom — newest last, that is where app work
+      resumes and where you append new app entries by hand.
 
-F2. Seed it with exactly this content:
+    (`compiler/studyfeed_compiler/state.py` also appends to this file, but only from the
+    box, and the compiler is finished and dormant. Nothing on this laptop writes it
+    automatically.)
 
-    ---
-    # JOURNAL_APP — Phase 2 (Android app) human log
+F2. Import the content pack. It is NOT in git — it is derived from copyrighted sources and
+    `compiler/dist/` is gitignored, so a fresh clone has no pack and the app has nothing to
+    play. Copy it from the box:
 
-    Companion to `JOURNAL.md` (Phase 1 / compiler, written by `state.py` on the Hetzner
-    box). This file is owned by the laptop. Never append compiler progress here, and
-    never append app progress to `JOURNAL.md` — that split is what keeps the two
-    machines from colliding.
+        scp -i ~/.ssh/id_ed25519 root@<box>:/root/studyfeed_pack.tar \
+            ~/projects/studyfeed/compiler/dist/
+        cd ~/projects/studyfeed/compiler/dist && tar xf studyfeed_pack.tar
 
-    ## Known divergence from BUILD_PROMPT — READ THIS BEFORE "FIXING" ANYTHING
+    That yields `pack_MRCP_PART1.db` (~135 MB), `manifest.json`, and `figures/` (1,121 PNGs).
 
-    **Status: KNOWN, INTENTIONAL, pending a spec amendment at A0. Not a bug. Do not
-    re-litigate this every session, and do NOT edit `BUILD_PROMPT.md` to resolve it.**
+F3. **VERIFY the pack before trusting it.** Its sha256 must equal the `checksum` field in
+    `manifest.json` — a truncated transfer otherwise surfaces later as mystery corruption:
 
-    `BUILD_PROMPT.md` §0 "Locked parameters" (~line 49) says:
+        certutil -hashfile pack_MRCP_PART1.db SHA256    # Windows
+        sha256sum pack_MRCP_PART1.db                    # Linux/macOS
 
-        build_env:  hetzner_headless_claude_code   # Linux, no GUI; Gradle CLI; sideload APK
+    If it does not match, STOP and re-transfer. On match, delete `studyfeed_pack.tar`.
 
-    That is no longer where the app is built. As of 2026-07-16 the Android app is built
-    on a 16GB Ryzen 5 laptop with Android Studio and a physical phone.
+F4. Never commit the pack, the figures, or the manifest — `.gitignore` already covers
+    `compiler/dist/`. Confirm with `git status` that they do not appear.
 
-    Why the change:
-    - The box cannot run a Gradle build. It had ~2.7GB RAM available with swap 96%
-      exhausted; a Gradle daemon plus the Kotlin compile daemon would trip the OOM
-      killer, whose first target is the largest process — a running compiler session.
-    - The box is headless. §8 A2 says the Study Feed is to be built first and "made
-      excellent" — infinite pager, swipe, tap-to-flip, AMOLED dark. That cannot be
-      judged without a screen and a real AMOLED panel.
-    - Disk: the box was at 84% (24GB free) with 9GB already in `sources/` + `work/`.
-
-    What survives unchanged:
-    - §8 A0's "buildable headless via `./gradlew assembleDebug`" — the INTENT (the app
-      must build from the CLI and must not depend on IDE-only configuration) is KEPT,
-      and is satisfied by running `./gradlew assembleDebug` from the laptop terminal.
-      Only the "over SSH" clause is moot.
-    - §1432 `./gradlew assembleDebug` as the dev loop — still true, different machine.
-    - The decoupling contract is untouched. The compiler still runs on the box and still
-      emits a pack `.db`; nothing about the pack format changes.
-
-    Open item for A0 (needs the user's explicit decision — §0 params are LOCKED):
-    - Amend §0 `build_env` to reflect laptop-builds-app / box-runs-compiler.
-    - Keystore (listed as an A0 gate in `.claude/plans/2026-07-15-studyfeed-kickoff.md`)
-      is now generated on the laptop. It must be backed up off-machine and must never be
-      committed — `*.jks` and `keystore.properties` are gitignored for exactly this
-      reason ("losing these is bad, committing them is worse").
-
-    How the pack reaches this laptop: `scp` from the box's `compiler/dist/` (gitignored —
-    it is derived from copyrighted sources and must never enter git), then `adb push` or
-    SAF-import onto the phone.
-
-    ## Log
-
-    - 2026-07-16 — Laptop provisioned as the Phase 2 build machine. Claude Code + master
-      rules installed, Android Studio linked. Divergence above recorded. No app code yet;
-      A0 not started.
-    ---
-
-F3. Add a line for `JOURNAL_APP.md` to `.claude/INDEX.md`'s file map, right after the
-    `JOURNAL.md` row — my rules require the codebase map to be updated in the same change
-    that adds a file. Keep it to one line, matching the existing style.
-
-F4. Leave both files uncommitted for now; they'll go in with A0's first commit. Do not
-    push during setup.
-
-F5. If you ever hit the §0 `build_env` contradiction in a later session: read this
-    ledger, accept it, move on. The permanent fix is a §0 amendment that only I can
-    approve, and it happens at A0 — not by a session quietly editing the spec.
+F5. Do not push during setup. Nothing gets pushed without an explicit ask (standing order
+    #4 in `JOURNAL.md`).
 
 
 ## REPORT BACK
@@ -231,7 +194,7 @@ F5. If you ever hit the §0 `build_env` contradiction in a later session: read t
 - Whether Ctrl+Esc actually opened Claude inside the IDE (the real proof)
 - What `adb devices` printed
 - Whether the repo is checked out on `dev`
-- Whether `JOURNAL_APP.md` was created and `.claude/INDEX.md` updated
+- Whether the pack imported and its sha256 MATCHED `manifest.json`'s `checksum` (paste both)
 
 If any step failed, say exactly which one and paste the real error. Do not paper over a
 failure or call something done that you didn't verify.

@@ -5,10 +5,11 @@ and every item it shows come from an imported **pack** (`pack_<EXAM>.db`, compil
 The app is a renderer + scheduler; the pack is the exam. See `BUILD_PROMPT.md` §8 for the build
 order and `.claude/INDEX.md` for the file map.
 
-**Build machine:** this laptop (Android Studio + a physical phone). The compiler still runs on the
-Hetzner box. `BUILD_PROMPT.md` §0 still says `build_env: hetzner_headless_claude_code` — that is a
-locked parameter the user has chosen to leave verbatim; `JOURNAL_APP.md` carries the divergence and
-explains it. Don't "fix" §0.
+**Build machine:** this laptop (Android Studio + a physical phone); the compiler ran on the Hetzner
+box and is now dormant. **PATCH 02 (2026-07-17) amended `BUILD_PROMPT.md` §0** to split
+compiler→box / app→laptop, so the spec and reality now agree — the old §0 divergence is closed and
+is history, not a live warning. `JOURNAL.md` (**Phase 2 — app** section) keeps the record of why.
+The CLI-buildable intent of §8 A0 still binds and is enforced by `build-logic/`.
 
 ---
 

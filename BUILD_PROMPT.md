@@ -11,19 +11,21 @@ conversation is eroded by compaction.
 > compaction.** **Do not start over, and do not re-save this file.**
 >
 > **⚠ AS OF 2026-07-17 (PATCH 02), STEPS 1–4 BELOW ARE HISTORY — PHASE 1 IS COMPLETE.**
-> The compiler is **DONE (C0–C13)** and `dist/pack_MRCP_PART1.db` is built (26,965 playable items,
-> reproducibility gate cleared). §13's kickoff, the archive drops, and the C0 environment checks all
+> The compiler is **DONE (C0–C13)** and `dist/pack_MRCP_PART1.db` is built (**32,957 playable feed
+> items** after C11b added blobs + interlink; reproducibility gate cleared) and **imported to the
+> laptop**, checksum-verified. §13's kickoff, the archive drops, and the C0 environment checks all
 > **already happened** — do not re-run them, and do not re-do §13.
 >
 > **Where a fresh session actually resumes now:**
 > - **App work (the live front — this is almost certainly you):** you are on the **laptop**. Read
->   `JOURNAL_APP.md` (the app's human log — laptop-owned) and go to **§8 A1**. A0 is done.
+>   `JOURNAL.md` — the ⛔ standing orders at its top, then its **Phase 2 — app** section — and go to
+>   **§8 A1**. A0 is done.
 > - **Compiler work (the box, now dormant):** read `compiler/.compiler_state.json`, re-poll any batch
->   IDs under `batches`, read the tail of `JOURNAL.md`, resume at `next_action`.
+>   IDs under `batches`, read `JOURNAL.md`'s **Phase 1 — compiler** section, resume at `next_action`.
 >
-> **State on disk is the truth, never the transcript** — but note the two machines keep **two
-> journals** (`JOURNAL.md` = compiler/box, written by `state.py`; `JOURNAL_APP.md` = app/laptop).
-> Never cross-write them.
+> **State on disk is the truth, never the transcript.** As of 2026-07-17 there is **ONE journal**:
+> `JOURNAL_APP.md` was merged into `JOURNAL.md` and deleted (the two-file split existed only to stop
+> the two machines colliding, and Phase 1 is done). Both histories are preserved in it, sectioned.
 
 **2. Wire it into my working agreement.** I use a `CLAUDE.md` (auto-loaded every session, deliberately
 short), `.claude/INDEX.md` (codebase map, scanned first), and `.claude/PLAYBOOK.md` (on-demand
@@ -882,10 +884,14 @@ switch exams. Progress is namespaced per `exam_code` and never wiped.
 > documents *how* the shipped pack was built (§10a: the spec lives on disk).
 >
 > **What exists now:** `compiler/dist/pack_MRCP_PART1.db` (gitignored — derived from copyrighted
-> sources) — 86,702 atoms · 37,795 concepts + 67,795 edges · 14,455 MCQs (12,455 curated + 2,000
-> generated) · 9,510 flashcards · 3,000 reels · 8,194 topic dossiers · **26,965 playable feed_items**
-> · 147,146 stable_keys. The **PATCH-01 reproducibility gate is CLEARED** (two builds → byte-identical
+> sources; **imported to the laptop 2026-07-17**, sha256 verified against `manifest.json`) — counts
+> read from the shipped DB, not from a doc: 86,698 atoms · 37,795 concepts + 67,795 edges · 14,455
+> MCQs (12,455 curated + 2,000 generated) · 9,507 flashcards · 3,000 reels · 8,194 topic dossiers ·
+> 2,997 text blobs · 2,998 interlink quizzes · 1,121 figures · **32,957 playable feed_items** ·
+> 147,142 stable_keys. The **PATCH-01 reproducibility gate is CLEARED** (two builds → byte-identical
 > stable_key set + content checksum), so a rebuild never orphans progress or notes (§5j).
+> *(Superseded earlier figures — 26,965 items / 86,702 atoms / 147,146 keys — predate C11b's blobs +
+> interlink and the two source-fact atom removals.)*
 >
 > **Known gaps, flagged not silent:** `text_blobs` / `blob_quizzes` / `interlink_quizzes` / `figures` /
 > `dup_clusters` ship **empty** — those assets were trimmed at C11. **§8 A2's blob and image card types
@@ -1029,13 +1035,14 @@ Compose Canvas for the concept map, DataStore for settings. No network libs, no 
 > **Where Phase 2 is built (PATCH 02, 2026-07-17):** on the **laptop** (Android Studio + a physical
 > phone), not the Hetzner box — see §0 `build_env`. The **CLI-buildable intent binds unchanged**:
 > `./gradlew assembleDebug` must work from a terminal with no IDE-only configuration. Only "over SSH"
-> is moot. The app's human log is **`JOURNAL_APP.md`** (never `JOURNAL.md` — that one is the
-> compiler's, written by `state.py` on the box).
+> is moot. The app's human log is **`JOURNAL.md`, its "Phase 2 — app" section** (merged 2026-07-17;
+> `JOURNAL_APP.md` is deleted — append app entries to the END of `JOURNAL.md`).
 >
 > **Status: A0 ✅ DONE (2026-07-16/17). A1 is next.** Do not re-do A0; do not resequence §8.
 
 - **A0 · Skeleton + offline/no-background guarantees.** ✅ **DONE 2026-07-16/17** — gate closed
-  (keystore generated + backed up off-machine). Details in `JOURNAL_APP.md` + `app/README.md`.
+  (keystore generated + backed up off-machine). Details in `JOURNAL.md` ("Phase 2 — app") +
+  `app/README.md`.
   - Buildable via `./gradlew assembleDebug` from the laptop CLI; SDK/cmdline setup documented in
     `app/README.md`. ✅ Enforced by an included build (`build-logic/`): every `assemble<Variant>`
     depends on a merged-manifest parse + a runtime-classpath denylist, so a violating APK **cannot be
@@ -1071,7 +1078,8 @@ Compose Canvas for the concept map, DataStore for settings. No network libs, no 
   - **§11e progress export/import belongs HERE, not at A7** — §11e's own words: *"Treat it as part of
     A1, not a nice-to-have for later."* Export/import is per-pack, exactly like the progress DB. This
     is not a resequencing of §8; it is A1 doing what §11e already assigned it. **Now urgent:** a real
-    26,965-item pack exists, so the moment it is studied, progress becomes real and losable (§11d).
+    32,957-item pack exists **and is on the laptop**, so the moment it is studied, progress becomes
+    real and losable (§11d).
 - **A2 · Study Feed (build first, make excellent).** Infinite vertical pager; per-type composables:
   - **Reel** — hook; tap to reveal; swipe; got-it/shaky → FSRS.
   - **Text blob** — passage + read-progress + `est_read_seconds`; on scroll-past, schedule its
@@ -1556,9 +1564,9 @@ catastrophe. Treat it as part of A1, not a nice-to-have for later.
 
 > **⚠ A1 OWNS THIS — confirmed 2026-07-17 (PATCH 02).** §8 A1 now names it explicitly and §8 A7 has
 > been reduced to surfacing the Settings entry points, so the spec names exactly one owner.
-> **It is now urgent, not theoretical:** Phase 1 shipped a real 26,965-item pack, so the moment it is
-> studied, progress becomes real and losable. The earlier "safe to defer" reasoning rested on no pack
-> existing — **that premise is dead.**
+> **It is now urgent, not theoretical:** Phase 1 shipped a real 32,957-item pack and it is **imported
+> to the laptop**, so the moment it is studied, progress becomes real and losable. The earlier "safe to
+> defer" reasoning rested on no pack existing — **that premise is doubly dead.**
 > Export is **per-pack** (progress is per-pack), and per the PATCH 01 §11e revision it is a **ZIP**
 > (`progress.db` + `note_images/`), not a bare file copy.
 
@@ -1618,8 +1626,8 @@ catastrophe. Treat it as part of A1, not a nice-to-have for later.
 > long since processed. Kept verbatim as the historical record (§10a).
 >
 > **A fresh session goes to §8 A1 instead** (see the resume box at the top of this file), reads
-> `JOURNAL_APP.md`, and builds on the laptop. The only line below that still binds is the last one:
-> **when in doubt at any point: ask.**
+> `JOURNAL.md` (⛔ standing orders at the top, then "Phase 2 — app"), and builds on the laptop. The
+> only line below that still binds is the last one: **when in doubt at any point: ask.**
 
 **Read this file from disk, not from my paste.** I saved it as `BUILD_PROMPT.md` in the repo root, and
 `CLAUDE.md` points at it. That is deliberate: by §10a, instructions that live only in the conversation
@@ -1710,6 +1718,8 @@ APK, not a stripped-down version. **When in doubt at any point: ask me.**
 
 1. **Phase 1 is COMPLETE (C0–C13).** `compiler/dist/pack_MRCP_PART1.db` exists — 26,965 playable
    items, 147,146 stable_keys, PATCH-01 reproducibility gate cleared. The compiler is dormant.
+   *(Count superseded 2026-07-17: the true figure is **32,957** — C11b's blobs + interlink had
+   already landed when this was written. See `JOURNAL.md` "Phase 2 — app".)*
 2. **The app is built on the laptop** (Android Studio + physical phone), not the Hetzner box, which is
    headless and OOM-bound. A0 shipped from there on 2026-07-16/17.
 
@@ -1718,7 +1728,7 @@ APK, not a stripped-down version. **When in doubt at any point: ask me.**
 | § | Was | Now |
 |---|---|---|
 | §0 `build_env` | `hetzner_headless_claude_code` (locked) | **Split**: compiler→box, app→laptop. **CLI-buildable intent unchanged**; only "over SSH" is moot. |
-| START HERE | resume → `.compiler_state.json`, begin at §13 | Phase 1 closed → app sessions read `JOURNAL_APP.md` and resume at **§8 A1**. |
+| START HERE | resume → `.compiler_state.json`, begin at §13 | Phase 1 closed → app sessions read `JOURNAL_APP.md` and resume at **§8 A1**. ⁽¹⁾ |
 | §7 | C0–C13 as pending work with live ⛔ gates | Marked **COMPLETE / historical**. Empty-table gaps flagged for A2. |
 | §8 A0 | "buildable headless… **over SSH**" | ✅ **DONE**; "over SSH" dropped, CLI intent kept + build-enforced by `build-logic/`. |
 | §8 A1 | pack loading, generic | + **schema-version gate**, + **degrade on empty tables**, + **§11e**, + explicit no-hardcoded-exam rule. ⇦ next stage. |
@@ -1726,6 +1736,13 @@ APK, not a stripped-down version. **When in doubt at any point: ask me.**
 | §11c | build on the box; `scp`; **ask** scp-vs-Cockpit | **`adb install -r`** over USB from the laptop. The scp/Cockpit question is **moot — do not re-raise it.** Pack ships separately from the APK. |
 | §11e | "part of A1" (contradicted by §8) | **A1 owns it, urgent** — a real pack now exists, so the "safe to defer" premise is dead. |
 | §13 | Kickoff — "do this now" | **History. Do not execute.** |
+
+> ⁽¹⁾ **Superseded later the same day (2026-07-17).** This table records what PATCH 02 changed and is
+> left standing as the audit trail (§10a) — but its "read `JOURNAL_APP.md`" is no longer current.
+> `JOURNAL_APP.md` was afterwards **merged into `JOURNAL.md` and deleted**: the two-file split existed
+> only to stop the box and the laptop writing one file concurrently, and Phase 1 finishing made it
+> unnecessary. Both histories are preserved in `JOURNAL.md`, sectioned Phase 1 / Phase 2, with the ⛔
+> standing orders hoisted to the top. **A fresh app session reads `JOURNAL.md`.**
 
 ### On "work with other databases in future" — what it does and does not mean
 
