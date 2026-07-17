@@ -1103,7 +1103,13 @@ Compose Canvas for the concept map, DataStore for settings. No network libs, no 
   - **Reel** — hook; tap to reveal; swipe; got-it/shaky → FSRS.
   - **Text blob** — passage + read-progress + `est_read_seconds`; on scroll-past, schedule its
     `blob_quiz` a few cards later and set a re-read to resurface **in-app next session** (no notification).
-  - **Image** — figure + caption; pinch-zoom; tap → linked atom.
+  - ~~**Image** — figure + caption; pinch-zoom; tap → linked atom.~~ **← NOT A CARD TYPE. Corrected
+    2026-07-17 (PATCH 04): the pack has ZERO `image` feed rows.** Figures are **attachments**, not feed
+    items — `atoms.figure_id` (3,630) · `mcqs.figure_id` (**1**) · `topic_pages.figure_ids_json` (1,461).
+    **Render the figure INLINE** (+ caption, pinch-zoom, tap → linked atom) **on the card that owns it** —
+    any flashcard/reel whose atom carries a `figure_id`, plus the one MCQ. Reaches ~564 of 32,957 cards
+    (~250 distinct figures); the other ~870 live in dossiers → **A4**. Do **not** synthesise image cards:
+    that is the app inventing feed items the pack never authored (§runtime forbids generation).
   - **Flashcard** — tap-flip; 4-button rating → FSRS.
   - **MCQ** — best-of-five; pick → **answer revealed inline** + explanation + per-distractor "why wrong";
     → FSRS; wrong → local mistake ledger. No negative marking. Show "key disputed" if `key_conflict`.
@@ -1141,7 +1147,9 @@ Compose Canvas for the concept map, DataStore for settings. No network libs, no 
 
 **Acceptance (end-to-end):**
 1. Import `pack_MRCP_PART1.db`; app bar shows exam name; filters + tag chips come from the pack.
-2. Mixed feed shows all six item types; every card shows its 1–5 importance; PYQs show a year badge.
+2. Mixed feed shows all ~~six~~ **FIVE** item types the pack actually has — `mcq` · `flashcard` · `reel` ·
+   `interlink` · `blob` (**PATCH 04**: there is no `image` type; figures render inline on their own card,
+   see §8 A2). Every card shows its 1–5 importance; PYQs show a year badge.
 3. Tap an importance indicator → the "why" breakdown renders from `importance_signals_json`.
 4. "5★ only" and "PYQ only" filters work; Importance ↓ sort works; Priority sort differs from
    Importance ↓ (proving weakness is folded in locally).
@@ -1845,3 +1853,75 @@ The correction does **not** relax the rule — it is the reason the rule exists.
 **Unchanged and still binding:** no exam-specific string may ever enter the app (§0 `multi_pack`,
 §8 A1); the schema-version gate (§8 A1); §11e export/import owned by A1; standing order #2 (no
 resequencing) — A1 is still next, and its scope did not grow.
+
+---
+
+## PATCH 04 — A2: no Image card (figures are attachments) + the A2 build decisions — applied IN PLACE 2026-07-17
+
+> **Authorised by the user on 2026-07-17**, choosing "No Image card; figures render inline" when the
+> conflict was surfaced (standing order #1: surface, never silently reconcile), and directing: *"make sure
+> you note this decision everywhere and edit accordingly, and all the other decisions you have made in the
+> plan go in short in the relevant places."* This section is the audit trail (§10a).
+>
+> **Changes NOTHING about the pack format, the schema DDL, or the decoupling contract** (§2, §6,
+> `spec/schema.sql` — the edit there is comment-only; verified the DDL still executes and matches the
+> shipped pack byte-for-byte in shape: 23 tables, identical `feed_items` columns, `user_version` 1).
+
+### The fact the spec got wrong (again)
+
+§8 A2 named an **Image** card type, Acceptance #2 demanded *"all six item types"*, and `schema.sql`'s
+comment listed `reel | blob | image | flashcard | mcq | interlink`. **Read from the shipped pack:**
+
+| item_type | rows |
+|---|---|
+| `mcq` | 14,455 |
+| `flashcard` | 9,507 |
+| `reel` | 3,000 |
+| `interlink` | 2,998 |
+| `blob` | 2,997 |
+| **`image`** | **0 — the type has never existed in any pack** |
+
+**Figures are ATTACHMENTS, not feed items** — and that was deliberate in `figures.py`, not an oversight:
+`atoms.figure_id` **3,630** · `mcqs.figure_id` **1** · `topic_pages.figure_ids_json` **1,461**.
+
+### What changed
+
+| § | Was | Now |
+|---|---|---|
+| §8 A2 "Image" bullet | a card type: "figure + caption; pinch-zoom; tap → linked atom" | **Struck.** Not a card type. The figure renders **INLINE on the card that owns it** (flashcard/reel whose atom has a `figure_id`, plus the 1 MCQ) — caption, pinch-zoom and tap→atom all preserved, just attached rather than standalone. |
+| Acceptance #2 | "all **six** item types" | "all **FIVE** item types the pack actually has", named explicitly. |
+| `spec/schema.sql` | comment listed `image` | Comment corrected (**DDL untouched**); notes figures are attachments and that the type set is **not closed** — the app resolves types from actual rows. |
+
+**Reach:** figures appear on ~**564 of 32,957** cards (**1.7%**, ~250 distinct). The other ~870 are
+reachable through dossiers → **A4**, which is where the compiler put them. Nothing is lost; it is a
+different screen.
+
+**Do NOT synthesise image feed rows in the app.** That is the app inventing feed items the pack never
+authored — it breaks "the pack is the exam" and brushes §runtime's no-realtime-generation rule. A figure
+divorced from its question is a quiz with no answer.
+
+### The other A2 decisions, recorded here because they bind future sessions
+
+- **NO markdown library — a tiny in-house renderer that treats `*`, `<`, `>` as LITERAL text.**
+  **This is a clinical-correctness rule, not dependency hygiene.** Measured across **68,893** real
+  markdown fields: the pack's actual vocabulary is newlines (22.7%), `- ` bullets (2.3%), `1. ` numbered
+  (0.04%) — headings, links, images, code fences and strikethrough are **entirely absent**. But medical
+  text is full of characters a renderer would seize: **every `*italic*` hit is multiplication in a lab
+  value** (of the form `<cell count> * 10^9/L`) and **every `>` blockquote is a threshold** (a line of
+  the form `> <N>: <interpretation>`). A markdown renderer eats the asterisks → `<count> 10^9/L`: **a
+  silently wrong lab value on a physician's revision card.** Exposure: `>` in **8.9%** of MCQ
+  explanations, `<` in 6.1%, `*` in 3.6% of stems. *(Forms shown, not pack text — §copyright: docs log
+  counts and decisions, never book content.)* ⚠ **Never "upgrade" this to a markdown library** — it would look like a
+  tidy-up and would silently re-introduce the corruption.
+- **Figures load via `BitmapFactory.decodeFile` + a small LRU — never Coil/Glide.** The files are local,
+  so an image loader's entire value (HTTP fetch, network cache) is moot; worse, **Coil's standard
+  artifact depends on OkHttp and the guard's denylist would fail the build, correctly.** An image loader
+  that *can* fetch URLs has no business in an app that must never touch a network.
+- **Paging: hand-rolled windowing over A1's `FeedReader`, not Paging 3.** The D4 reader already does
+  `LIMIT/OFFSET` on an indexed order and a feed is consumed strictly forwards. **A3 rewrites the ordering
+  anyway** — adopting a paging library now would fit A3's engine around a library chosen before its
+  requirements exist. Revisit at A3, with real requirements and a real-device measurement.
+- **A2 renders and simply orders; the ordering ENGINE is A3.** Standing order #2 — no resequencing.
+
+**Unchanged and still binding:** no exam-specific string may ever enter the app; capability is resolved
+per pack from actual rows (PATCH 03); §11e stays A1-owned (PATCH 02).

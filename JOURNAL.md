@@ -898,3 +898,66 @@ hardware, cache `feedSize`/`seenCount` rather than recomputing them on every ope
 `pack_manifest` ✅ · per-exam progress DB, never wiped ✅ · switch-exam registry ✅ · §11e export/import ✅ ·
 capability detection per pack ✅. **A2 (the Study Feed) is next, and needs the phone** — "made excellent"
 is a judgement about a real AMOLED panel and a real thumb, which no emulator can make.
+
+### 2026-07-17 — A2 planned. PATCH 04: no Image card; and a markdown library would corrupt lab values.
+
+**The phone is connected (Samsung SM-S918B / S23 Ultra, Android 16, 1440x3088, arm64) — a REAL AMOLED
+panel, which is the thing the whole laptop move existed for.** It dropped off wifi debugging when the
+screen locked; user's call: **build A2 now, reconnect the phone for what only it can answer.** Enable
+**Stay awake while charging** before the next session or the link will keep dropping. Useful datum: the
+141 MB pack pushes over wifi adb in **3.4 s (~39 MB/s)** — staging is not a bottleneck.
+**A2 plan → `.claude/plans/2026-07-17-a2-study-feed.md`** (decision log D9–D12 continues A1's D1–D8).
+
+**⚠ PATCH 04 — SPEC-vs-REPO, the 4th such find in two days. The "Image" card type has NO DATA.**
+§8 A2 named an Image card, Acceptance #2 demanded *"all six item types"*, `schema.sql`'s comment listed
+`image`. **Read from the shipped pack:** `mcq` 14,455 · `flashcard` 9,507 · `reel` 3,000 · `interlink`
+2,998 · `blob` 2,997 — **`image`: 0. It has never existed in any pack.** Figures are **ATTACHMENTS**, and
+deliberately so (`figures.py`): `atoms.figure_id` 3,630 · `mcqs.figure_id` **1** ·
+`topic_pages.figure_ids_json` 1,461. Surfaced per standing order #1; **user chose: no Image card, figures
+render INLINE on the card that owns them** (caption + pinch-zoom + tap→atom all kept, just attached).
+Corrected at every site — §8 A2's bullet, Acceptance #2 (**six → FIVE**, types named), `schema.sql`'s
+comment (**DDL untouched**; verified it still executes and matches the shipped pack: 23 tables, identical
+`feed_items` columns, `user_version` 1), `CLAUDE.md`, `.claude/INDEX.md` — plus **PATCH 04** at the end of
+`BUILD_PROMPT.md` as the audit trail. **Reach:** figures appear on ~**564 of 32,957** cards (1.7%, ~250
+distinct); the other ~870 live in dossiers → **A4**. **Do NOT synthesise image feed rows** — that is the
+app inventing items the pack never authored (§runtime forbids generation), and a figure without its
+question is a quiz with no answer.
+
+**🔴 THE BIG ONE — A MARKDOWN LIBRARY WOULD CORRUPT LAB VALUES. Measured, not assumed.**
+Scanned **68,893** real markdown fields across all 11 `*_md` columns before choosing a renderer.
+- *What the pack actually contains:* newlines **22.69%** · `- ` bullets **2.31%** · `1. ` numbered 0.04% ·
+  5 table fields · 2 `***…***`. **Headings, links, images, `code`, fences, strikethrough, `_italic_`:
+  ENTIRELY ABSENT.**
+- *What the "markdown" hits actually are:* **medical notation a renderer would seize.** Every `*italic*`
+  match is **multiplication in a lab value** — of the form `<cell count> * 10^9/L` (blood counts, with
+  their reference ranges also using `*`). Every `>` blockquote is a **threshold** — a line of the form
+  `> <N>: <interpretation>`. *(Forms shown, not pack text — copyright rule: never quote book content.)*
+- **A markdown renderer takes text between two asterisks as italic AND EATS THE ASTERISKS.**
+  `<count> * 10^9/L` → `<count> 10^9/L`. **The multiplication silently disappears from a lab
+  value on a physician's revision card.** A `> <N>` threshold becomes an indented quotation, losing
+  "greater than". **These are WRONG FACTS, not ugly ones.**
+- **Exposure:** `>` in **8.9%** of MCQ explanations (1,283 fields) · `<` in **6.1%** (884) · `*` in
+  **3.6%** of stems (516).
+- **Decision (D10): NO markdown library.** A tiny in-house renderer supporting exactly what exists —
+  newlines, `- ` bullets, `1. ` lists — treating `*`, `<`, `>`, `~`, backtick as **LITERAL**. For this
+  corpus that is strictly **more correct** than any general markdown engine, and needs no dependency and
+  nothing to clear the guard. Cost stated honestly: 7 fields of 68,893 (the 2 `***…***` + 5 tables) render
+  as literal text, against corrupting ~1,300. ⚠ **Never "upgrade" this to a markdown library — it would
+  look like a tidy-up and would silently re-introduce the corruption.** Promoted to `CLAUDE.md`, because
+  it is exactly the kind of thing a future session would "fix".
+
+**Other A2 decisions (recorded in PATCH 04 + CLAUDE.md so they bind future sessions):**
+- **D12 — figures via `BitmapFactory.decodeFile` + a small LRU; NEVER Coil/Glide.** The files are local,
+  so an image loader's whole value (HTTP fetch, network cache) is moot — and **Coil's standard artifact
+  depends on OkHttp, which our own guard's denylist would fail the build over, correctly.** An image
+  loader that *can* fetch URLs has no business in an app that must never touch a network.
+- **D11 — hand-rolled windowing over A1's `FeedReader`, not Paging 3.** The D4 reader already does
+  `LIMIT/OFFSET` on an indexed order and a feed is consumed strictly forwards. **A3 rewrites the ordering
+  anyway** — adopting a paging library now fits A3's engine around a library chosen before its
+  requirements exist. Unproven on hardware: if it stutters, cache the window; don't reach for a library.
+- **A2 renders + simply orders. The ordering ENGINE is A3** (standing order #2 — no resequencing).
+
+**Feed shape worth knowing before building filters:** importance is **5★ 1,046 · 4★ 23,452 · 3★ 305 ·
+2★ 3,736 · 1★ 4,418** — **71% is 4★**, so §8 A2's "4★+" filter selects ~74% of the deck and is nearly a
+no-op, while "5★ only" selects 1,046 (3%). That histogram is the audited, intended `pyq_min` floor (the
+Opus importance-scorer called it *defensible*) — expected, not a bug. `is_pyq=1` → **4,306**.

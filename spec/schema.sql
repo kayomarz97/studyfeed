@@ -151,7 +151,12 @@ CREATE TABLE figures ( id INTEGER PRIMARY KEY, path TEXT, caption_md TEXT, sourc
 
 -- ── convenience: one row per playable card so the app pages + sorts the feed cheaply ──
 CREATE TABLE feed_items ( id INTEGER PRIMARY KEY,
-  item_type TEXT,   -- reel | blob | image | flashcard | mcq | interlink
+  -- reel | blob | flashcard | mcq | interlink
+  -- `image` was listed here historically but NO pack has ever emitted one, and the app must not invent
+  -- them (PATCH 04, 2026-07-17). Figures are ATTACHMENTS, not feed items: atoms.figure_id,
+  -- mcqs.figure_id, topic_pages.figure_ids_json. They render inline on the card that owns them.
+  -- The set is not closed — a future pack may add a type; the app resolves types from actual rows.
+  item_type TEXT,
   ref_id INTEGER, subject_id INTEGER,
   importance INTEGER DEFAULT 1, importance_score REAL DEFAULT 0,
   is_pyq INTEGER DEFAULT 0 );

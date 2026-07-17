@@ -41,6 +41,12 @@ build from the CLI with no IDE-only config.
 > `pack_manifest` at runtime — that is what lets a future pack (MRCP Part 2, USMLE, …) play with **no
 > code change** (§0 `multi_pack`). One hardcoded "MRCP" silently makes it a single-exam app.
 >
+> ⚠ **The feed has FIVE item types, not six (PATCH 04).** `mcq` · `flashcard` · `reel` · `interlink` ·
+> `blob`. **There is no `image` type and never has been** — figures are **attachments** (`atoms.figure_id`
+> 3,630 · `mcqs.figure_id` 1 · `topic_pages.figure_ids_json` 1,461) and render **inline on the card that
+> owns them**. Any doc saying "six item types" or naming an Image card is stale. **Do not synthesise image
+> feed rows** — that is the app inventing items the pack never authored (§runtime forbids generation).
+>
 > ⚠ **Nor may it hardcode which asset types exist — same contract, quieter failure (PATCH 03).**
 > **Detect capability per pack, at runtime:** actual rows are authoritative; `counts_json` +
 > `feature_flags_json` are the pack's own declaration (hint + cross-check). **The C11 trim was UNDONE —
@@ -49,6 +55,18 @@ build from the CLI with no IDE-only config.
 > ship without them: an app that assumes blobs exist because Part 1 had them **cannot swap its
 > database**. Test both directions — full pack AND a synthetic trimmed pack, same binary.
 
+> ⚠ **NEVER add a markdown library. The pack's `*_md` fields are medical text, and a renderer would
+> corrupt lab values (PATCH 04).** Measured over 68,893 real fields: every `*italic*` is **multiplication**
+> (of the form `<cell count> * 10^9/L`) and every `>` blockquote is a **threshold** (`> <N>:
+> <interpretation>`). A markdown engine eats the asterisks → `<count> 10^9/L` — **a silently wrong lab value on a
+> physician's revision card**. Exposure: `>` in **8.9%** of MCQ explanations, `<` in 6.1%, `*` in 3.6% of
+> stems. The real vocabulary is only newlines + `- ` bullets + `1. ` lists (headings/links/code/fences:
+> **zero**). Use the in-house renderer; treat `*`, `<`, `>` as **literal**. This looks like a tidy-up
+> waiting to happen — **it is not**. It is about the corpus, not about effort.
+>
+> ⚠ **No image/network loader (Coil, Glide) — figures are LOCAL files.** `BitmapFactory.decodeFile` + an
+> LRU. Coil's standard artifact pulls OkHttp; the guard's denylist **would fail the build, correctly**.
+>
 > ⚠ **Never substring-match an AndroidManifest — PARSE it.** (Promoted from the PLAYBOOK ledger after
 > the same mistake landed **twice**: A0, then A1.) This applies to *any* tool or language — `grep`, `rg`,
 > Python `in`/`.count()`, `Select-String` — and to throwaway checks exactly as much as to committed code.
