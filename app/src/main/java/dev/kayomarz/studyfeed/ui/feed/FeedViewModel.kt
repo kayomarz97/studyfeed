@@ -7,6 +7,8 @@ import dev.kayomarz.studyfeed.feed.FeedCard
 import dev.kayomarz.studyfeed.feed.FeedFilter
 import dev.kayomarz.studyfeed.feed.FeedQuery
 import dev.kayomarz.studyfeed.feed.FeedRepository
+import dev.kayomarz.studyfeed.feed.FeedScheduler
+import dev.kayomarz.studyfeed.feed.FeedStateJson
 import dev.kayomarz.studyfeed.pack.PackDatabase
 import dev.kayomarz.studyfeed.pack.PackRegistry
 import dev.kayomarz.studyfeed.progress.BlobRead
@@ -23,16 +25,23 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.time.Instant
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 /**
- * Drives the Study Feed (BUILD_PROMPT §8 A2): windows the feed forward, and on each interaction writes
- * FSRS + progress **off the main thread** so a rating never blocks the swipe (plan §3.5).
+ * Drives the Study Feed (BUILD_PROMPT §8 A2–A3): windows the feed forward, and on each interaction
+ * writes FSRS + progress **off the main thread** so a rating never blocks the swipe (plan §3.5).
  *
- * **No ordering engine here — that is A3** (standing order #2). This serves the pack's own
- * importance-first order via [FeedRepository.page] and simply appends the next window as the user nears
- * the end. A3 replaces the paging call with its due-pool/variety engine; nothing else here changes.
+ * **A3 ordering engine ([FeedScheduler]).** The default ("Smart / For You") feed is composed by the
+ * engine — a due-pool + importance-weighted new drip + variety, paced to an editable deadline. The
+ * moment an explicit sort or any filter is chosen, we fall back to A2's proven [FeedRepository.page]
+ * path ([usesEngine] gates this), so Acceptance 4's filter/sort behaviour is untouched. The engine's
+ * memory (ring buffer, drip counters, cursors, pending blob quiz-backs) lives in `feed_state` so it
+ * survives restart and the §11e export/import.
  */
 class FeedViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -61,6 +70,20 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
     private var examCode: String? = null
     private var loaded = 0
 
+    // ---- A3 ordering engine -------------------------------------------------------------------------
+    private val engineConfig = FeedScheduler.Config()
+    private val engineStore = MemStore()
+    private var scheduler: FeedScheduler? = null
+    /** Serialises engine windows — [FeedScheduler] is stateful, so overlapping windows would race. */
+    private val engineMutex = Mutex()
+    /** The (editable) MCQ finish line; loaded/defaulted in [start]. */
+    private var deadline: LocalDate? = null
+    /** True once the engine's stream has no more cards to give (fully studied + nothing due). */
+    private var engineExhausted = false
+
+    /** The engine drives ONLY the default feed; any explicit sort or filter uses the A2 SQL path. */
+    private fun usesEngine(q: FeedQuery): Boolean = q.sort == FeedQuery.Sort.SMART && q.filter.isAll
+
     // ONE Room instance for the session, opened when the active exam is known — reopening it per rating
     // (as an earlier draft did) leaks connections and re-runs Room's open cost on every swipe.
     private var progressDb: ProgressDatabase? = null
@@ -81,6 +104,7 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
             ProgressDatabase.ensureExists(getApplication(), pack.examCode)
             progressDb = ProgressDatabase.open(getApplication(), pack.examCode)
             repo = FeedRepository.open(ProgressDatabase.fileFor(getApplication(), pack.examCode), pack.dbFile)
+            initEngine()
             (PackDatabase.open(pack.dbFile) as? PackDatabase.Result.Ok)?.pack
         }
         _ui.update {
@@ -95,8 +119,13 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
         val r = repo
         if (r == null) { _ui.update { it.copy(loading = false, hasPack = false) }; return@launch }
         _ui.update { it.copy(loading = true, query = query) }
-        val (first, total) = withContext(Dispatchers.IO) { r.page(query, 0, PAGE) to r.count(query) }
+        engineExhausted = false
+        val (first, total) = withContext(Dispatchers.IO) {
+            if (usesEngine(query)) engineWindow(PAGE) to r.size()   // engine: total is a rough deck size
+            else r.page(query, 0, PAGE) to r.count(query)
+        }
         loaded = first.size
+        if (usesEngine(query) && first.size < PAGE) engineExhausted = true
         _ui.update {
             it.copy(loading = false, hasPack = true, cards = first, total = total, query = query)
         }
@@ -108,15 +137,87 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
     /** Append the next window when the user is within [PREFETCH] of the end. */
     fun onReachedIndex(index: Int) {
         val r = repo ?: return
-        if (index < loaded - PREFETCH || loaded >= _ui.value.total) return
+        if (index < loaded - PREFETCH) return
         val query = _ui.value.query
-        viewModelScope.launch {
-            val next = withContext(Dispatchers.IO) { r.page(query, loaded, PAGE) }
-            if (next.isNotEmpty()) {
+        if (usesEngine(query)) {
+            if (engineExhausted) return
+            viewModelScope.launch {
+                val next = withContext(Dispatchers.IO) { engineWindow(PAGE) }
+                if (next.isEmpty()) { engineExhausted = true; return@launch }
                 loaded += next.size
+                if (next.size < PAGE) engineExhausted = true
                 _ui.update { it.copy(cards = it.cards + next) }
             }
+        } else {
+            if (loaded >= _ui.value.total) return
+            viewModelScope.launch {
+                val next = withContext(Dispatchers.IO) { r.page(query, loaded, PAGE) }
+                if (next.isNotEmpty()) {
+                    loaded += next.size
+                    _ui.update { it.copy(cards = it.cards + next) }
+                }
+            }
         }
+    }
+
+    // ---- A3 engine plumbing -------------------------------------------------------------------------
+
+    /** Build the scheduler for this app-open: hydrate `feed_state`, resolve the deadline setting. */
+    private suspend fun initEngine() {
+        val r = repo ?: return
+        engineStore.set(FeedStateJson.fromJson(dao?.feedState(ENGINE_KEY)))
+        deadline = resolveDeadline()
+        scheduler = FeedScheduler(poolsAdapter(r), engineStore, engineConfig)
+    }
+
+    /**
+     * Compose the next engine window and load its payloads, then flush the engine's state to
+     * `feed_state`. Serialised by [engineMutex] because the scheduler is stateful. Runs on IO.
+     */
+    private suspend fun engineWindow(n: Int): List<FeedCard> = engineMutex.withLock {
+        val sch = scheduler ?: return emptyList()
+        val r = repo ?: return emptyList()
+        val now = Instant.now()
+        val refs = sch.window(n, now.toString(), LocalDate.now().toString(), daysUntilDeadline(now))
+        val cards = r.loadCards(refs)
+        flushEngineState()
+        cards
+    }
+
+    private fun daysUntilDeadline(now: Instant): Int {
+        val d = deadline ?: return engineConfig.defaultDeadlineDays
+        val days = ChronoUnit.DAYS.between(LocalDate.now(), d).toInt()
+        return days.coerceAtLeast(1)   // on/after the finish line → pace becomes "serve all remaining"
+    }
+
+    /** Read `feed.deadline` from settings; default to today + 8 weeks on first run and persist it. */
+    private suspend fun resolveDeadline(): LocalDate {
+        dao?.setting(DEADLINE_KEY)?.let { runCatching { return LocalDate.parse(it) } }
+        val d = LocalDate.now().plusDays(engineConfig.defaultDeadlineDays.toLong())
+        dao?.putSetting(dev.kayomarz.studyfeed.progress.Setting(DEADLINE_KEY, d.toString()))
+        return d
+    }
+
+    private suspend fun flushEngineState() {
+        dao?.putFeedState(dev.kayomarz.studyfeed.progress.FeedState(ENGINE_KEY, FeedStateJson.toJson(engineStore.get())))
+    }
+
+    private fun poolsAdapter(r: FeedRepository) = object : FeedScheduler.Pools {
+        override fun due(nowIso: String, exclude: Set<Long>, limit: Int) = r.duePool(nowIso, exclude, limit)
+        override fun newMcqs(afterScore: Double?, afterId: Long?, limit: Int) = r.newMcqs(afterScore, afterId, limit)
+        override fun newOthers(afterScore: Double?, afterId: Long?, limit: Int) = r.newOthers(afterScore, afterId, limit)
+        override fun filler(nowIso: String, exclude: Set<Long>, limit: Int) = r.fillerPool(nowIso, exclude, limit)
+        override fun remainingNewMcqs() = r.remainingNewMcqs()
+        override fun blobRef(blobId: Long) = r.blobRef(blobId)
+    }
+
+    /** In-memory mirror of `feed_state` the scheduler reads/writes synchronously; flushed to DB by us. */
+    private class MemStore : FeedScheduler.StateStore {
+        @Volatile private var s = FeedScheduler.FeedState()
+        @Synchronized override fun load() = s
+        @Synchronized override fun save(state: FeedScheduler.FeedState) { s = state }
+        @Synchronized fun set(state: FeedScheduler.FeedState) { s = state }
+        @Synchronized fun get() = s
     }
 
     // ---- interactions: write off the main thread, never block the swipe ----------------------------
@@ -150,6 +251,12 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
             quizzed_at = null,
             reread_due = now.plus(java.time.Duration.ofDays(1)).toString(),
         ))
+        // A3: also land the quiz-back a few cards later in THIS session (A2 deferred the delayed insert).
+        // Under the engine mutex so a concurrent window() can't overwrite the newly-pending quiz-back.
+        engineMutex.withLock {
+            scheduler?.scheduleBlobQuiz(card.itemId)
+            flushEngineState()
+        }
     }
 
     fun toggleStar(card: FeedCard) = viewModelScope.launch(Dispatchers.IO) {
@@ -197,6 +304,8 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         const val PAGE = 40
         const val PREFETCH = 10
+        const val ENGINE_KEY = "engine"          // feed_state row holding the serialised engine state
+        const val DEADLINE_KEY = "feed.deadline" // settings row: the editable MCQ finish line (ISO date)
     }
 }
 

@@ -92,6 +92,12 @@ sealed interface FeedCard {
         val estReadSeconds: Int?,
         /** The quiz-back for this passage (§8 A2). Null if the pack shipped none for this blob. */
         val quiz: BlobQuiz?,
+        /**
+         * True when the A3 engine re-surfaced this passage as its **delayed quiz-back** (a few cards
+         * after it was first read, §8 A3 rule 3) — the card can open straight at its quiz. False for a
+         * first read.
+         */
+        val openAtQuiz: Boolean = false,
     ) : FeedCard
 
     /** A passage's check-your-understanding question (`blob_quizzes`). */

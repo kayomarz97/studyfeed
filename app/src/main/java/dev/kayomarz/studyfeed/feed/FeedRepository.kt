@@ -114,6 +114,130 @@ class FeedRepository private constructor(
         }
     }
 
+    // ---- A3 ordering-engine pools (BUILD_PROMPT §8 A3) ---------------------------------------------
+    //
+    // The engine ([FeedScheduler]) does the stateful composition; this only builds the candidate POOLS
+    // in SQL (cheap, indexed) and loads payloads for the refs the engine picks. Content-safe: every
+    // query returns ids + importance, never pack text (copyright rule).
+
+    /**
+     * The **due pool**: FSRS cards due now ∪ blobs whose re-read is due now, most-urgent first.
+     *
+     * Urgency = **most-overdue-first** (`due ASC` — ISO-8601 strings sort chronologically, so this needs
+     * no `julianday` parsing of `Instant`'s `…T…Z` form, which SQLite parses unreliably), with
+     * importance breaking ties. [exclude] (items already emitted this app-open) is filtered in Kotlin to
+     * avoid a giant `NOT IN (…)`.
+     */
+    fun duePool(nowIso: String, exclude: Set<Long>, limit: Int): List<FeedScheduler.Ref> {
+        val rows = ArrayList<FeedScheduler.Ref>(limit + exclude.size)
+        db.rawQuery(
+            """
+            SELECT f.item_type, f.id, f.ref_id, f.importance, f.importance_score, f.subject_id, c.due AS due_at
+            FROM main.fsrs_cards c
+            JOIN $PACK.feed_items f ON f.item_type = c.item_type AND f.id = c.item_id
+            WHERE c.due IS NOT NULL AND c.due <= ?
+            UNION ALL
+            SELECT f.item_type, f.id, f.ref_id, f.importance, f.importance_score, f.subject_id, b.reread_due AS due_at
+            FROM main.blob_reads b
+            JOIN $PACK.feed_items f ON f.item_type = 'blob' AND f.id = b.blob_id
+            WHERE b.reread_due IS NOT NULL AND b.reread_due <= ?
+            ORDER BY due_at ASC, importance DESC, id
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(nowIso, nowIso, (limit + exclude.size).toString()),
+        ).use { c -> while (c.moveToNext()) rows += refFrom(c, FeedScheduler.Source.DUE) }
+        return rows.filter { it.itemId !in exclude }.take(limit)
+    }
+
+    /** Never-seen MCQs after the keyset cursor, importance-first (5★/PYQ earliest). */
+    fun newMcqs(afterScore: Double?, afterId: Long?, limit: Int): List<FeedScheduler.Ref> =
+        newPool(mcqOnly = true, afterScore, afterId, limit, FeedScheduler.Source.NEW_MCQ)
+
+    /** Never-seen non-MCQ items after the keyset cursor, importance-first. */
+    fun newOthers(afterScore: Double?, afterId: Long?, limit: Int): List<FeedScheduler.Ref> =
+        newPool(mcqOnly = false, afterScore, afterId, limit, FeedScheduler.Source.NEW_OTHER)
+
+    private fun newPool(
+        mcqOnly: Boolean, afterScore: Double?, afterId: Long?, limit: Int, source: FeedScheduler.Source,
+    ): List<FeedScheduler.Ref> {
+        val typeClause = if (mcqOnly) "f.item_type = 'mcq'" else "f.item_type <> 'mcq'"
+        val args = mutableListOf<String>()
+        // Keyset: strictly after (importance_score DESC, id ASC). Null cursor = first page.
+        val keyset = if (afterScore != null && afterId != null) {
+            args += afterScore.toString(); args += afterScore.toString(); args += afterId.toString()
+            "AND (f.importance_score < ? OR (f.importance_score = ? AND f.id > ?))"
+        } else ""
+        args += limit.toString()
+        val rows = ArrayList<FeedScheduler.Ref>(limit)
+        db.rawQuery(
+            """
+            SELECT f.item_type, f.id, f.ref_id, f.importance, f.importance_score, f.subject_id
+            FROM $PACK.feed_items f
+            WHERE $typeClause
+              AND NOT EXISTS(SELECT 1 FROM main.fsrs_cards c WHERE c.item_type = f.item_type AND c.item_id = f.id)
+              $keyset
+            ORDER BY f.importance_score DESC, f.id
+            LIMIT ?
+            """.trimIndent(),
+            args.toTypedArray(),
+        ).use { c -> while (c.moveToNext()) rows += refFrom(c, source) }
+        return rows
+    }
+
+    /** Seen-but-not-yet-due items — filler so the feed never dead-ends. Emitted ids excluded in Kotlin. */
+    fun fillerPool(nowIso: String, exclude: Set<Long>, limit: Int): List<FeedScheduler.Ref> {
+        val rows = ArrayList<FeedScheduler.Ref>(limit + exclude.size)
+        db.rawQuery(
+            """
+            SELECT f.item_type, f.id, f.ref_id, f.importance, f.importance_score, f.subject_id
+            FROM main.fsrs_cards c
+            JOIN $PACK.feed_items f ON f.item_type = c.item_type AND f.id = c.item_id
+            WHERE c.due IS NULL OR c.due > ?
+            ORDER BY f.importance DESC, f.importance_score DESC, f.id
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(nowIso, (limit + exclude.size).toString()),
+        ).use { c -> while (c.moveToNext()) rows += refFrom(c, FeedScheduler.Source.FILLER) }
+        return rows.filter { it.itemId !in exclude }.take(limit)
+    }
+
+    /** Count of never-seen MCQs — the numerator of the deadline pace. */
+    fun remainingNewMcqs(): Int = countOf(
+        """
+        SELECT COUNT(*) FROM $PACK.feed_items f
+        WHERE f.item_type = 'mcq'
+          AND NOT EXISTS(SELECT 1 FROM main.fsrs_cards c WHERE c.item_type = 'mcq' AND c.item_id = f.id)
+        """.trimIndent()
+    )
+
+    /** Resolve a blob (keyed by its `feed_items.id`) to a Ref, to re-surface its quiz-back (§8 A3). */
+    fun blobRef(feedItemId: Long): FeedScheduler.Ref? =
+        db.rawQuery(
+            """SELECT f.item_type, f.id, f.ref_id, f.importance, f.importance_score, f.subject_id
+               FROM $PACK.feed_items f WHERE f.id = ? AND f.item_type = 'blob'""",
+            arrayOf(feedItemId.toString()),
+        ).use { c -> if (c.moveToNext()) refFrom(c, FeedScheduler.Source.BLOB_QUIZ) else null }
+
+    private fun refFrom(c: android.database.Cursor, source: FeedScheduler.Source) = FeedScheduler.Ref(
+        itemType = c.getString(0).orEmpty(), itemId = c.getLong(1), refId = c.getLong(2),
+        importance = c.getInt(3), importanceScore = c.getDouble(4),
+        subjectId = if (c.isNull(5)) null else c.getLong(5), source = source,
+    )
+
+    /** Load full payloads for an ordered list of engine-picked refs, preserving the engine's order. */
+    fun loadCards(refs: List<FeedScheduler.Ref>): List<FeedCard> = refs.mapNotNull { ref ->
+        val r = FeedRepositoryRef(ref.itemType, ref.itemId, ref.refId, ref.importance, ref.importanceScore, ref.subjectId)
+        val fsrs = fsrsFor(ref.itemType, ref.itemId)
+        when (ref.itemType) {
+            "mcq" -> loadMcq(ref.refId, r, fsrs)
+            "flashcard" -> loadFlashcard(ref.refId, r, fsrs)
+            "reel" -> loadReel(ref.refId, r, fsrs)
+            "blob" -> loadBlob(ref.refId, r, fsrs)?.copy(openAtQuiz = ref.openAtQuiz)
+            "interlink" -> loadInterlink(ref.refId, r, fsrs)
+            else -> null
+        }
+    }
+
     // ---- query → SQL --------------------------------------------------------------------------------
 
     private fun whereClause(filter: FeedFilter): Pair<String, List<String>> {

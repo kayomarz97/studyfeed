@@ -48,8 +48,11 @@ of A2 (markdown renderer, filters, sort, star/tag, blob quiz-back are all pure S
   code. Fix: push figures in smaller batches, or accept it (a real user imports figures via SAF with the
   pack, where it's a one-time local copy, not wifi).
 
-**Next stages to BUILD (functional), in order:** A3 (feed ordering engine) → A4 (topic dossier reader) →
-A5 (concept map) → A6 (mistakes/mastery/stats) → A7 (settings + **the design pass below**).
+**Next stages to BUILD (functional), in order:** ~~A3 (feed ordering engine)~~ **✅ DONE 2026-07-17**
+(engine `feed/FeedScheduler.kt`; locked policy = blended due-led / MCQ-paced editable-deadline / burst
+cap; 10 JVM + 5 real-pack tests; see JOURNAL "A3 feed ordering engine COMPLETE") → **A4 (topic dossier
+reader) ← NEXT** → A5 (concept map) → A6 (mistakes/mastery/stats) → A7 (settings + **the design pass
+below**).
 
 ---
 
@@ -170,10 +173,11 @@ to reel, interlink, flashcard (flip), and the blob quiz. MCQ is different (you t
    `RealPackTest`/`FeedRepositoryTest` read `files/realpack/` (push via the run-as procedure in
    `RealPackTest`'s KDoc). `am instrument -r` directly — never `connectedAndroidTest` (it uninstalls +
    wipes the fixture). **A skip is not a pass — check the `skipped` count.**
-4. **Build A3 next** (feed ordering engine, §8 A3): FSRS due-pool cross-type, importance weighting for
-   new/among-equal, variety rules (≤2 same type in a row, land blob quiz-backs at the right delay,
-   sprinkle reels), daily new-item drip + burst, recent-type ring buffer in `feed_state`. It **replaces**
-   `FeedRepository`'s Smart sort / consumes `blob_reads.reread_due`. Then A4 → A5 → A6 → A7.
+4. ~~Build A3 next~~ **A3 DONE** (see `.claude/plans/2026-07-17-a3-feed-ordering-engine.md` for the full
+   design + §7 LOCKED POLICY). **Build A4 next** (Topic Dossier reader, §8 A4): Library/Search screen
+   sortable by importance, search entity by name/alias → `topic_pages.body_md` as one long scrollable
+   page with inline diagrams, collapsible `topic_sections` + jump-nav, links to that entity's
+   MCQs/flashcards. **Pure render — nothing generated.** Then A5 → A6 → A7.
 5. **At A7:** execute §2 above as the design pass, asking the user to choose options with diagrams. Also
    the deferred UX: tags-to-bottom (2.4), tap-anywhere (2.6), home page (2.1).
 6. Every push: **secret-scanner FIRST, no exception** (a skipped-scan mistake is in the ledger). Never

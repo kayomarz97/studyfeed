@@ -1197,3 +1197,58 @@ in batches or accept.
 
 **Resume point:** pushed through `4104072` on `dev`, in sync with origin. Next stage to build = **A3
 (feed ordering engine)** — replaces `FeedRepository`'s Smart sort, consumes `blob_reads.reread_due`.
+
+**[compacted at 2026-07-17T17:17:23Z]** — context compacted; disk state is the truth (§10a).
+
+_[session ended: other at 2026-07-17T17:17:33Z]_
+
+_[session ended: other at 2026-07-17T17:20:34Z]_
+
+### 2026-07-17 — hooks fixed (compaction was blocked) + **A3 feed ordering engine COMPLETE**
+
+**First, the compaction blocker:** `/compact` was failing because all 4 hook commands in
+`.claude/settings.json` still pointed at the dead Hetzner path `/root/projects/MRCP Gamify/.claude/
+hooks/*.py`; `python3` exited non-zero (file-not-found) before the script ran, and a non-zero
+**PreCompact** hook blocks compaction. Repointed all 4 to `$CLAUDE_PROJECT_DIR/.claude/hooks/*.py`
+(portable) → verified exit 0 → `/compact` now runs. Commit `951ad25`.
+
+**A3 — the feed ordering engine (§8 A3). Built, verified every layer.** A2 ordered the feed with a
+stateless SQL `ORDER BY`; A3's rules are stateful, so a **pure Kotlin composer** (`feed/FeedScheduler.kt`,
+no Android/SQL — injected `Pools`+`StateStore`) interleaves SQL-built candidate pools:
+
+- **Due pool** (cross-type: `fsrs_cards.due` ∪ `blob_reads.reread_due`), most-overdue-first — this is
+  what **consumes `reread_due`** (Acceptance 7 next-session resurface) and re-surfaces lapsed MCQs
+  (Acceptance 6).
+- **New drip**, importance-weighted (5★/PYQ first), **keyset-paginated** on `(importance_score DESC,
+  feed_items.id)` — stable as items leave the never-seen set, no offset drift.
+- **Variety**: ≤2 same type in a row, sprinkle reels, land a read blob's quiz-back a few cards later
+  (the delayed insert A2 deferred — `scheduleBlobQuiz` + `feed_state.pendingBlobQuizzes`).
+- State (`recentTypes` ring buffer, drip counters, cursors, pending quizzes) persists to **`feed_state`**
+  as one JSON row (`FeedStateJson`) → survives restart AND the §11e export/import.
+
+**⛔ LOCKED POLICY (user decisions 2026-07-17 — a new session must not "re-tune" these without asking):**
+1. **Feed mix = blended, due-led** (~70/30 due:new, adaptive). Not reviews-first, not new-forward.
+2. **New MCQs paced to an EDITABLE deadline.** `daily_new_mcq_budget = ceil(remaining_new_mcqs ÷
+   days_left)`. Deadline is a **settings row `feed.deadline`** (ISO date), default = first-open **+ 8
+   weeks**; **the user can keep changing it** (A7 gives it a date-picker; the value drives the pace
+   immediately). Falling behind raises the budget; past the deadline → serve all remaining. Non-MCQ new
+   types are **NOT** deadline-bound — lighter budget `ceil(mcqBudget × 0.4)`, for variety/pacing only.
+   *(User's words: "keep a daily of x number so that i finish all the mcqs in next 8 weeks" · "8 weeks
+   and I can keep changing the deadline".)*
+3. **Overdue avalanche = capped per app-open** (`dueBurst`, default 60) — a returning-after-a-gap user
+   gets a manageable burst, not a 200-card wall; the rest roll forward.
+   All three numbers are A7-tunable knobs (`FeedScheduler.Config`).
+
+**Explicit sort/filter bypasses the engine** → A2's proven `FeedRepository.page` path (Acceptance 4
+untouched). `FeedViewModel.usesEngine` = `sort==SMART && filter.isAll`.
+
+**Verified (real output, not claimed):** JVM `FeedSchedulerTest` **10/10, 0 skipped**; instrumented
+`FeedSchedulerRealPackTest` on the real 32,957-item pack **`OK (5 tests)`** via `am instrument -r`
+(never `connectedAndroidTest` — it wipes the fixture); `verifyOfflineGuarantees` green, **zero new
+deps**; live smoke on `emulator-5554` — the "Smart" feed renders real cards (5★ RA/HLA MCQ leads,
+true-black), no crash in logcat. **A design pass is still owed at A7** (home page, subject/PYQ redesign,
+tags-to-bottom, flashcard/reel differentiation, tap-anywhere) — A3 is the engine, not new visuals.
+
+**Resume point:** A3 done, committing on `dev`. **Next stage to build = A4 (Topic Dossier reader, §8
+A4)** — Library/Search screen, `topic_pages.body_md` as one long scrollable page with inline diagrams +
+collapsible `topic_sections` + jump-nav; pure render, nothing generated. Then A5 → A6 → A7 (design pass).

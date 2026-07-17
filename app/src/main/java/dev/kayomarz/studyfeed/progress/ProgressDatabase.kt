@@ -227,4 +227,12 @@ interface ProgressDao {
 
     @Query("SELECT * FROM blob_reads WHERE blob_id = :blobId")
     suspend fun blobRead(blobId: Long): BlobRead?
+
+    // ---- A3: feed-ordering engine state (the recent-type ring buffer, drip counters, cursors) -------
+
+    @Query("SELECT value FROM feed_state WHERE key = :key")
+    suspend fun feedState(key: String): String?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putFeedState(state: FeedState)
 }
