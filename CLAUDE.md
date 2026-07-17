@@ -49,6 +49,14 @@ build from the CLI with no IDE-only config.
 > ship without them: an app that assumes blobs exist because Part 1 had them **cannot swap its
 > database**. Test both directions — full pack AND a synthetic trimmed pack, same binary.
 
+> ⚠ **Never substring-match an AndroidManifest — PARSE it.** (Promoted from the PLAYBOOK ledger after
+> the same mistake landed **twice**: A0, then A1.) This applies to *any* tool or language — `grep`, `rg`,
+> Python `in`/`.count()`, `Select-String` — and to throwaway checks exactly as much as to committed code.
+> The manifest's **comments are part of the file**, and ours deliberately quotes the very strings you'd
+> search for (`android.permission.INTERNET`, `<service>`) inside a "DO NOT ADD, EVER" block. A substring
+> hit **cannot tell a live element from a comment forbidding it**. Corollary: if a hand-rolled check
+> contradicts `verifyOfflineGuarantees`, **suspect your check first** — the guard parses.
+
 **Codebase map:** scan `.claude/INDEX.md` FIRST — it says what every file does and how the
 system works. Navigate by the map, not by exploratory greps; keep it true in the same commit
 as any file add/move/repurpose.

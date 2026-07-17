@@ -6,6 +6,9 @@ plugins {
     // kotlin-android alongside it is a hard error ("not compatible with the new DSL").
     // Built-in Kotlin replaces kotlin-android ONLY; the Compose compiler is still its own plugin.
     alias(libs.plugins.compose.compiler)
+    // KSP2 — Room's annotation processor (A1). kapt is a HARD ERROR under AGP 9's built-in Kotlin and
+    // KSP1 doesn't support Kotlin 2.4.10 / AGP 9.3.0, so KSP2 is the only supported path, not a choice.
+    alias(libs.plugins.ksp)
     // The offline/no-background guard (buildSrc). Not optional, not skippable: it hangs itself off
     // every assemble task, so there is no way to build an APK that violates §8 A0.
     id("studyfeed.offline-guarantees")
@@ -46,6 +49,11 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0-a0"
+
+        // Instrumented tests (A1). AndroidJUnitRunner ships in androidx.test:runner, which is an
+        // androidTestImplementation dep — it is NOT on the app's runtime classpath and never reaches
+        // the shipped APK, so the offline guard's denylist is unaffected.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -115,5 +123,23 @@ dependencies {
     // NOT networking) — the denylist in buildSrc must not false-positive on those.
     implementation(libs.fsrs)
 
+    // Room — progress_<EXAM>.db ONLY (plan D1). The content pack is read with raw SQLite and ATTACHed
+    // on a dedicated read-only connection (plan D4), because ATTACH is per-connection and Room POOLS
+    // connections: a pooled ATTACH is invisible to the next query. Do not "simplify" the pack onto
+    // Room — that is the bug D4 exists to avoid. NOTE: no room-ktx (merged into room-runtime at 2.7.0).
+    implementation(libs.room.runtime)
+    ksp(libs.room.compiler)
+
     testImplementation(libs.junit)
+
+    // Instrumented tests: SQLite/Room behaviour has no JVM implementation, so it can only be observed
+    // on a real Android image. Pure logic stays in JVM tests (plan D7); these cover the I/O.
+    androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.core)
+    // KSP is configured PER SOURCE SET: `ksp(...)` above covers `main` ONLY. Without this line, a
+    // @Database declared in an androidTest fails at RUNTIME, not build time, with a baffling
+    // "ClassNotFoundException: ..._Impl" — the processor simply never ran for this source set.
+    kspAndroidTest(libs.room.compiler)
 }

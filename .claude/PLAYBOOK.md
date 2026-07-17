@@ -1486,7 +1486,22 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   AndroidManifest.xml that lists the forbidden items as text.
   **Fix/prevention:** any structural check over XML/code must parse the format (e.g.
   `javax.xml.parsers.DocumentBuilder`), never regex raw text. A guard that cries wolf gets
-  switched off. (seen 1x)
+  switched off.
+  **2026-07-17 recurrence (stage A1):** repeated in a different language on the same file. After
+  adding Room and stripping its injected `MultiInstanceInvalidationService`, I hand-verified the
+  merged manifest with Python substring checks (`'permission.INTERNET' in src`,
+  `src.count('<service')`) instead of trusting `verifyOfflineGuarantees` — it "found" INTERNET +
+  a `<service>` + a `<receiver>` that didn't exist, matching the same DO-NOT-ADD warning comment
+  again. Re-parsing with `ElementTree` (comments aren't elements) confirmed the guard was right
+  and my check was wrong. It recurred because the original entry read as advice about how the
+  *task's own code* should check the manifest, not about any ad-hoc/manual verification done
+  afterwards — "grep" was treated narrowly (the shell tool) rather than as "any substring match
+  over manifest text" (grep, rg, Python `in`/`.count()`, Select-String, all equally guilty).
+  **Fix/prevention:** never substring-match manifest XML in ANY language or tool — parse it
+  (`ElementTree`/`DocumentBuilder`/etc.), full stop, whether the check is committed task code or
+  a one-off verification. Corollary: when a hand-rolled check contradicts the build-enforced
+  guard, suspect the hand-rolled check first — the guard parses. Promoted to a one-line rule in
+  `CLAUDE.md` (project) per the (seen 2x) rule. (seen 2x)
 
 - **2026-07 · `keytool` defaults to legacy JKS — always pass `-storetype PKCS12`.** Generating an
   Android signing keystore with `-storetype JKS` triggers "The JKS keystore uses a proprietary
@@ -1524,3 +1539,16 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   issuetracker #295373352, open/unshipped) — only fix is update Studio or downgrade AGP. On any
   IDE version complaint, confirm with `gradlew` from a terminal FIRST, before touching a pin. Full
   compat table: playbook "Android build toolchain" note, §8. (seen 1x)
+
+- **2026-07 · Transcribe a docs-researcher's exact version string VERBATIM — never reformat it to
+  match a remembered pattern.** `docs-researcher` correctly reported "KSP 2.3.10" for Kotlin
+  2.4.10. Writing it into `libs.versions.toml`, I "knew" KSP versions are `<kotlin>-<ksp>` (true
+  for KSP1, e.g. `2.0.21-1.0.28`) and silently rewrote it to `2.4.10-2.3.10` — a version that
+  doesn't exist. Build failed: "Plugin ... version '2.4.10-2.3.10' was not found." Root cause: KSP
+  changed its scheme at KSP2 (>=2.3.0) to plain standalone semver, decoupled from Kotlin — the
+  research was correct and I overrode it with a stale mental model, defeating the entire point of
+  having invoked the researcher.
+  **Fix/prevention:** when a researcher/doc gives an exact version string, write it byte-for-byte;
+  if it "looks like the wrong format," that's a signal the scheme changed, not a typo to correct.
+  Before pinning any dependency version, confirm it exists in the repo's `maven-metadata.xml`
+  (e.g. `curl .../maven-metadata.xml | grep '<version>2.3.10'`). (seen 1x)

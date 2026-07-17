@@ -62,6 +62,29 @@
         <receiver
             android:name="androidx.profileinstaller.ProfileInstallReceiver"
             tools:node="remove" />
+
+        <!--
+          Room (A1) injects this <service> into the merged manifest unconditionally — it is declared
+          in room-runtime's own manifest, so it arrives the moment Room is on the classpath. Nobody
+          asked for it. `verifyOfflineGuarantees` caught it the first time Room was added and FAILED
+          the build, which is precisely the guard doing its job (same story as the profileinstaller
+          receiver above: libraries inject background components behind your back).
+
+          It is removed here, deliberately, and removing it is safe rather than merely convenient:
+          MultiInstanceInvalidationService exists ONLY to propagate Room invalidation events BETWEEN
+          PROCESSES, and it does nothing unless a RoomDatabase.Builder explicitly opts in via
+          enableMultiInstanceInvalidation(). StudyFeed is single-process by construction — one
+          Activity, zero services, zero providers of our own (§8 A0 / §12) — so there is no second
+          process to invalidate, we never call that builder method, and we never will. The service
+          would be dead code with a manifest entry, i.e. pure surface area.
+
+          If a future stage ever genuinely needs cross-process Room invalidation, that is a §12
+          decision for the user, not a line to quietly delete: it would mean the app had grown a
+          second process, which the offline/no-background contract does not currently allow.
+        -->
+        <service
+            android:name="androidx.room.MultiInstanceInvalidationService"
+            tools:node="remove" />
     </application>
 
 </manifest>

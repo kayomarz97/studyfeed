@@ -651,3 +651,81 @@ violation.** The real test targets resources/constants/layouts (parse `strings.x
 literal equals an exam name). Corrected in the plan's acceptance section.
 
 **Next:** the ATTACH spike on the emulator (plan step 1) — nothing else gets built on D4 until it passes.
+
+### 2026-07-17 — Room lands, and the ATTACH spike PASSED (D4 survives falsification)
+
+**User directive:** *"do everything on laptop as I can connect external display and figure things out, do
+everything unless there's a manual gate. keep the mistake logs."* So: emulator (`Medium_Phone_API_36.1`,
+API 36.1 = our compileSdk), autonomous, stopping only at real ⛔ gates. **The physical phone is out of
+scope entirely** — see D6. ⚠ One thing flagged once and not re-litigated (the user's call): **an external
+monitor is not an AMOLED panel.** `#000000` is *pixels off* on AMOLED and *backlit grey* on LCD, so A2
+must not claim the AMOLED look is *verified* on a non-AMOLED screen.
+
+**✅ THE ATTACH SPIKE PASSED — 6/6 on a real Android image. D4 stands; build the data layer on it.**
+The spike was written to **falsify** D4, not to confirm it (`app/src/androidTest/.../spike/AttachSpikeTest.kt`
+— **throwaway, delete when the real data layer lands**). Every hostile case held:
+
+| Attempt to break D4 | Result |
+|---|---|
+| Does Room *actually* default to WAL? (precondition — if not, the concern was moot) | **WAL confirmed** |
+| Cross-DB `JOIN` over `pack.feed_items` + `main.fsrs_cards` | **works** |
+| Reader pinned to a stale snapshot after Room commits? | **sees later commits** — no staleness |
+| Room's writer blocked while the attached reader is open? | **50 inserts, unblocked** |
+| Does the ATTACH vanish? (**the pooling failure mode**) | **survived 100 queries** |
+| Is the reader *genuinely* read-only? (D4's no-contention argument rests on it) | **OS refuses its writes** |
+
+The stale-read case mattered most: a pinned snapshot would have shown **outdated progress with nothing
+looking wrong** — worse than an error. **Emulator proves CORRECTNESS only** (same framework, same
+libsqlite); throughput under an attached DB (the javadoc's "no parallel queries") is still **unmeasured**
+and needs a real device. Never quote an emulator timing as a device timing.
+
+**Room 2.8.4 + KSP 2.3.10 + AGP 9 built-in Kotlin BUILDS** — the research's biggest unverified claim, now
+confirmed empirically rather than by citation (`assembleDebugAndroidTest`, 51 tasks executed).
+
+**⚠ THE GUARD CAUGHT A REAL VIOLATION — Room injects a background service.** The moment Room hit the
+classpath, `verifyOfflineGuarantees` **failed the build**:
+`✗ <service> androidx.room.MultiInstanceInvalidationService — the app must do no background work (§12)`.
+Nobody asked for it; `room-runtime`'s own manifest declares it unconditionally — **exactly** the
+profileinstaller story from A0 (libraries inject background components behind your back). **Stripped via
+`tools:node="remove"` with written justification**, and removal is *safe*, not merely convenient: that
+service exists **only** to propagate Room invalidation **between processes** and does nothing unless a
+builder calls `enableMultiInstanceInvalidation()`. StudyFeed is single-process by construction (one
+Activity, zero services/receivers), so there is no second process, and we never call it. If a future
+stage ever needs it, that is a **§12 decision for the user** — not a line to quietly delete, because it
+would mean the app grew a second process. **This is A0's guard paying for itself: a violating APK could
+not be built.** Verified after the fix by PARSING both merged manifests: service NONE · receiver NONE ·
+uses-permission only `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` (app-scoped, AGP-injected, **not**
+network) · provider only the allowlisted `androidx.startup.InitializationProvider`.
+
+**🔴 MISTAKES LOGGED (per the user's standing instruction) — both now in the PLAYBOOK ledger:**
+
+1. **I corrupted a verified answer at the transcription step.** `docs-researcher` correctly reported
+   **KSP 2.3.10**. I wrote `ksp = "2.4.10-2.3.10"` — silently reformatting it to the `<kotlin>-<ksp>`
+   pattern I "knew", and writing a confident comment asserting that format. Build failed: *"Plugin
+   [com.google.devtools.ksp, version 2.4.10-2.3.10] was not found"*. **Root cause: KSP changed its
+   versioning at 2.3.0.** KSP1 = `<kotlin>-<ksp>` (…2.2.21-2.0.5); **KSP2 (≥2.3.0) = plain standalone
+   semver, decoupled from Kotlin** — that decoupling is *why* KSP1 stopped at Kotlin 2.2.x. Maven
+   Central confirms no `2.4.10-*` exists; `<latest>`/`<release>` = `2.3.10`. **The failure wasn't
+   "didn't research" — it was "researched, then overrode the result with memory at the last step",
+   which wasted the research at the exact moment it was meant to pay off.** Rules: transcribe verified
+   versions **verbatim**; if the answer looks mis-formatted, the *format changed* — verify, don't
+   correct; confirm any pin exists in `maven-metadata.xml` before writing it.
+2. **I re-made a mistake already in this repo's ledger — "never grep a manifest, parse it" (now
+   seen 2x → PROMOTED to a one-line rule in `CLAUDE.md`).** Checking my own service-strip, I ran Python
+   `'permission.INTERNET' in src` over the merged manifest. It reported INTERNET **PRESENT**,
+   contradicting the guard. **It matched MY OWN WARNING COMMENT** — our manifest's "DO NOT ADD, EVER"
+   block literally quotes `<uses-permission android:name="android.permission.INTERNET" />`. Parsing gave
+   the truth (absent). **Why it recurred despite being logged:** the A0 entry read as advice about the
+   *guard's implementation*, so I applied it to committed task code and not to my own ad-hoc check — and
+   I read "grep" as *the shell tool* rather than *any substring match*. The rule is now general: **never
+   substring-match manifest XML in any tool or language; and if a hand-rolled check contradicts the
+   build-enforced guard, suspect the check first — the guard parses.**
+
+**Also fixed (ordinary iteration, noted in-code not in the ledger):** a `@Database` in `androidTest`
+failed at RUNTIME with `ClassNotFoundException: ..._Impl` — **KSP is configured per source set**;
+`ksp(...)` covers `main` only, so `kspAndroidTest(...)` is required. Comment left at the dependency.
+
+**Verified green:** `verifyOfflineGuarantees` — 122 debug / 118 release modules, none forbidden, no
+network permission, no background component. `testDebugUnitTest --rerun-tasks` — **15 tests, 0 failures**.
+`connectedDebugAndroidTest` — **6 tests, 0 failures** (counts read from the XML reports, never from
+"BUILD SUCCESSFUL").
