@@ -41,6 +41,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.kayomarz.studyfeed.pack.PackImporter
 import dev.kayomarz.studyfeed.ui.PackUiState
+import dev.kayomarz.studyfeed.ui.dossier.DossierScreen
+import dev.kayomarz.studyfeed.ui.dossier.DossierViewModel
+import dev.kayomarz.studyfeed.ui.dossier.ItemDetailScreen
+import dev.kayomarz.studyfeed.ui.dossier.LibraryScreen
 import dev.kayomarz.studyfeed.ui.feed.FeedScreen
 import dev.kayomarz.studyfeed.ui.theme.StudyFeedTheme
 
@@ -70,21 +74,51 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * Top-level routing between the two A-stage screens:
- *  - **Feed** (A2) — the app opens here once a pack is imported; it IS the app.
+ * Top-level routing between the A-stage screens:
+ *  - **Feed** (A2/A3) — the app opens here once a pack is imported; it IS the app.
  *  - **Manage** (A1) — import/switch packs and export/import progress.
+ *  - **Library → Dossier → Reference** (A4) — search a topic, read its dossier, open a related item.
  *
- * The feed reports "no pack" by calling back, which flips to Manage; Manage has an explicit way back.
- * A2 owns the feed and A1 the pack management — deliberately separate screens, one job each.
+ * ⚠ This is a deliberately simple `when`-over-enum router. **Global navigation (a home page, bottom
+ * tabs) is an A7 redesign item (backlog 2.1)** — A4 adds the minimal reachable path, no nav chrome yet.
+ * The A4 screens share ONE activity-scoped [DossierViewModel] so its loaded dossier/item state persists
+ * across the Library→Dossier→Reference hops (and back).
  */
-private enum class Screen { Feed, Manage }
+private sealed interface Screen {
+    data object Feed : Screen
+    data object Manage : Screen
+    data object Library : Screen
+    data class Dossier(val topicPageId: Long) : Screen
+    data class ItemDetail(val type: String, val refId: Long) : Screen
+}
 
 @Composable
 private fun Root() {
-    var screen by remember { mutableStateOf(Screen.Feed) }
+    var screen by remember { mutableStateOf<Screen>(Screen.Feed) }
+    // Remembered so the Reference viewer's Back returns to the dossier it was opened from.
+    var currentDossierId by remember { mutableStateOf(0L) }
+    val dossierVm: DossierViewModel = viewModel()
+
     when (screen) {
-        Screen.Feed -> FeedScreen(onNoPack = { screen = Screen.Manage })
+        Screen.Feed -> FeedScreen(
+            onNoPack = { screen = Screen.Manage },
+            onOpenLibrary = { screen = Screen.Library },
+        )
         Screen.Manage -> PackScreen(onOpenFeed = { screen = Screen.Feed })
+        Screen.Library -> LibraryScreen(
+            vm = dossierVm,
+            onOpenDossier = { id -> currentDossierId = id; dossierVm.openDossier(id); screen = Screen.Dossier(id) },
+            onBack = { screen = Screen.Feed },
+        )
+        is Screen.Dossier -> DossierScreen(
+            vm = dossierVm,
+            onOpenItem = { type, refId -> dossierVm.openItem(type, refId); screen = Screen.ItemDetail(type, refId) },
+            onBack = { screen = Screen.Library },
+        )
+        is Screen.ItemDetail -> ItemDetailScreen(
+            vm = dossierVm,
+            onBack = { screen = Screen.Dossier(currentDossierId) },
+        )
     }
 }
 

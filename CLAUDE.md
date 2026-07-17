@@ -64,6 +64,16 @@ build from the CLI with no IDE-only config.
 > **zero**). Use the in-house renderer; treat `*`, `<`, `>` as **literal**. This looks like a tidy-up
 > waiting to happen — **it is not**. It is about the corpus, not about effort.
 >
+> ⚠ **TWO corpora, TWO renderers — do not conflate them (PATCH 05, A4).** The rule above is for the
+> **card `*_md` fields** (MCQ/atom → `PackMarkdown`). The **dossier `topic_pages`/`topic_sections`
+> body_md** were compiler-**assembled** and use a richer set: `#`/`##` headings, `**bold**` (163k pairs),
+> backtick `` `citations` `` — so they get a **separate in-house `DossierMarkdown`** (still NO library).
+> **The hazard persists there** (measured 13 `N * 10^9` + 20 `DRB1*04:01` alleles + `<`/`>` thresholds):
+> `DossierMarkdown` matches **`**bold**` double-star pairs ONLY** and keeps every lone `*`/`<`/`>`
+> literal. Also: `topic_pages.body_md` **is** the full page = preamble + the same `## ` sections
+> `topic_sections` holds **verbatim** — render the preamble + `topic_sections`, **never both** (or every
+> fact doubles).
+>
 > ⚠ **No image/network loader (Coil, Glide) — figures are LOCAL files.** `BitmapFactory.decodeFile` + an
 > LRU. Coil's standard artifact pulls OkHttp; the guard's denylist **would fail the build, correctly**.
 >

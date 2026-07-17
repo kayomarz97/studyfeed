@@ -48,11 +48,11 @@ of A2 (markdown renderer, filters, sort, star/tag, blob quiz-back are all pure S
   code. Fix: push figures in smaller batches, or accept it (a real user imports figures via SAF with the
   pack, where it's a one-time local copy, not wifi).
 
-**Next stages to BUILD (functional), in order:** ~~A3 (feed ordering engine)~~ **✅ DONE 2026-07-17**
-(engine `feed/FeedScheduler.kt`; locked policy = blended due-led / MCQ-paced editable-deadline / burst
-cap; 10 JVM + 5 real-pack tests; see JOURNAL "A3 feed ordering engine COMPLETE") → **A4 (topic dossier
-reader) ← NEXT** → A5 (concept map) → A6 (mistakes/mastery/stats) → A7 (settings + **the design pass
-below**).
+**Next stages to BUILD (functional), in order:** ~~A3 (feed ordering engine)~~ **✅ DONE** (engine
+`feed/FeedScheduler.kt`) → ~~A4 (topic dossier reader)~~ **✅ DONE 2026-07-17** (`dossier/` +
+`ui/dossier/`; **PATCH 05**: dossier corpus needs its own `DossierMarkdown`; 9 JVM + 4 real-pack tests;
+see JOURNAL "A4 Topic Dossier reader COMPLETE") → **A5 (concept map) ← NEXT** → A6 (mistakes/mastery/
+stats) → A7 (settings + **the design pass below**).
 
 ---
 

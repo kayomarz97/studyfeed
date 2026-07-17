@@ -1252,3 +1252,42 @@ tags-to-bottom, flashcard/reel differentiation, tap-anywhere) — A3 is the engi
 **Resume point:** A3 done, committing on `dev`. **Next stage to build = A4 (Topic Dossier reader, §8
 A4)** — Library/Search screen, `topic_pages.body_md` as one long scrollable page with inline diagrams +
 collapsible `topic_sections` + jump-nav; pure render, nothing generated. Then A5 → A6 → A7 (design pass).
+
+### 2026-07-17 — **A4 Topic Dossier reader COMPLETE** (+ a real markdown-corpus finding: "PATCH 05")
+
+Built the Library/Search + Dossier reader + in-place reference viewer (§8 A4). Pure pack reads
+(`dossier/DossierRepository.kt`, pack-only read-only), reusing the feed's `FigureImage`/`Importance`
+composables. **Locked (user):** search matches **name/alias + full body text**; a related MCQ/flashcard
+opens in an **in-place read-only viewer** (reuses A2 `FeedCards`, writes no FSRS). Entry = a **Search**
+button in the feed top bar (global nav = A7 redesign, backlog 2.1). 8,194 dossiers, all fully populated.
+
+**⚠ FINDING — the dossier corpus is a DIFFERENT markdown vocabulary from the card fields (call it
+PATCH 05). A future session MUST NOT conflate them:**
+- The **card `*_md` fields** (MCQ/atom) that PATCH 04 measured use ONLY newlines + `- ` bullets — so
+  `PackMarkdown` treats `*`/`<`/`>`/backtick as **literal**. That rule is CORRECT for cards.
+- The **dossier `topic_pages`/`topic_sections` body_md** were **assembled by the compiler** and use a
+  richer set: `#`/`##` **headings** (8,194 / 28,990), **`**bold**`** (163,107 pairs), backtick-wrapped
+  **`` `citations` ``** (every field). So the card renderer left them RAW on screen (`**`, `##` visible).
+- **BUT the PATCH 04 hazard STILL LIVES in the dossier corpus** — measured **13 `N * 10^9`
+  multiplications + 20 `DRB1*04:01` alleles**, plus `<` 565 / `>` 999 thresholds. So the fix is a
+  **separate, in-house `DossierMarkdown`** (NO library — same standing rule) that renders `**bold**`
+  (**double-star pairs ONLY**), `## ` headings and backtick citations, while **every lone `*` and every
+  `<`/`>` stays literal**. Proven on device: `HLA-DRB1*04:01 and DRB1*04:04` renders with its asterisks
+  intact and correctly bolded. 9 JVM tests (`DossierMarkdownTest`) lock the safety.
+- **Structural finding:** `topic_pages.body_md` IS the full page = a preamble + the SAME `## ` sections
+  that `topic_sections` holds **verbatim** (section body ⊂ page body, headings 100% overlap). So the
+  reader renders the **preamble** from `body_md` (title/subtitle stripped of the `# title`) + the
+  **collapsible sections from `topic_sections`** — NEVER both, or every fact shows twice.
+
+**Verified:** `DossierMarkdownTest` 9/9 JVM (0 skipped) — bold, multiplication/allele/threshold LITERAL,
+backtick strip, headings/bullets/notes. `DossierRealPackTest` **OK (4 tests)** on the real pack — library
+importance-first, name/alias+body search (name-hits rank first, gibberish empty), a dossier loads full
+(sections + resolvable figures, no repeated `## ` heading), a related MCQ opens read-only (no FSRS).
+`verifyOfflineGuarantees` green, **zero new deps** (no icons lib either — text affordances). Live smoke on
+`emulator-5554`: Search → Library (importance-sorted, cross-subject) → rheumatoid-arthritis dossier
+renders bold facts + muted citations + safe alleles, sections once each.
+
+**Resume point:** A4 done. **Next = A5 (Concept map, §8 A5)** — force-directed graph on Compose Canvas,
+node size = centrality, colour = importance, tap node → summary + typed edges → "Quiz me" pulls
+`interlink_quizzes`. Then A6 → A7 (design pass). A3+A4 committed on `dev`, **not yet pushed** (user:
+"build A4, push later").

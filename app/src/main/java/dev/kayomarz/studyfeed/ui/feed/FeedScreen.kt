@@ -23,6 +23,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,6 +51,7 @@ import dev.kayomarz.studyfeed.feed.ImportanceSignals
 fun FeedScreen(
     vm: FeedViewModel = viewModel(),
     onNoPack: () -> Unit,
+    onOpenLibrary: () -> Unit = {},
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
 
@@ -57,15 +59,22 @@ fun FeedScreen(
         !ui.hasPack -> LaunchedEffect(Unit) { onNoPack() } // hand off to the import screen
         else -> Column(Modifier.fillMaxSize()) {
             // The filter/sort bar rides above the pager and respects the status-bar inset. It stays
-            // visible while a filter narrows the deck to empty, so the user can always undo it.
-            FeedControls(
-                query = ui.query,
-                subjects = ui.subjects,
-                tags = ui.tags,
-                onFilter = vm::setFilter,
-                onSort = vm::setSort,
-                modifier = Modifier.statusBarsPadding().padding(top = 4.dp),
-            )
+            // visible while a filter narrows the deck to empty, so the user can always undo it. A search
+            // icon leads it → the Library/dossier reader (A4). (Global nav is redesigned at A7.)
+            Row(
+                Modifier.statusBarsPadding().padding(top = 4.dp).fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onOpenLibrary) { Text("Search") }
+                FeedControls(
+                    query = ui.query,
+                    subjects = ui.subjects,
+                    tags = ui.tags,
+                    onFilter = vm::setFilter,
+                    onSort = vm::setSort,
+                    modifier = Modifier.weight(1f),
+                )
+            }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when {
                     ui.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
