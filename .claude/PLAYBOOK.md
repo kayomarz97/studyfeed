@@ -1634,3 +1634,15 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   comments, test fixtures. When an argument needs an example, invent a synthetic FORM (e.g.
   `<count> * 10^9/L`, `> <N>: <interpretation>`) that cannot be a substring of any real pack row —
   never a real excerpt, no matter how short or "obviously fair use." (seen 1x)
+
+- **2026-07 · `git push` and `secret-scanner` are one inseparable step — no exception for "already
+  scanned this session."** At A2, on a "push and continue" request, I ran `git push origin dev`
+  straight after committing without re-running `secret-scanner`, because I'd run it before every
+  other push that session and was in flow. This particular commit was higher-risk than most: minutes
+  earlier a real copyrighted `text_blob` passage (HLA-DR4) had been on screen, and JOURNAL.md quoted
+  a string from it (`DRB1*04:01`). A retroactive scan came back clean (standard WHO/IMGT-HLA
+  nomenclature, not authored prose) — no harm, but that was luck, not process, and it repeated the
+  same mistake class already caught pre-push earlier that session (the entry above).
+  **Fix/prevention:** never type `git push` without the immediately-preceding `secret-scanner` run
+  on THAT push's commits — each push carries its own new diff and its own new risk; "scanned
+  earlier," "just docs," and "in flow" are not exceptions. (seen 1x)

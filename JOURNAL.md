@@ -1161,3 +1161,39 @@ correctly independent (the blob was unstarred while the interlink stayed starred
 
 `verifyOfflineGuarantees` green (124/120, no new dep). A2 remaining: figures-on-cards (235MB deferred),
 on-phone long-MCQ scroll re-check.
+
+### 2026-07-17 — ⛔ COMPACTION HANDOFF: A2 done-enough, A7 design backlog captured, resume A3→A7
+
+**The user is compacting the conversation here.** Full resume + design backlog:
+**`.claude/plans/2026-07-17-a7-design-backlog-and-resume.md` — READ IT FIRST on resume.**
+
+**Long-MCQ nested scroll: CONFIRMED WORKING on the phone** (user checked on the S23 Ultra). The last
+open on-device risk for A2 is closed — the card's internal scroll scrolls content, the pager takes over
+at the edges.
+
+**User's design feedback on the A2 feed (2026-07-17) — BUILD FUNCTIONAL THROUGH A7, then execute as a
+dedicated A7 design pass. Do NOT implement now.** Captured in full (with options + ASCII diagrams +
+pros/cons) in the backlog doc. Summary:
+1. A **landing/home page** on app open showing "things still left" (due/progress) — currently opens
+   straight to the feed. (Ties into A6 stats.)
+2. **Subject** + **PYQ** presentation reimagined — the current grey label + plain PYQ pill are "not the
+   way I imagined". PYQ is the strongest yield signal and should stand out more. ⚠ colour already encodes
+   importance, so subject can't be colour-coded.
+3. **Tags (Careless slip etc.) move to the BOTTOM of the card, AFTER the answer**, within thumb reach
+   (currently top, always visible). Clear + likely a safe early A7 change.
+4. **Flashcard vs Reel** feel redundant to the user ("one and the same"). DEEPER — types come from the
+   dormant compiler; the app must not merge/invent types (§runtime/PATCH 04). Propose UI-only
+   differentiation + study-mode presentation (mixed/random vs structured/by-subject); do NOT wake the
+   compiler without explicit go-ahead.
+5. **Tap ANYWHERE to reveal** (not just the Reveal button).
+
+**THE PLAN:** build **A3 → A4 → A5 → A6 → A7 functionally** (§8 order, standing order #2), keep the design
+backlog, then do all the design/layout edits at A7. **Keep asking the user in chat with options +
+pros/cons + diagrams.**
+
+**A2 open technical item (non-blocking):** figures-on-cards not deployed — code done + tested, but the
+235 MB figures push kept timing out over wifi-adb (a real SAF import copies them locally, one-time). Push
+in batches or accept.
+
+**Resume point:** pushed through `4104072` on `dev`, in sync with origin. Next stage to build = **A3
+(feed ordering engine)** — replaces `FeedRepository`'s Smart sort, consumes `blob_reads.reread_due`.
