@@ -1117,3 +1117,23 @@ this filter" with the bar still visible so it's always undoable.
 `verifyOfflineGuarantees` green (124/120, **no new dependency** — filters/sort are pure SQL + Compose).
 JVM 37/0. Still to do in A2: one-tap star/tag ON cards, blob quiz-back timing, figures-on-cards (235MB
 push deferred), and the phone re-check of long-MCQ scroll.
+
+### 2026-07-17 — A2 one-tap star + tag (Acceptance 5), round-tripped on device
+
+Every card now carries a ⭐ star (top-right) and the pack's tag chips (from `tag_defs`), one tap to
+apply/remove. State is read from the progress DB as each card appears (`loadMarks`) and written
+off-thread on tap.
+
+**Acceptance 5 verified end-to-end on-device** (not just at the DAO): tapping the star wrote
+`stars=(interlink, 29963)`; tapping "Must revisit" wrote `item_tags=(interlink, 29963, 'revisit')` —
+both keyed to the same card, both persisted (DB pulled and inspected). Because the filters query these
+exact tables with `EXISTS` across the ATTACH, the star/tag → "Starred"/Tag-filter loop is closed: a
+starred card now shows up under the Starred chip. Visually confirmed: the five tag chips render
+("Careless slip · Knowledge gap · Mixed up options · Guessed · Must revisit") and the star toggles.
+
+Threaded via `CardActionsState` through all five card composables (star/tag are progress-side, never
+pack content). `verifyOfflineGuarantees` green (124/120, no new dep). JVM 37/0.
+
+**A2 status:** five card types ✅ · FSRS wiring ✅ · importance/PYQ chrome + why-sheet ✅ · filters + sort
+(Acceptance 4) ✅ · one-tap star/tag (Acceptance 5) ✅. **Remaining:** blob quiz-back timing (leans into
+A3's ordering), figures-on-cards (235MB push deferred), and the on-phone long-MCQ scroll re-check.

@@ -53,6 +53,7 @@ enum class Rating { AGAIN, HARD, GOOD, EASY }
 @Composable
 private fun CardScaffold(
     card: FeedCard,
+    actions: CardActionsState,
     onImportanceClick: () -> Unit,
     content: @Composable () -> Unit,
 ) {
@@ -65,10 +66,66 @@ private fun CardScaffold(
             .padding(20.dp)
             .verticalScroll(rememberScrollState()),
     ) {
-        CardHeader(card, onImportanceClick)
-        Spacer(Modifier.height(20.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            CardHeader(card, onImportanceClick, Modifier.weight(1f))
+            StarButton(actions.starred, actions.onToggleStar)
+        }
+        Spacer(Modifier.height(12.dp))
+        // One-tap tag chips from the pack's tag_defs (§8 A2). Applied/removed on tap, state from the DB.
+        if (actions.tags.isNotEmpty()) {
+            TagRow(actions)
+            Spacer(Modifier.height(8.dp))
+        }
         content()
         Spacer(Modifier.height(40.dp)) // breathing room above the pager edge
+    }
+}
+
+/** Star + tag state and callbacks passed down to a card. Progress-side, never pack content. */
+data class CardActionsState(
+    val starred: Boolean,
+    val appliedTagKeys: Set<String>,
+    val tags: List<dev.kayomarz.studyfeed.pack.PackDatabase.TagDef>,
+    val onToggleStar: () -> Unit,
+    val onToggleTag: (String) -> Unit,
+)
+
+@Composable
+private fun StarButton(starred: Boolean, onClick: () -> Unit) {
+    val c = if (starred) Color(0xFFFFD54F) else MaterialTheme.colorScheme.onSurfaceVariant
+    Text(
+        text = if (starred) "★" else "☆",
+        color = c,
+        fontSize = 22.sp,
+        modifier = Modifier.clip(RoundedCornerShape(50)).clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    )
+}
+
+@Composable
+private fun TagRow(actions: CardActionsState) {
+    androidx.compose.foundation.layout.FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        actions.tags.forEach { tag ->
+            val on = tag.key in actions.appliedTagKeys
+            val border = if (on) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.surfaceVariant
+            Text(
+                text = tag.label,
+                fontSize = 12.sp,
+                color = if (on) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .border(BorderStroke(1.dp, border), RoundedCornerShape(50))
+                    .background(
+                        if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent
+                    )
+                    .clickable { actions.onToggleTag(tag.key) }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            )
+        }
     }
 }
 
@@ -83,13 +140,14 @@ private fun CardScaffold(
 fun McqCard(
     card: FeedCard.Mcq,
     onImportanceClick: () -> Unit,
+    actions: CardActionsState,
     onAnswered: (chosenIdx: Int, correct: Boolean) -> Unit,
     onRate: (Rating) -> Unit,
 ) {
     var chosen by remember(card.itemId) { mutableStateOf<Int?>(null) }
     val revealed = chosen != null
 
-    CardScaffold(card, onImportanceClick) {
+    CardScaffold(card, actions, onImportanceClick) {
         if (card.keyConflict) {
             KeyDisputedBanner(card.keyConflictNote)
             Spacer(Modifier.height(12.dp))
@@ -204,10 +262,11 @@ private fun KeyDisputedBanner(note: String?) {
 fun FlashcardCard(
     card: FeedCard.Flashcard,
     onImportanceClick: () -> Unit,
+    actions: CardActionsState,
     onRate: (Rating) -> Unit,
 ) {
     var flipped by remember(card.itemId) { mutableStateOf(false) }
-    CardScaffold(card, onImportanceClick) {
+    CardScaffold(card, actions, onImportanceClick) {
         Text(if (flipped) "ANSWER" else "TAP TO REVEAL", fontSize = 11.sp, letterSpacing = 1.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(12.dp))
@@ -239,10 +298,11 @@ fun FlashcardCard(
 fun ReelCard(
     card: FeedCard.Reel,
     onImportanceClick: () -> Unit,
+    actions: CardActionsState,
     onRate: (Rating) -> Unit,
 ) {
     var revealed by remember(card.itemId) { mutableStateOf(false) }
-    CardScaffold(card, onImportanceClick) {
+    CardScaffold(card, actions, onImportanceClick) {
         MarkdownText(card.hookMd, style = MaterialTheme.typography.headlineSmall)
         card.figure?.let { Spacer(Modifier.height(16.dp)); FigureImage(it) }
         if (!revealed) {
@@ -274,9 +334,10 @@ fun ReelCard(
 fun BlobCard(
     card: FeedCard.Blob,
     onImportanceClick: () -> Unit,
+    actions: CardActionsState,
     onRead: () -> Unit,
 ) {
-    CardScaffold(card, onImportanceClick) {
+    CardScaffold(card, actions, onImportanceClick) {
         card.title?.takeIf { it.isNotBlank() }?.let {
             Text(it, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
@@ -298,10 +359,11 @@ fun BlobCard(
 fun InterlinkCard(
     card: FeedCard.Interlink,
     onImportanceClick: () -> Unit,
+    actions: CardActionsState,
     onRate: (Rating) -> Unit,
 ) {
     var revealed by remember(card.itemId) { mutableStateOf(false) }
-    CardScaffold(card, onImportanceClick) {
+    CardScaffold(card, actions, onImportanceClick) {
         Text("CONNECTION", fontSize = 11.sp, letterSpacing = 1.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(12.dp))

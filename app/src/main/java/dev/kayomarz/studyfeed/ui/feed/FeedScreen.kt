@@ -102,9 +102,20 @@ private fun FeedPager(ui: FeedViewModel.Ui, vm: FeedViewModel) {
         flingBehavior = PagerDefaults.flingBehavior(state = pager, snapPositionalThreshold = 0.15f),
     ) { page ->
         val card = ui.cards[page]
+        // Load this card's star/tag state the first time it's shown, so the icons reflect the DB.
+        LaunchedEffect(card.itemType, card.itemId) { vm.loadMarks(card) }
+        val marks = ui.marks[card.itemType to card.itemId] ?: FeedViewModel.CardMarks()
+        val actions = CardActionsState(
+            starred = marks.starred,
+            appliedTagKeys = marks.tagKeys,
+            tags = ui.tags,
+            onToggleStar = { vm.toggleStar(card) },
+            onToggleTag = { vm.toggleTag(card, it) },
+        )
         Box(Modifier.fillMaxSize()) {
             CardBody(
                 card = card,
+                actions = actions,
                 onWhy = { vm.showWhy(card) },
                 onRate = { vm.rate(card, it) },
                 onAnswered = { chosen, correct ->
@@ -120,17 +131,18 @@ private fun FeedPager(ui: FeedViewModel.Ui, vm: FeedViewModel) {
 @Composable
 private fun CardBody(
     card: FeedCard,
+    actions: CardActionsState,
     onWhy: () -> Unit,
     onRate: (Rating) -> Unit,
     onAnswered: (chosenIdx: Int, correct: Boolean) -> Unit,
     onRead: () -> Unit,
 ) {
     when (card) {
-        is FeedCard.Mcq -> McqCard(card, onWhy, onAnswered, onRate)
-        is FeedCard.Flashcard -> FlashcardCard(card, onWhy, onRate)
-        is FeedCard.Reel -> ReelCard(card, onWhy, onRate)
-        is FeedCard.Blob -> BlobCard(card, onWhy, onRead)
-        is FeedCard.Interlink -> InterlinkCard(card, onWhy, onRate)
+        is FeedCard.Mcq -> McqCard(card, onWhy, actions, onAnswered, onRate)
+        is FeedCard.Flashcard -> FlashcardCard(card, onWhy, actions, onRate)
+        is FeedCard.Reel -> ReelCard(card, onWhy, actions, onRate)
+        is FeedCard.Blob -> BlobCard(card, onWhy, actions, onRead)
+        is FeedCard.Interlink -> InterlinkCard(card, onWhy, actions, onRate)
     }
 }
 

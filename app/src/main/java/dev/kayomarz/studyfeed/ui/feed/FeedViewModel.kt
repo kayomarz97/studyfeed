@@ -48,7 +48,12 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
         /** subjects/tags for the filter dropdowns — read from the pack, of course. */
         val subjects: List<PackDatabase.Subject> = emptyList(),
         val tags: List<PackDatabase.TagDef> = emptyList(),
+        /** per-card star/tag state, keyed by (item_type, item_id); loaded lazily as cards appear. */
+        val marks: Map<Pair<String, Long>, CardMarks> = emptyMap(),
     )
+
+    /** A card's star + applied tags (progress-side state, not pack content). */
+    data class CardMarks(val starred: Boolean = false, val tagKeys: Set<String> = emptySet())
 
     private val registry = PackRegistry(app)
     private val fsrs = FsrsBridge()
@@ -143,8 +148,35 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleStar(card: FeedCard) = viewModelScope.launch(Dispatchers.IO) {
         val d = dao ?: return@launch
-        if (d.isStarred(card.itemType, card.itemId)) d.unstar(card.itemType, card.itemId)
-        else d.star(Star(card.itemType, card.itemId, Instant.now().toString()))
+        val nowStarred = if (d.isStarred(card.itemType, card.itemId)) {
+            d.unstar(card.itemType, card.itemId); false
+        } else {
+            d.star(Star(card.itemType, card.itemId, Instant.now().toString())); true
+        }
+        updateMarks(card) { it.copy(starred = nowStarred) }
+    }
+
+    fun toggleTag(card: FeedCard, tagKey: String) = viewModelScope.launch(Dispatchers.IO) {
+        val d = dao ?: return@launch
+        val has = d.tagsFor(card.itemType, card.itemId).contains(tagKey)
+        if (has) d.removeTag(card.itemType, card.itemId, tagKey)
+        else d.addTag(ItemTag(card.itemType, card.itemId, tagKey, Instant.now().toString()))
+        val tags = d.tagsFor(card.itemType, card.itemId).toSet()
+        updateMarks(card) { it.copy(tagKeys = tags) }
+    }
+
+    /** Load the star/tag state for a card the first time it's shown (so the icons reflect the DB). */
+    fun loadMarks(card: FeedCard) = viewModelScope.launch(Dispatchers.IO) {
+        if (_ui.value.marks.containsKey(card.itemType to card.itemId)) return@launch
+        val d = dao ?: return@launch
+        val starred = d.isStarred(card.itemType, card.itemId)
+        val tags = d.tagsFor(card.itemType, card.itemId).toSet()
+        updateMarks(card) { CardMarks(starred, tags) }
+    }
+
+    private fun updateMarks(card: FeedCard, f: (CardMarks) -> CardMarks) {
+        val key = card.itemType to card.itemId
+        _ui.update { ui -> ui.copy(marks = ui.marks + (key to f(ui.marks[key] ?: CardMarks()))) }
     }
 
     fun showWhy(card: FeedCard) = _ui.update { it.copy(whySheetFor = card) }
