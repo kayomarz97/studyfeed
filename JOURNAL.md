@@ -780,3 +780,52 @@ pack is verified" when nothing had been.
    `adb push` to `/data/local/tmp` → `chmod 644` → `run-as <pkg> cp` into `files/` → drive
    `am instrument` **directly** so nothing reinstalls underneath you. Files then land owned by the app's
    UID and are readable. `filesDir` is where an imported pack really lives (D2), so this walks the real path.
+
+### 2026-07-17 — SAF import lands: the app can take a pack in (plan step 4)
+
+**`PackSource.kt` + `PackImporter.kt`.** The app can now import a pack from a user-picked folder into
+`filesDir/packs/<exam_code>/`, verified and cancellable. **30 instrumented tests, 30 RAN, 0 skipped,
+0 failures** (the "RAN" count is now explicit — see the false-green entry above; a skip is not a pass).
+`verifyOfflineGuarantees` green: 122 debug / 118 release, no network permission, no background component.
+
+**Why import copies ~370 MB at all — it is the API, not a preference:** no `SQLiteDatabase.openDatabase`
+overload accepts a `Uri`, only `String`/`File`. A pack the user merely *pointed at* through the picker
+must be physically brought into storage we own before SQLite can read a byte of it.
+
+**The ORDER of the import is most of the design** (each step exists to avoid a specific bad outcome):
+1. **`manifest.json` (3.6 KB) first** — it declares `schema_version`, so a pack this app can never play
+   is refused **before** copying 370 MB of it. A cheap pre-gate; the DB row stays authoritative (§3).
+2. **Space check before writing a byte** — `StorageManager.getAllocatableBytes()` (API 26+ = our exact
+   floor), not `File.getUsableSpace()`: per Google's javadoc it counts reclaimable cache, so it returns
+   a truer figure. `getUsableSpace()` would refuse imports that would actually have worked.
+3. **Copy the DB**, hashing **as it streams** — the file is read once, not twice.
+4. **Verify sha256 against `manifest.json.checksum`** — the **FILE** hash. **NOT**
+   `pack_manifest.checksum` (the content hash over stable_keys), which would never match. The trap from
+   §3.3, now guarded in code.
+5. **Open + gate the real DB** — authoritative.
+6. **Only then copy figures (~235 MB)** — no point moving a quarter-gigabyte of images for a pack we are
+   about to reject.
+7. **Atomic rename into place.** Until that instant nothing exists at the real path, so a crash, a
+   cancel, or a flat battery **cannot leave a half-pack that LOOKS importable** — which is worse than no
+   pack, because it fails later and mysteriously, i.e. mid-study.
+
+**`DocumentsContract`, not `DocumentFile`** — its own javadoc admits "substantial overhead" (a separate
+ContentResolver query per property access). Across 1,121 figures that overhead, not the bytes, would
+dominate. One cursor with an explicit projection lists the whole directory.
+
+**`PackSource` exists for testability, and that is not speculative generality.** A SAF `content://` tree
+URI needs a human tapping a picker, so without the seam the paths that actually matter — corrupt pack,
+cancelled import, atomic rename, cleanup — could only be tested by hand, which means never. With it,
+`FilePackSource` drives all of them. The only untested remainder is one `DocumentsContract` query.
+
+**No background work, by construction:** a plain `suspend fun` that runs while the user watches and dies
+when they leave. It must never become a Service/WorkManager — A0's guard fails the build if anyone tries
+(§12), and that is the guard working, not an obstacle to route around.
+
+**Proven, not asserted:** cancel mid-copy installs nothing and leaves no staging dir · a corrupted pack
+is refused by checksum with a message a human can act on · a too-new pack is refused *before* the big
+copy · re-import replaces content wholesale without stale leftovers · **two exams coexist** (the
+foundation "switch exam" needs) · a pack with **no figures directory imports fine** (D5 — absent ≠
+broken; a future pack may ship without images) · progress reports through to FINALISING.
+
+**Next:** the progress DB (Room) + registry on the now-proven D4 reader, then manifest-driven UI.
