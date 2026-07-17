@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
@@ -104,7 +105,10 @@ private fun PackScreen(onOpenFeed: () -> Unit = {}, vm: PackUiState = viewModel(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        // Inset below the status bar (edge-to-edge on targetSdk 36) so the header isn't clipped,
+        // while the true-black background still fills behind the bar.
+        modifier = Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState())
+            .padding(20.dp),
     ) {
         when {
             ui.importing != null -> ImportingCard(ui.importing!!, onCancel = vm::cancelImport)

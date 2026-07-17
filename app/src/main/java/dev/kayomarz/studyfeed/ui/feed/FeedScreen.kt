@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.PageSize
+import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,6 +68,14 @@ fun FeedScreen(
                 pageSize = PageSize.Fill,
                 // Keep neighbours composed so a swipe reveals a ready card, not a flash of blank.
                 beyondViewportPageCount = 1,
+                // Advance on a SHORT swipe. Default (0.5) needs a slow drag past half the screen —
+                // on-device that felt like "swipe a long distance". 0.15 commits to the next card once
+                // ~15% of the page is dragged, which reads as a natural flick. (Reported by the user,
+                // 2026-07-17, studying on the S23 Ultra.)
+                flingBehavior = PagerDefaults.flingBehavior(
+                    state = pager,
+                    snapPositionalThreshold = 0.15f,
+                ),
             ) { page ->
                 val card = ui.cards[page]
                 Box(Modifier.fillMaxSize()) {

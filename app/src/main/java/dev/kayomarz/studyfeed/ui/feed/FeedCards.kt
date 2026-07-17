@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -58,6 +59,11 @@ private fun CardScaffold(
     Column(
         Modifier
             .fillMaxSize()
+            // The true-black background bleeds full-screen (great on AMOLED), but the CONTENT must sit
+            // below the status bar — otherwise the importance chip is clipped by the notification bar
+            // (reported on-device 2026-07-17; targetSdk 36 forces edge-to-edge). statusBarsPadding()
+            // insets the content only; the black still fills behind the bar.
+            .statusBarsPadding()
             .padding(20.dp)
             .verticalScroll(rememberScrollState()),
     ) {

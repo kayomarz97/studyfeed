@@ -1052,3 +1052,25 @@ chrome, the "why" sheet, the FSRS bridge and the rating write-path — then ran 
 one-tap star/tag on cards, blob quiz-back scheduling, and **the phone pass** — AMOLED true-black on the
 real panel, swipe feel, scroll smoothness (the judgement calls no emulator can make; the phone keeps
 dropping wifi-adb when it sleeps — enable Stay-awake).
+
+### 2026-07-17 — A2 device feedback round 1: swipe distance + status-bar clipping fixed
+
+Studied on the real S23 Ultra panel and the user reported three things:
+- **True black reads well** on the real AMOLED — confirmed, no change needed.
+- **"Couldn't find a long MCQ"** — not a bug: MCQs are mixed in and importance-first puts 5★
+  interlinks/reels at the top; MCQs appear further down. No fix.
+- **Swipe needed too long a travel** (though smooth), and **the 5★ importance chip was clipped behind
+  the notification bar**. Both fixed:
+
+1. **Pager advances on a short swipe.** `VerticalPager`'s default `snapPositionalThreshold` (0.5) needs
+   a slow drag past half the screen to commit — that felt like "swipe a long distance". Set
+   `PagerDefaults.flingBehavior(snapPositionalThreshold = 0.15f)` so ~15% travel flicks to the next card.
+2. **Content insets below the status bar (edge-to-edge fix).** targetSdk 36 forces edge-to-edge, so the
+   card content drew under the status bar and clipped the importance chip. Added `statusBarsPadding()`
+   to the card scaffold AND the manage screen's column — the true-black background still bleeds full
+   behind the bar (good on AMOLED), only the content is inset. Verified on-device: the 5★ chip now sits
+   clear of the clock/battery icons.
+
+Rebuilt + redeployed to the phone; no crash. Still owed on the phone: swipe-feel re-check (the user's
+thumb, not a screenshot), plus the remaining A2 pieces (filters/sort/star/tag, blob quiz-back) and
+figures on cards (the 235MB push timed out over wifi — deferred, affects ~1.7% of cards).
