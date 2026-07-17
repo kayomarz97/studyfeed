@@ -1,6 +1,31 @@
 # A1 — Pack loading (generic): SAF import, schema gate, manifest-driven UI, progress DB, §11e export/import
 
-**Date:** 2026-07-17 · **Branch:** `dev` · **Stage:** §8 A1 (A0 ✅ done) · **Status:** PLAN — no app code written yet
+**Date:** 2026-07-17 · **Branch:** `dev` · **Stage:** §8 A1 (A0 ✅ done) · **Status:** IN PROGRESS
+
+---
+
+## 0. DECISION LOG — every call made, and *why*
+
+> **Standing instruction from the user (2026-07-17):** *"changes/mistakes during the app making are
+> always noted so they don't happen again and why that decision was made."* This log is that record.
+> **Append here the moment a decision is made — never reconstruct it later from memory.** A decision
+> without its *why* is worthless: the next session cannot tell a deliberate constraint from an accident,
+> so it "cleans up" the constraint. Mistakes go to `PLAYBOOK.md`'s ledger via `mistake-tracker`
+> (that is the durable, cross-session record); the cause + rule get summarised here too.
+
+| # | Decision | Why (the part that must survive) | Consequence accepted |
+|---|---|---|---|
+| D1 | **Room for `progress_<EXAM>.db`; raw SQLite for the pack** | Use the typed tool on the DB we own **and will migrate**; the plain tool on the DB we only ever read. Room's value is schema verification + migrations, and only progress has a schema that evolves. | Two access idioms in one codebase; cross-DB joins are hand-written SQL. |
+| D2 | **`filesDir` (app-private) for the imported pack** | The pack is derived from **copyrighted** sources. `filesDir` is the only option other apps cannot read — the same instinct that keeps `compiler/dist/` out of git. | Can't inspect/hand-swap without `adb`; counts against app storage; uninstall costs a 370 MB re-import (pack is reproducible — progress is not; §11e covers that). |
+| D3 | **Pack identity from directory CONTENTS, never filename** | `exam_code` comes from `pack_manifest`. Filename-derived identity is the **"same filename ≠ same file"** trap already in the ledger from C1 — it cost a whole drop's misclassification there. | `SPEC.md` §1's `pack_<EXAM_CODE>/` tree is illustrative, not normative — owed a spec line when A1 lands. |
+| D4 | **Dedicated non-pooled READ-ONLY connection for cross-DB reads** | `ATTACH` is per-connection; Room **pools** connections, so a pooled ATTACH vanishes. A connection we own and never return to a pool cannot lose its ATTACH. It never writes, so it cannot contend with Room's writer. | Rests on a **documented gap** (no official Room+ATTACH doc) ⇒ must be spiked before anything is built on it (D6). |
+| D5 | **Capability detected per pack at runtime; rows authoritative** | *"Use the data"* is a fact about **this** pack; *"never assume the data"* is the rule for **every** pack. Hardcoding "blobs exist" because Part 1 had them = an app that cannot swap its DB = §0 `multi_pack` failing **silently**. | A1 must build a **synthetic trimmed fixture** — today's full pack cannot prove degradation, having nothing missing. |
+| D6 | **Correctness spikes on the EMULATOR now; performance on the PHONE later** | User: *"I would connect phone later once everything is built."* The emulator (`Medium_Phone_API_36.1`, matches compileSdk 36) runs a **real** Android image — same libsqlite, same framework — so an ATTACH/WAL/pooling **correctness** verdict is genuine. It would **lie** about the 370 MB copy and 1,121-file traversal (host disk, no real I/O limits). | Perf numbers + real-device UX deferred, and **explicitly flagged as unverified** until the phone arrives. Never report an emulator timing as a device timing. |
+| D7 | **Order within A1: pure-logic first, I/O behind it** | Without a device, only pure Kotlin is verifiable today — so build the parts that are *provable now* first, and keep I/O in thin adapters behind them. Good design regardless: pure logic stays JVM-testable forever, and A0's tests are already pure JVM. | Some A1 pieces stay untested until the emulator/phone step. **Not a §8 resequencing** — standing order #2 governs STAGES (A0→A1→A2), not the order of work inside A1. |
+
+---
+
+**Date:** 2026-07-17 · **Branch:** `dev` · **Stage:** §8 A1 (A0 ✅ done)
 
 > Read from disk before writing this: `BUILD_PROMPT.md` §8 A1 + §11e (PATCH 02 rewrote them),
 > `spec/SPEC.md` (the contract), `spec/schema.sql`, `CLAUDE.md`, `.claude/INDEX.md`, and the
@@ -281,12 +306,15 @@ Nothing here starts until §3 is answered.
    official, verbatim code; `StorageManager.getAllocatableBytes()` (API 26+, our exact floor) beats
    `File.getUsableSpace()` per Google's javadoc — it counts reclaimable cache.
 
-1. **SPIKE the ATTACH assumption FIRST — throwaway code, on the real phone (§3.7).** Everything else
-   rests on it, and it rests on a documented gap. **Falsify this:** *a dedicated read-only connection
-   with an ATTACH can read `progress_<EXAM>.db` while Room's WAL pool writes it, without error or stale
-   reads.* Pass ⇒ build step 4 on it. Fail ⇒ Kotlin-side join + amend `SPEC.md` §2; **never** "fix" it by
-   disabling WAL. Also measure the real `DocumentsContract` traversal of 1,121 figures here — cheap to
-   learn now, expensive to discover in step 3.
+1. **SPIKE the ATTACH assumption before building on it — throwaway code, on the EMULATOR (§3.7, D4, D6).**
+   Everything else rests on it, and it rests on a documented gap. **Falsify this:** *a dedicated
+   read-only connection with an ATTACH can read `progress_<EXAM>.db` while Room's WAL pool writes it,
+   without error or stale reads.* Pass ⇒ build step 5 on it. Fail ⇒ Kotlin-side join + amend `SPEC.md`
+   §2; **never** "fix" it by disabling WAL — that would degrade every write in the app.
+   - **Emulator is valid for this and only this** (D6): correctness of ATTACH/WAL/pooling is framework +
+     libsqlite behaviour, faithfully reproduced. **It is NOT valid for timing** — the 370 MB copy and the
+     1,121-file `DocumentsContract` traversal must be measured on the **real phone** when it arrives, and
+     until then any number from the emulator is **unverified and must be labelled so**.
 2. **Pack contract layer** — data classes for `pack_manifest`, `subjects`, `tag_defs`; parse both
    representations. No UI. Unit-testable without a device.
 3. **The schema gate** (§3.6) — one constant, refusal messages, the type-parsing. **Tests first**: a v1
@@ -322,8 +350,16 @@ real 32,957-item pack is now on this laptop; the moment it is studied, progress 
 - [ ] A pack imports from a user-picked directory; progress survives a re-import of the same exam.
 - [ ] A `schema_version` newer than `SUPPORTED_SCHEMA_MAX` is **refused with a message naming both
       versions** — no crash, no partial load. Proven with a synthetic v2 pack.
-- [ ] Every exam-facing label comes from `pack_manifest`. **`grep -ri "mrcp" app/src/` returns only the
-      forbidding comment** — enforced by a test, not a promise.
+- [ ] Every exam-facing label comes from `pack_manifest`. **No exam string in any resource, constant, or
+      layout** (§8 A1's actual words) — enforced by a test, not a promise.
+      - ⚠ **Criterion corrected 2026-07-17 — my first draft was wrong.** It said *"`grep -ri "mrcp"
+        app/src/` returns only the forbidding comment"*, which is **stricter than the spec** and which
+        the A1 code itself violates: `PackManifest.kt`/`PackCapabilities` name MRCP **in comments**, to
+        explain *why* it must never be hardcoded. Those comments are the mechanism that keeps the rule
+        alive across sessions — deleting them to satisfy a bad grep would destroy the explanation and
+        protect nothing. **The test must target resources/constants/layouts, not comments** (e.g. parse
+        `strings.xml` + assert no string literal in code equals an exam name). A grep over all of
+        `app/src/` is the wrong instrument: it cannot tell a rule from a violation.
 - [ ] **Swappability proven in BOTH directions with the SAME binary** (§3.1a — the headline acceptance):
       today's full pack offers every card type (blobs/interlink/figures included — **the data exists,
       use it**); a **synthetic trimmed pack** offers fewer, with no dead UI and no crash. Building that

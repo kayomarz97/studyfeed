@@ -574,3 +574,80 @@ copy (SQLite cannot open a `content://` URI — it needs a real path, so import 
 correctly fails the build over); and whether the app accepts any directory containing a `pack_*.db` +
 `manifest.json` rather than requiring SPEC.md §1's `pack_<EXAM_CODE>/` wrapper (which the compiler does
 not actually emit — it writes the three straight into `dist/`).
+
+### 2026-07-17 — A1 STARTED: the pack contract layer + the schema gate (first app code since A0)
+
+**Decisions are now logged with their WHY, per the user's standing instruction** (*"changes/mistakes
+during the app making are always noted so they don't happen again and why that decision was made"*).
+The live table is **`.claude/plans/2026-07-17-a1-pack-import.md` §0 DECISION LOG** — D1–D7, append the
+moment a call is made, never reconstruct later. **A decision without its *why* is worthless: the next
+session cannot tell a deliberate constraint from an accident, so it "cleans up" the constraint.**
+Mistakes still route to `PLAYBOOK.md`'s ledger via `mistake-tracker` (the durable cross-session record).
+
+**The seven decisions, in one line each** (rationale in the plan's D-table):
+- **D1 Room for `progress_<EXAM>.db`, raw SQLite for the pack** — typed tool on the DB we own and
+  migrate; plain tool on the DB we only read. Only progress has a schema that evolves.
+- **D2 `filesDir`** — the pack is derived from **copyrighted** sources; `filesDir` is the only location
+  other apps cannot read. Same instinct that keeps `compiler/dist/` out of git.
+- **D3 pack identity from directory CONTENTS, never filename** — `exam_code` comes from `pack_manifest`.
+  Filename identity is the **"same filename ≠ same file"** trap already in the ledger from C1.
+- **D4 a dedicated non-pooled READ-ONLY connection for cross-DB reads** — see the ATTACH finding below.
+- **D5 capability detected per pack at runtime, rows authoritative** — PATCH 03's rule.
+- **D6 correctness on the EMULATOR now, performance on the PHONE later** — user: *"I would connect phone
+  later once everything is built."* `Medium_Phone_API_36.1` AVD exists and matches compileSdk 36. The
+  emulator runs a **real** Android image (same libsqlite, same framework) so an ATTACH/WAL/pooling
+  **correctness** verdict is genuine; it would **lie** about the 370 MB copy and the 1,121-file
+  traversal (host disk, no real I/O limits). **Never report an emulator timing as a device timing.**
+- **D7 pure-logic first, I/O behind it** — only pure Kotlin is verifiable without a device, so build what
+  is provable now and keep I/O in thin adapters. **Not a §8 resequencing** — standing order #2 governs
+  STAGES (A0→A1→A2), not the order of work inside A1.
+
+**⚠ The ATTACH finding — `SPEC.md` §2's design collides with Room, and it would have surfaced mid-build.**
+SQLite scopes `ATTACH` to **one connection**; Room **pools** connections ⇒ a pooled ATTACH is invisible
+to the next query. Android's own `enableWriteAheadLogging()` javadoc: *"If the database has any attached
+databases, then execution of queries in parallel is not possible"* — and Room enables WAL by default.
+**No official Room doc addresses Room+ATTACH at all** (recorded as a gap, not smoothed over).
+**Resolution (D4):** one dedicated, non-pooled, read-only connection on `progress_<EXAM>.db` with the
+pack ATTACHed read-only, serving **only** feed/priority SELECTs and **never writing**; Room's pool owns
+every write. WAL allows concurrent readers beside one writer, so they coexist by design — and the ATTACH
+lives on a connection we never hand back to a pool, so it cannot vanish. **This rests on a documented gap
+and is SPIKED FIRST on the emulator before anything is built on it.** Claim to falsify: *a dedicated
+read-only connection with an ATTACH can read `progress_<EXAM>.db` while Room's WAL pool writes it,
+without error or stale reads.* Fail ⇒ join in Kotlin (`fsrs_cards` is sparse; 32,957 rows fit in memory)
+and amend `SPEC.md` §2 — **never** by disabling WAL, which would degrade every write in the app.
+
+**Built + VERIFIED (run, not assumed):**
+- `app/.../pack/PackManifest.kt` — `PackManifest` / `PackFileManifest` / `PackCapabilities`. The seam:
+  the app knows this shape and nothing else about any exam.
+- `app/.../pack/SchemaVersion.kt` — the gate. One constant (`SUPPORTED_MAX = 1`); refuses a **newer**
+  pack **naming both versions**, loads a compatible **older** one (SPEC.md §4 is more precise than §8
+  A1's "newer/unknown" shorthand — followed the contract), refuses self-contradictory/unreadable packs.
+  **Never throws — refusal is a value**, because a gate that throws on hostile input IS the crash §8 A1
+  forbids. Pure Kotlin, zero Android ⇒ provable with no device (D7).
+- `app/src/test/.../pack/SchemaVersionTest.kt` — **12 tests, written against the real traps**, not the
+  happy path. **`testDebugUnitTest --rerun-tasks`: 15 tests, 0 failures, 0 errors, 28/28 tasks executed**
+  (counts read from the JUnit XML, not from Gradle's "BUILD SUCCESSFUL"). `verifyOfflineGuarantees`:
+  green — 114 debug / 110 release modules, none forbidden; no network permission, no background
+  component.
+
+**Two traps encoded in code + tests so they cannot be rediscovered the hard way** (both found by reading
+the REAL pack, both documented in the KDoc where someone will actually hit them):
+- **Two different `checksum` fields.** `manifest.json.checksum` = `8005f7d7…` = **sha256 of the .db FILE**
+  (transfer integrity — this is what import verifies). `pack_manifest.checksum` = `8551d0c4…` =
+  **content-checksum over sorted stable_keys** (§5j reproducibility anchor). **Never compare them** — it
+  fails on a good pack. Named `contentChecksum` in code, with the warning on the field itself.
+- **`schema_version` has three representations** — `pack_manifest` **TEXT "1"**, `PRAGMA user_version`
+  **INTEGER 1**, `manifest.json` **JSON "1"**. Always `SchemaVersion.parse()`; a naive `==` across forms
+  refuses a valid pack. There is a test asserting the TEXT and INTEGER forms reconcile.
+
+**🔴 MY OWN MISTAKE, caught and corrected the same hour — the acceptance criterion was wrong.** I wrote
+*"`grep -ri "mrcp" app/src/` returns only the forbidding comment"*. That is **stricter than §8 A1**,
+whose actual words are *"must not appear in any resource, constant, or layout"* — and the A1 code
+violates my version, because `PackManifest.kt` names MRCP **in comments** explaining why it must never be
+hardcoded. **The criterion was wrong, not the comments:** those comments are the mechanism that keeps the
+rule alive across sessions; deleting them to satisfy a bad grep would destroy the explanation and protect
+nothing. **Rule: a grep over all of `app/src/` is the wrong instrument — it cannot tell a rule from a
+violation.** The real test targets resources/constants/layouts (parse `strings.xml`, assert no string
+literal equals an exam name). Corrected in the plan's acceptance section.
+
+**Next:** the ATTACH spike on the emulator (plan step 1) — nothing else gets built on D4 until it passes.
