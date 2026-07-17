@@ -1006,3 +1006,49 @@ query add zero to the classpath, which is the whole point of not pulling a markd
 **Next (A2 steps 4–8):** the five card composables (AMOLED, on the phone), importance indicator + PYQ
 badge + why-sheet, filters + sort (Priority must differ from Importance ↓), one-tap star/tag, FSRS wiring
 + mistake ledger, blob quiz-back timing.
+
+### 2026-07-17 — A2 Study Feed is LIVE and proven end-to-end on a real device
+
+**The feed works.** Built the five card composables, the infinite vertical pager, the importance/PYQ
+chrome, the "why" sheet, the FSRS bridge and the rating write-path — then ran it and studied through it.
+
+**Verified by actually using it (emulator; AMOLED/swipe-feel judgement still owed to the phone, D6):**
+- App opens straight to the feed, **importance-first** (first card a 5★ interlink) on true-black.
+- Reveal → the four FSRS buttons appear (Again/Hard/Good/Easy, colour-graded red→blue).
+- **Rating "Good" wrote BOTH rows** (pulled the progress DB and inspected it): `fsrs_cards` =
+  `interlink 29963, state=1, reps=1, lapses=0, stability=3.26, due=2026-07-17` (FSRS-6 computed a real
+  stability + due), and `reviews` = `(interlink, 29963, 3)` (the append-only history A7's optimiser
+  needs). **Acceptance 2 + 6 demonstrated live.**
+- Swipe advances the pager to the next card. (First swipe "failed" — it was a too-slow `input swipe`,
+  not a nested-scroll bug; a faster fling advanced cleanly. Verified, not assumed.)
+- No crash; `verifyOfflineGuarantees` green (124 debug / 120 release, no new dep, no network, no
+  background component).
+
+**The pieces:**
+- `feed/FeedCard.kt` + `feed/FeedRepository.kt` (prev commit) — model + ATTACH reader, proven 5/5 on the
+  phone at 1.8 s over full-feed scans.
+- `ui/feed/FeedCards.kt` — the five composables. MCQ: pick → **answer revealed inline** + explanation +
+  per-distractor why-wrong + rating (no negative marking); flashcard tap-flip; reel/interlink reveal;
+  blob "mark read". Ratings flow OUT via callbacks — the composables never write, so a DB write can't
+  block the swipe (§3.5).
+- `ui/feed/FeedViewModel.kt` — windows the feed forward (page 40, prefetch 10; **no ordering engine —
+  that's A3**), and on each interaction writes FSRS + progress off the main thread. Holds ONE Room
+  instance for the session (an earlier draft reopened it per rating — a leak).
+- `ui/feed/FeedScreen.kt` — the `VerticalPager` + the "why" sheet rendering `importance_signals_json` as
+  ranked human phrases (Acceptance 3).
+- `ui/feed/CardChrome.kt` — importance indicator (**colour encodes 1–5**, §8 A5) + PYQ badge + header.
+- `ui/feed/FigureImage.kt` — `BitmapFactory.decodeFile` + LRU, **never Coil/Glide** (D12: local files;
+  OkHttp would fail the guard). Off-thread decode, downsampled.
+- `ui/feed/MarkdownText.kt` — renders `PackMarkdown` blocks; the `***…***` emphasis styled, every lone
+  `*` (multiplication) untouched.
+- `progress/FsrsBridge.kt` — maps a rating → an updated `fsrs_cards` row via java-fsrs. Works within
+  SPEC.md §2's fixed 7-column schema; **tracks `reps`/`lapses` itself** (java-fsrs's Card doesn't expose
+  them). ⚠ **Known limitation, flagged not hidden:** the schema has no `step` column, so a card still in
+  LEARNING when the app closes restarts its learning steps on reopen — negligible (learning steps are
+  minutes; the card is due immediately either way), and a `schema_version` decision if it ever matters.
+- `MainActivity.kt` — routes Feed↔Manage; the app opens to the Feed when a pack is active.
+
+**Still to do in A2:** filters (5★/PYQ/type/starred/tag) + sort (Priority must differ from Importance ↓),
+one-tap star/tag on cards, blob quiz-back scheduling, and **the phone pass** — AMOLED true-black on the
+real panel, swipe feel, scroll smoothness (the judgement calls no emulator can make; the phone keeps
+dropping wifi-adb when it sleeps — enable Stay-awake).

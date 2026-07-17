@@ -199,4 +199,32 @@ interface ProgressDao {
 
     @Query("SELECT value FROM settings WHERE key = :key")
     suspend fun setting(key: String): String?
+
+    // ---- A2: mistakes, stars, tags -------------------------------------------------------------
+
+    /** A wrong MCQ answer (§8 A2 → A6's ledger). Written the moment the user picks a wrong option. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMistake(mistake: Mistake)
+
+    @Query("DELETE FROM stars WHERE item_type = :type AND item_id = :id")
+    suspend fun unstar(type: String, id: Long)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM stars WHERE item_type = :type AND item_id = :id)")
+    suspend fun isStarred(type: String, id: Long): Boolean
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun addTag(tag: ItemTag)
+
+    @Query("DELETE FROM item_tags WHERE item_type = :type AND item_id = :id AND tag_key = :tagKey")
+    suspend fun removeTag(type: String, id: Long, tagKey: String)
+
+    @Query("SELECT tag_key FROM item_tags WHERE item_type = :type AND item_id = :id")
+    suspend fun tagsFor(type: String, id: Long): List<String>
+
+    /** Blob read-tracking (§8 A2 step 9: schedule the quiz-back + a re-read). */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putBlobRead(read: BlobRead)
+
+    @Query("SELECT * FROM blob_reads WHERE blob_id = :blobId")
+    suspend fun blobRead(blobId: Long): BlobRead?
 }

@@ -29,6 +29,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -37,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.kayomarz.studyfeed.pack.PackImporter
 import dev.kayomarz.studyfeed.ui.PackUiState
+import dev.kayomarz.studyfeed.ui.feed.FeedScreen
 import dev.kayomarz.studyfeed.ui.theme.StudyFeedTheme
 
 /**
@@ -57,15 +61,34 @@ class MainActivity : ComponentActivity() {
         setContent {
             StudyFeedTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    PackScreen()
+                    Root()
                 }
             }
         }
     }
 }
 
+/**
+ * Top-level routing between the two A-stage screens:
+ *  - **Feed** (A2) — the app opens here once a pack is imported; it IS the app.
+ *  - **Manage** (A1) — import/switch packs and export/import progress.
+ *
+ * The feed reports "no pack" by calling back, which flips to Manage; Manage has an explicit way back.
+ * A2 owns the feed and A1 the pack management — deliberately separate screens, one job each.
+ */
+private enum class Screen { Feed, Manage }
+
 @Composable
-private fun PackScreen(vm: PackUiState = viewModel()) {
+private fun Root() {
+    var screen by remember { mutableStateOf(Screen.Feed) }
+    when (screen) {
+        Screen.Feed -> FeedScreen(onNoPack = { screen = Screen.Manage })
+        Screen.Manage -> PackScreen(onOpenFeed = { screen = Screen.Feed })
+    }
+}
+
+@Composable
+private fun PackScreen(onOpenFeed: () -> Unit = {}, vm: PackUiState = viewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
 
     // SAF: a DIRECTORY picker, because a pack is a directory (spec/SPEC.md §1) — db + manifest +
@@ -96,6 +119,7 @@ private fun PackScreen(vm: PackUiState = viewModel()) {
                 onSwitch = vm::switchTo,
                 onExport = { exportTo.launch(vm.suggestedExportName()) },
                 onImportProgress = { importFrom.launch(arrayOf("application/zip", "*/*")) },
+                onStudy = onOpenFeed,
             )
         }
 
@@ -186,6 +210,7 @@ private fun LoadedPack(
     onSwitch: (String) -> Unit,
     onExport: () -> Unit,
     onImportProgress: () -> Unit,
+    onStudy: () -> Unit,
 ) {
     val a = ui.active!!
     // THE app-bar label — read from pack_manifest.exam_name. The only reason this app knows any exam
@@ -193,6 +218,10 @@ private fun LoadedPack(
     Text(a.examName, style = MaterialTheme.typography.headlineSmall)
     Text("pack ${a.packVersion} · ${a.feedSize} items · ${a.seenCount} seen",
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+    Spacer(Modifier.height(16.dp))
+    // The primary action: go study. The feed IS the app; this screen is for managing packs.
+    Button(onClick = onStudy, modifier = Modifier.fillMaxWidth()) { Text("Study ${a.feedSize} items") }
 
     Spacer(Modifier.height(20.dp))
     Section("Subjects (${a.subjects.size})")
