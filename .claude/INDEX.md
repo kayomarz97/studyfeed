@@ -4,7 +4,9 @@
 > One line per entry: what it is and when to touch it. **Update this file in the SAME
 > commit whenever files are added, moved, or repurposed** — a stale map is worse than none.
 > Authoritative spec: `BUILD_PROMPT.md` (**re-read from disk — PATCH 02, 2026-07-17, rewrote §0/§7/§8
-> A0+A1/§11c/§13 + START HERE**; §7 and §13 are now *history, do not execute*).
+> A0+A1/§11c/§13 + START HERE**; §7 and §13 are now *history, do not execute*. **PATCH 03, 2026-07-17:**
+> the C11 asset trim was **undone** — blobs/interlink/figures **ship POPULATED, use them**; capability is
+> detected **per pack at runtime** so the DB stays swappable. Any text saying they "ship empty" is stale.)
 > **STATUS: Phase 1 (compiler) COMPLETE — C0–C13, pack shipped + imported to the laptop
 > (32,957 playable feed items). Phase 2 (app) is live: A0 done, A1 next.**
 > Resume truth: **`JOURNAL.md`** — one merged log (⛔ standing orders at the top, then Phase 1 /
@@ -32,8 +34,8 @@ imports and renders offline. Everything exam-specific lives in the profile → p
 | `JOURNAL.md` | **The single human log, and the resume truth for app work** (prose; counts/decisions only, never book content). Merged 2026-07-17 — was two files. Layout: ⛔ **standing orders at the top (read first)** → **Phase 1 — compiler** (C0–C13, dormant, `state.py`-written) → **Phase 2 — app** (LIVE; hand-written here, append new app entries at the END). Also carries the now-RESOLVED §0 `build_env` divergence as history. |
 | `CLAUDE.md` | Project working agreement (2 sections filled; the rest is global). |
 | `LAPTOP_SETUP.md` | Phase 2 dev-machine bootstrap: paste-into-Claude prompt — installs Claude Code CLI, bootstraps the `claude-master` global rulebook, links Android Studio (plugin 27310), preps SDK/adb, clones the repo on `dev`. App is built on the laptop (needs a screen/device); compiler stays on the box. |
-| `spec/schema.sql` | **Canonical content-pack DDL (source of truth).** `PRAGMA user_version` = schema version. |
-| `spec/SPEC.md` | Human contract: 2-DB model, manifest, versioning, runtime invariants, progress-DB schema. |
+| `spec/schema.sql` | **Canonical content-pack DDL (source of truth).** `PRAGMA user_version` = schema version (**INTEGER 1** — note `pack_manifest.schema_version` is **TEXT "1"**; parse, never `==` across the two). |
+| `spec/SPEC.md` | **Human contract — read before A1.** 2-DB model (pack read-only + `ATTACH`-ed beside a read-write per-`exam_code` progress DB), manifest, versioning (app refuses a **newer** schema, older still loads), runtime invariants, progress-DB DDL. Pack = a **directory** imported via SAF; `figures.path` is **relative**, so layout is load-bearing. |
 | `spec/manifest.schema.json` | JSON Schema for `manifest.json` shipped beside each pack. |
 | `spec/SCORING.md` | The deterministic 1–5 importance model + worked examples. |
 | `profiles/mrcp_part1.yaml` | First exam profile: tiers, weights, floors, scripts, dedupe, zoning, aliases, tags, `data_corrections` (§5j stable_keys of web-verified-wrong atoms, excluded at pack). |

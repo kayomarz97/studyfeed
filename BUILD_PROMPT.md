@@ -893,9 +893,13 @@ switch exams. Progress is namespaced per `exam_code` and never wiped.
 > *(Superseded earlier figures — 26,965 items / 86,702 atoms / 147,146 keys — predate C11b's blobs +
 > interlink and the two source-fact atom removals.)*
 >
-> **Known gaps, flagged not silent:** `text_blobs` / `blob_quizzes` / `interlink_quizzes` / `figures` /
-> `dup_clusters` ship **empty** — those assets were trimmed at C11. **§8 A2's blob and image card types
-> therefore have no data yet**; A2 must degrade gracefully rather than assume they exist.
+> **Asset coverage (corrected 2026-07-17 — PATCH 03; the old "shipped empty" text was stale):** the
+> C11 trim was **undone** by C11b + the figures tail. `text_blobs` **2,997** · `blob_quizzes` **2,997** ·
+> `interlink_quizzes` **2,998** · `figures` **1,121** are all **POPULATED**, and `feature_flags` declares
+> `has_blobs`/`has_interlink`/`has_figures` = true. **§8 A2's blob and image card types DO have data** —
+> build them for real. Only `dup_clusters` (plus `topics`, `cluster_members`) is empty.
+> **This changes what today's pack contains, NOT the rule:** availability is still resolved at runtime
+> per pack (§8 A1), because the next exam's pack may legitimately ship without any of these.
 >
 > **The live front is Phase 2 (§8), on the laptop.** Details: `JOURNAL.md` tail (compiler history) and
 > `compiler/.compiler_state.json`.
@@ -1071,10 +1075,25 @@ Compose Canvas for the concept map, DataStore for settings. No network libs, no 
     version(s) in one constant. *Why this is not optional:* a future pack built against a bumped schema
     is the exact case a naive loader corrupts, and it is the failure mode that turns "works with other
     packs" from a promise into a hope.
-  - **Degrade gracefully on empty tables.** `text_blobs`, `blob_quizzes`, `interlink_quizzes`,
-    `figures` and `dup_clusters` ship **empty** in the current pack (trimmed at C11 — see §7). Absent
-    ≠ broken: a pack missing an asset type must simply not offer it. Do not assume any table is
-    populated; drive availability off `counts_json` / actual rows.
+  - **Capability detection is per-pack, at runtime — this is what makes the DB swappable (PATCH 03).**
+    **Never hardcode which asset types exist.** Every pack declares its own coverage, and the app must
+    ask *this* pack rather than assume the last one's shape. Resolve availability in this order:
+    **actual rows are authoritative**, `counts_json` and `feature_flags_json` are the pack's own
+    declaration (a fast hint, and a cross-check — if a flag says `has_blobs` but the table is empty, the
+    pack is malformed: trust the rows, surface the disagreement). Absent ≠ broken: a pack without an
+    asset type must simply not offer it, with no dead UI and no crash.
+    - ⚠ **Corrected 2026-07-17 (PATCH 03) — the old text here was stale and said the opposite.** It
+      claimed `text_blobs`/`blob_quizzes`/`interlink_quizzes`/`figures`/`dup_clusters` "ship empty
+      (trimmed at C11)". **C11b and the figures tail undid that trim.** The shipped pack has
+      text_blobs **2,997** · blob_quizzes **2,997** · interlink_quizzes **2,998** · figures **1,121**,
+      with `has_blobs`/`has_interlink`/`has_figures` all true. Only `dup_clusters` (+ `topics`,
+      `cluster_members`) is empty. **Use the data — it exists.**
+    - **Why the rule survives the correction, and matters MORE not less:** today's pack being full is a
+      fact about *this* pack, not a licence to assume. `first_exam` is one of many (§0 `multi_pack`) —
+      an MRCP Part 2 or USMLE pack may ship no blobs or no figures at all. The app that hardcodes
+      "blobs exist" because MRCP Part 1 had them is exactly the app that cannot swap its database.
+      **Test both directions:** today's full pack lights every card type up; a synthetic trimmed pack
+      offers fewer — same binary, no code change.
   - **§11e progress export/import belongs HERE, not at A7** — §11e's own words: *"Treat it as part of
     A1, not a nice-to-have for later."* Export/import is per-pack, exactly like the progress DB. This
     is not a resequencing of §8; it is A1 doing what §11e already assigned it. **Now urgent:** a real
@@ -1758,8 +1777,71 @@ The contract is **kept, not extended**. Two additions make it safe rather than m
 - **The schema-version gate (§8 A1)** — check `pack_manifest.schema_version` + `PRAGMA user_version`
   on import; refuse an unsupported pack with a clear message. A future pack on a bumped schema is
   exactly what a naive loader corrupts.
-- **Empty tables are normal** (§7/§8 A1) — the shipped pack has none of `text_blobs`/`figures`/etc.
-  A pack lacking an asset type must simply not offer it.
+- **Per-pack capability detection** (§7/§8 A1) — **corrected 2026-07-17 (PATCH 03):** this used to read
+  "the shipped pack has none of `text_blobs`/`figures`/etc", which is no longer true — C11b + the figures
+  tail populated them (blobs 2,997 · interlink 2,998 · figures 1,121). **Use them.** The rule is
+  unchanged and is precisely what makes the DB swappable: never hardcode which asset types exist; ask
+  *the loaded pack* (actual rows authoritative; `counts_json`/`feature_flags_json` its declaration). A
+  pack lacking an asset type must simply not offer it. Today's pack being full is a fact about this
+  pack — the next one is not obliged to match it.
 
 **The standing rule that protects all of this:** nothing exam-specific may ever enter the app. One
 hardcoded string turns a generic player into a single-exam app, silently.
+
+---
+
+## PATCH 03 — the C11 trim was undone: use the assets; keep the pack swappable — applied IN PLACE 2026-07-17
+
+> **Authorised by the user on 2026-07-17**, who directed: *"update it in such a way that I can always
+> swap the database for the next exam, but now since c11b is completed and I have the data use it and
+> always make notes of it in journal file and wherever else so a new session is never confused."*
+> Applied **in place** (like PATCH 02) because the stale text was actively misdirecting: it told A1/A2 to
+> plan around assets that **exist**. This section is the audit trail (§10a).
+>
+> **Changes NOTHING about the pack format, the schema, or the decoupling contract** (§2, §6,
+> `spec/schema.sql`). It corrects a fact the spec got wrong and sharpens a rule it already had.
+
+### The fact the spec got wrong
+
+§7 and §8 A1 both stated that `text_blobs` / `blob_quizzes` / `interlink_quizzes` / `figures` /
+`dup_clusters` **"ship empty — trimmed at C11"**. True when written; **false since C11b**. Read from the
+shipped DB on 2026-07-17 (not from any doc):
+
+| Table | Spec claimed | Actually ships | Filled by |
+|---|---|---|---|
+| `text_blobs` | empty | **2,997** | C11b (`de77ac0`) |
+| `blob_quizzes` | empty | **2,997** | C11b (`de77ac0`) |
+| `interlink_quizzes` | empty | **2,998** | C11b (`de77ac0`) |
+| `figures` | empty | **1,121** | figures tail (`b64bc36`) |
+| `dup_clusters` | empty | 0 ✅ | — (also empty: `topics`, `cluster_members`) |
+
+`pack_manifest.feature_flags_json` declares `has_blobs` / `has_interlink` / `has_figures` = **true**.
+Consequence: **§8 A2's blob and image card types have real data — build them for real.** PATCH 02's
+warning that this "bites A2" is **retired**; it described a shortage that no longer exists.
+
+### The rule, sharpened (this is what keeps the DB swappable)
+
+The correction does **not** relax the rule — it is the reason the rule exists. "Use the data" applies to
+*this* pack; **"never assume the data" applies to every pack**:
+
+- **Never hardcode which asset types exist.** Resolve per pack, at runtime: **actual rows are
+  authoritative**; `counts_json` + `feature_flags_json` are the pack's own declaration — a fast hint and
+  a cross-check. Flag says `has_blobs`, table is empty ⇒ the pack is malformed: trust rows, surface it.
+- **An app that hardcodes "blobs exist" because MRCP Part 1 had them is an app that cannot swap its
+  database.** That is the §0 `multi_pack` contract failing silently — which is the only way it ever fails.
+- **Test both directions** (§8 A1 acceptance): today's full pack lights every card type; a synthetic
+  trimmed pack offers fewer. **Same binary, no code change.** A1 must not use today's pack as its only
+  fixture — a full pack cannot prove graceful degradation.
+
+### What changed
+
+| § | Was | Now |
+|---|---|---|
+| §7 "Known gaps" | assets "ship empty", A2 "has no data yet" | **Corrected counts**; A2 warning **retired** — the data exists, build the cards for real. |
+| §8 A1 "Degrade gracefully on empty tables" | listed 5 tables as empty | Retitled **"Capability detection is per-pack, at runtime"**: rows authoritative, flags/counts declarative, correction noted, both-directions test required. |
+| "work with other databases" §  | "the shipped pack has none of `text_blobs`/`figures`/etc" | Corrected; rule restated as the swappability mechanism. |
+| Stat block (§7) | 26,965 items · 86,702 atoms · 147,146 keys | **32,957 · 86,698 · 147,142** — read from the DB, superseded figures noted. |
+
+**Unchanged and still binding:** no exam-specific string may ever enter the app (§0 `multi_pack`,
+§8 A1); the schema-version gate (§8 A1); §11e export/import owned by A1; standing order #2 (no
+resequencing) — A1 is still next, and its scope did not grow.

@@ -40,6 +40,14 @@ build from the CLI with no IDE-only config.
 > ⚠ **The app must never contain an exam-specific string.** Every exam-facing label resolves from
 > `pack_manifest` at runtime — that is what lets a future pack (MRCP Part 2, USMLE, …) play with **no
 > code change** (§0 `multi_pack`). One hardcoded "MRCP" silently makes it a single-exam app.
+>
+> ⚠ **Nor may it hardcode which asset types exist — same contract, quieter failure (PATCH 03).**
+> **Detect capability per pack, at runtime:** actual rows are authoritative; `counts_json` +
+> `feature_flags_json` are the pack's own declaration (hint + cross-check). **The C11 trim was UNDONE —
+> the shipped pack HAS blobs 2,997 · interlink 2,998 · figures 1,121, so use them** (any doc still
+> saying these "ship empty" is stale — that text was corrected on 2026-07-17). But a *future* pack may
+> ship without them: an app that assumes blobs exist because Part 1 had them **cannot swap its
+> database**. Test both directions — full pack AND a synthetic trimmed pack, same binary.
 
 **Codebase map:** scan `.claude/INDEX.md` FIRST — it says what every file does and how the
 system works. Navigate by the map, not by exploratory greps; keep it true in the same commit

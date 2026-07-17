@@ -453,6 +453,11 @@ DBs (Anki/CSV) — no importer/adapter layer is to be built. Multi-pack is alrea
 - **Degrade gracefully on empty tables:** `text_blobs`/`blob_quizzes`/`interlink_quizzes`/`figures`/
   `dup_clusters` ship **empty** (trimmed at C11). **⚠ This bites A2, not just A1** — its blob and image
   card types have no data. Absent ≠ broken: drive availability off actual rows, never assume.
+  > 🔴 **SUPERSEDED the same day — see the PATCH 03 entry at the end of this journal.** The "ship empty"
+  > claim above is **FALSE**: C11b + the figures tail populated them (blobs 2,997 · interlink 2,998 ·
+  > figures 1,121). **The "bites A2" warning is RETIRED — A2's blob and image cards HAVE data.** Left
+  > unedited as the record of what PATCH 02 said. The *rule* in the last sentence still binds and is
+  > exactly what keeps the DB swappable.
 
 **§11e escalated to A1 and given one owner.** §11e always said "treat it as part of A1" while §8 listed
 it under A7 — a straight contradiction, resolved in §11e's favour (A1 builds it; A7 only surfaces the
@@ -512,3 +517,60 @@ no-op here. This is *why* nothing auto-appends to `JOURNAL.md` on the laptop (wh
 safe), but it means a session that compacts mid-A1 gets **no resume context injected** — exactly
 when it matters most. Flagged to the user, deliberately NOT fixed in the same commit as the journal
 merge (one logical change per commit). **Fix before A1 gets long.**
+
+### 2026-07-17 — PATCH 03: the C11 trim was undone. Use the assets; keep the pack swappable.
+
+**Read this before planning A1 or A2 — the spec was wrong and two sessions could have built around a
+shortage that does not exist.** §7 and §8 A1 both said `text_blobs`/`blob_quizzes`/`interlink_quizzes`/
+`figures`/`dup_clusters` "ship empty — trimmed at C11". **C11b (`de77ac0`) and the figures tail
+(`b64bc36`) undid that trim.** Verified by querying the shipped DB, not by reading a doc:
+
+| Table | Spec claimed | Actually ships |
+|---|---|---|
+| `text_blobs` | empty | **2,997** |
+| `blob_quizzes` | empty | **2,997** |
+| `interlink_quizzes` | empty | **2,998** |
+| `figures` | empty | **1,121** |
+| `dup_clusters` | empty | 0 ✅ (also empty: `topics`, `cluster_members`) |
+
+`feature_flags_json` declares `has_blobs`/`has_interlink`/`has_figures` = true. **§8 A2's blob and image
+card types HAVE data — build them for real.** PATCH 02's "⚠ this bites A2" warning is **RETIRED**.
+Corrected in place (user-authorised) at all four sites: §7 "Known gaps", §7's stat block, §8 A1's rule,
+and the "work with other databases" section — plus **PATCH 03** at the end of `BUILD_PROMPT.md` as the
+audit trail.
+
+**The user's directive, and the tension in it, resolved:** *"update it in such a way that I can always
+swap the database for the next exam, but now since c11b is completed and I have the data use it."*
+Those pull opposite ways only if implemented naively. **Use the data** = a fact about *this* pack.
+**Never assume the data** = the rule for *every* pack. The reconciliation is that capability is detected
+**per pack, at runtime**, so the same binary lights up every card type on today's full MRCP Part 1 pack
+and quietly offers fewer on a leaner future pack (Part 2, USMLE) — **no code change**. Resolution order:
+**actual rows are authoritative**; `counts_json` + `feature_flags_json` are the pack's own declaration
+(a fast hint + a cross-check — flag true but table empty ⇒ malformed pack; trust rows, surface it).
+**An app that hardcodes "blobs exist" because Part 1 had them is an app that cannot swap its database** —
+and that is the §0 `multi_pack` contract failing silently, which is the only way it ever fails.
+A1's acceptance therefore tests **both directions**: today's full pack AND a synthetic trimmed pack.
+Today's pack cannot prove graceful degradation — it has nothing missing to degrade from.
+
+**A1 plan written** → `.claude/plans/2026-07-17-a1-pack-import.md`. No app code written yet; the plan is
+held at the ⛔ gate pending the user's architecture decisions (below).
+
+**Two traps found while reading the pack, recorded so nobody burns an afternoon on them:**
+- **There are TWO different `checksum` fields with different values.** `manifest.json.checksum` =
+  `8005f7d7…` = **sha256 of the .db FILE** (transfer integrity — this is the one the import gate should
+  verify). `pack_manifest.checksum` = `8551d0c4…` = **content-checksum over sorted stable_keys** (the
+  §5j reproducibility anchor). Same name, different meaning, both in the same pack. **Never compare one
+  to the other** — it fails on a perfectly good pack.
+- **`schema_version` exists in three representations:** `pack_manifest.schema_version` is **TEXT `"1"`**,
+  `PRAGMA user_version` is **INTEGER `1`**, `manifest.json.schema_version` is the **JSON string `"1"`**.
+  Parse all three to Int; a naive `==` across representations refuses a valid pack. The DB row is
+  authoritative (SPEC.md §3); `user_version` mirrors it (SPEC.md §4) and disagreement = malformed pack.
+
+**Open at the A1 gate (user's call, not mine):** Room-vs-`ATTACH` architecture (SPEC.md §2 requires
+ATTACHing the read-only pack DB beside the read-write progress DB and joining across; Room has no
+first-class ATTACH, and `androidx.room` is **not** in `libs.versions.toml` yet); the ~370 MB SAF import
+copy (SQLite cannot open a `content://` URI — it needs a real path, so import must physically copy
+135 MB DB + 235 MB figures, with progress + cancel, and **without** WorkManager, which A0's guard
+correctly fails the build over); and whether the app accepts any directory containing a `pack_*.db` +
+`manifest.json` rather than requiring SPEC.md §1's `pack_<EXAM_CODE>/` wrapper (which the compiler does
+not actually emit — it writes the three straight into `dist/`).
