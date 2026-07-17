@@ -729,3 +729,54 @@ failed at RUNTIME with `ClassNotFoundException: ..._Impl` — **KSP is configure
 network permission, no background component. `testDebugUnitTest --rerun-tasks` — **15 tests, 0 failures**.
 `connectedDebugAndroidTest` — **6 tests, 0 failures** (counts read from the XML reports, never from
 "BUILD SUCCESSFUL").
+
+### 2026-07-17 — the pack reader lands, and it reads the REAL pack (plus a false green I nearly shipped)
+
+**`PackDatabase.kt` — the app can now open a pack, gate it, and configure itself from it.** Raw SQLite,
+read-only, **not Room** (D1). The gate runs **before any content table is touched** (§8 A1's words), so a
+pack we don't understand never reaches a real query — the exact case a naive loader corrupts. Refusal is
+a value (`Result.Rejected`), never an exception: a loader that throws on a hostile file **is** the crash
+§8 A1 forbids. Capability resolution is D5 made real: **rows authoritative** (`EXISTS`, not `COUNT(*)` —
+at 86,698 atoms that is the difference between instant and not), with `counts_json`/`feature_flags_json`
+as the pack's declaration and a cross-check → `declarationMismatches`.
+
+**✅ VERIFIED AGAINST THE REAL SHIPPED PACK — not a fixture.** `RealPackTest` genuinely ran (proof below)
+against the actual 141 MB `pack_MRCP_PART1.db`: it loads through the same generic path any future pack
+will use; `exam_code`/`exam_name`/subjects/tags all populate; **its flags agree with its rows** (zero
+mismatches); **the C11b assets are present** (blobs/interlink/figures — PATCH 03 confirmed *in code*, so
+a future "optimisation" that skips those paths because a stale doc said they're empty now FAILS a test);
+and **the two `checksum` fields are provably different values**, guarding that trap in code rather than
+only in a comment.
+
+**Test counts (read from XML, never from "BUILD SUCCESSFUL"):** JVM **15 tests / 0 failures**;
+instrumented **20 tests / 0 failures** (6 spike + 11 synthetic-pack + 3 real-pack). `verifyOfflineGuarantees`
+green.
+
+**🔴 A FALSE GREEN I ALMOST SHIPPED — two tools lied, independently.** `RealPackTest` uses `assumeTrue`
+to skip when the pack is absent (it is gitignored; other machines won't have it). I ran it and reported
+`[PASS] × 3`. **All three had SKIPPED — they never ran.** I was one step from telling the user "the real
+pack is verified" when nothing had been.
+- **My own report script lied:** it classified a testcase as PASS unless it had a `<failure>`/`<error>`
+  child. A skipped test has `<skipped>` and neither — so it printed PASS. The suite-level `skipped="3"`
+  was right there in the XML, unread. **A reporter that can't tell "passed" from "never ran" is a
+  false-green generator.** Fixed to print RAN vs skipped explicitly.
+- **`am instrument` lied:** it prints **`OK (3 tests)` for three SKIPPED tests.** Only `am instrument -r`
+  reveals `AssumptionViolatedException`. **"OK (N tests)" does not mean N tests ran.**
+- **This is the same family as the project's existing `--rerun-tasks` rule** (UP-TO-DATE proves nothing):
+  the question is never *"did it say success"*, it is ***"did the assertion actually execute"***.
+- Rule added: **if a test CAN skip, its skip must be as loud as a failure** in whatever reads the results
+  — conditional tests are load-bearing precisely when they skip silently. Logged to the PLAYBOOK.
+
+**Two real Android facts behind the skip (both now in the PLAYBOOK as durable reference):**
+1. **`adb push` into `/sdcard/Android/data/<pkg>/` produces files the app CANNOT READ on Android 11+.**
+   adb writes them as the `shell` user; `run-as <pkg> ls` on that path returns **"Permission denied"**.
+2. **Gradle's `connectedAndroidTest` UNINSTALLS the APK — and uninstall WIPES app-scoped external
+   storage.** So a correctly-pushed fixture is deleted *before* the tests run. (Verified after a run:
+   `run-as` reported "unknown package" and the pushed dir was gone.) ⚠ **This also empirically confirms
+   D2's accepted consequence:** with `filesDir` + `allowBackup=false`, an uninstall really does take the
+   pack with it — a 370 MB re-import. The pack is reproducible; **progress is not** — which is exactly
+   why §11e is A1 scope and not deferrable.
+   **The procedure that works** (also in `RealPackTest`'s KDoc): `installDebug installDebugAndroidTest` →
+   `adb push` to `/data/local/tmp` → `chmod 644` → `run-as <pkg> cp` into `files/` → drive
+   `am instrument` **directly** so nothing reinstalls underneath you. Files then land owned by the app's
+   UID and are readable. `filesDir` is where an imported pack really lives (D2), so this walks the real path.

@@ -1293,6 +1293,40 @@ Sources: [developer.android.com/training/data-storage/app-specific](https://deve
 (raw HTML, `getAllocatableBytes(UUID)` + `allocateBytes` overloads + "Added in API level 26", read
 2026-07-17).
 
+**6. Getting a real fixture file onto the device for an instrumented test WITHOUT it being wiped
+or unreadable — verified empirically at A1 (2026-07-17), not from docs.**
+
+Two separate, real Android behaviors defeat the naive `adb push` + `./gradlew
+connectedDebugAndroidTest` approach:
+
+- **(a) `adb push` into app-scoped external storage writes as the `shell` UID, which the app
+  cannot read on Android 11+.** Pushing to
+  `/sdcard/Android/data/<pkg>/files/...` leaves the file `-rw-rw-rw- shell ext_data_rw`; the
+  app's own process gets `Permission denied` reading that same path. Verified:
+  `adb shell run-as <pkg> ls <path>` on an adb-pushed file → "Permission denied". A test that
+  lists the directory and finds nothing will silently assume-out rather than fail loudly.
+- **(b) `./gradlew connectedDebugAndroidTest` uninstalls the APK before AND after the run, and
+  uninstall wipes app-scoped external storage (`/sdcard/Android/data/<pkg>/`).** Even a
+  correctly-owned fixture placed there is gone before the test executes. Verified: after a
+  `connectedDebugAndroidTest` run, `run-as <pkg>` reports "unknown package" and the pushed
+  directory is gone.
+
+**Working procedure (verified end-to-end, fixture readable and test actually executes):**
+```bash
+./gradlew installDebug installDebugAndroidTest        # install BOTH; do NOT use connectedDebugAndroidTest
+adb push <file> /data/local/tmp/pack.db                # /data/local/tmp is shell-writable
+adb shell chmod 644 /data/local/tmp/pack.db             # o+r so the app UID can open it
+adb shell "run-as <pkg> mkdir -p files/realpack"
+adb shell "run-as <pkg> cp /data/local/tmp/pack.db files/realpack/pack_MRCP_PART1.db"
+adb shell am instrument -w -r -e class <TestClass> <pkg>.test/androidx.test.runner.AndroidJUnitRunner
+```
+After the `run-as cp`, the file is owned by the app's own UID (e.g. `u0_a233`) and readable by
+the app process. Driving `am instrument` directly (instead of the Gradle
+`connectedDebugAndroidTest` task) avoids the install/uninstall cycle that wipes the fixture.
+Always use `am instrument -w -r` (raw) and read `INSTRUMENTATION_STATUS` output, not just the
+final `OK (N tests)` line — see the Mistakes ledger entry on skipped tests below for why the bare
+summary line lies about skips.
+
 ---
 
 ## Mistakes ledger (real traps in THIS repo, with the fix)
@@ -1552,3 +1586,19 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   if it "looks like the wrong format," that's a signal the scheme changed, not a typo to correct.
   Before pinning any dependency version, confirm it exists in the repo's `maven-metadata.xml`
   (e.g. `curl .../maven-metadata.xml | grep '<version>2.3.10'`). (seen 1x)
+
+- **2026-07 · A SKIPPED instrumented test is not a passing test, and both the JUnit-XML reader
+  and `am instrument`'s summary line actively hide that.** At A1, `RealPackTest` assumed-out via
+  `assumeTrue()` (the fixture wasn't readable — see the Android app A1 dependencies API-note for
+  why) on all 3 real-pack tests. My own reporting script classified any `<testcase>` with no
+  `<failure>`/`<error>` child as `[PASS]`, ignoring the `<skipped>` child and the suite's
+  `skipped="3"` attribute; separately, `adb shell am instrument` printed `OK (3 tests)` for the
+  same run. Both readings said "passed" when nothing had run — I nearly reported "the real pack
+  is verified."
+  **Fix/prevention:** any test-result reader must check for `<skipped>`/`skipped=` and report
+  "ran" vs "skipped" separately — no `<failure>` is not the same as PASS. Never trust `am
+  instrument`'s bare `OK (N tests)`; use `am instrument -r` (raw) and grep for
+  `AssumptionViolatedException`/`INSTRUMENTATION_STATUS: stack=` before believing a suite
+  verified anything. Same family as this ledger's `--rerun-tasks` rule: the question is never
+  "did it say success," it is "did the assertion actually execute." A test that CAN skip must
+  have its skip surfaced as loudly as a failure in whatever reads the results. (seen 1x)
