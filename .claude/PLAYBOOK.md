@@ -573,6 +573,141 @@ branch — which could be copied instead of running `gradle wrapper` locally, bu
 convenience observation, not the documented procedure.)
 Source: [docs.gradle.org/current/userguide/gradle_wrapper.html](https://docs.gradle.org/current/userguide/gradle_wrapper.html); [docs.gradle.org/current/userguide/installation.html](https://docs.gradle.org/current/userguide/installation.html).
 
+**8. Android Studio ↔ AGP compatibility — read 2026-07-17.** Trigger: this laptop's installed
+Studio (build `AI-253.29346.138.2531.14876573`, data dir `AndroidStudio2025.3.1`) refuses to sync
+the project's pinned AGP 9.3.0 — "The project is using an incompatible version (AGP 9.3.0)...
+Latest supported version is AGP 9.0.0." Verified against the raw HTML `<table>` on
+developer.android.com (not the AI-summarized version of the same page — cross-checked both and the
+summarizer's numbers matched, but the raw table is quoted below as ground truth).
+
+*(1) Which Studio supports AGP 9.3.0 — the official table* (raw `<table>` from
+`developer.android.com/studio/releases`, "Last updated 2026-07-16 UTC"):
+```
+Android Studio version              Required AGP version
+Quail 2  | 2026.1.2                 7.1-9.3      <- supports AGP 9.3.0
+Quail 1  | 2026.1.1                 7.1-9.2
+Panda 4  | 2025.3.4                 7.1-9.2
+Panda 3  | 2025.3.3                 7.0-9.1
+Panda 2  | 2025.3.2                 7.0-9.1
+Panda 1  | 2025.3.1                 7.0-9.0      <- installed on this laptop
+Otter 3 Feature Drop | 2025.2.3     4.2-9.0
+```
+**Quail 2 (2026.1.2) is the only named Studio row that reaches AGP 9.3.** Channel — page prose:
+"This page lists new features and improvements in the latest version in the **stable channel**,
+Android Studio Quail 2" (i.e. not a preview build; corroborated independently — the main
+`developer.android.com/studio` download page also defaults to "Download Android Studio Quail 2 |
+2026.1.2" as of this read). Its closed-issues page (`/studio/releases/fixed-bugs/studio/2026.1.2`)
+shows the full channel history in order — `Canary 1`…`Canary 7`, `RC 1`, `RC 2`, then the
+suffix-less `2026.1.2` (stable) — confirming the normal canary→RC→stable graduation.
+**Gap, not published on developer.android.com:** an exact release day, and the IntelliJ-platform
+build ID (`AI-2NN.xxxxx`-style) for Quail 2. While a version is current (not yet archived) its page
+carries no "(Month Year)" suffix and no build-ID column exists anywhere (download links instead show
+the internal artifact version `2026.1.2.10`, e.g.
+`.../ide-zips/2026.1.2.10/android-studio-quail2-windows.zip`). Best bound from what IS dated:
+predecessor "Quail 1 (June 2026)" (its own archived page title) + this page's own "Last updated
+2026-07-16 UTC" + the closed-issues page's "Last updated 2026-07-14 UTC" + AGP 9.3.0 itself going
+stable "Last updated 2026-07-15 UTC" → Quail 2 stable shipped in the July 2026 window, tightly
+bound to on/around 2026-07-14–16, but no verbatim "released on `<date>`" sentence exists for it.
+
+*(2) Newest stable Studio as of 2026-07-17 = Quail 2 | 2026.1.2; its AGP ceiling is 9.3 — NOT
+canary/beta-only.* This means **updating Android Studio is a fully docs-supported fix** for this
+project's pinned AGP 9.3.0 (the current *stable* Studio already covers it — this is not a "wait for
+canary" situation).
+
+*(3) AGP ceiling for the INSTALLED Studio 2025.3.1 — confirmed exactly as the IDE reported.* Row
+`Panda 1 | 2025.3.1 → 7.0-9.0` = ceiling AGP **9.0**, matching the IDE's own error text verbatim.
+Release name + date (its own archived page title,
+`/studio/releases/past-releases/as-panda-1-release-notes`): **"Android Studio Panda 1 (February
+2026)."** **Fallback-pinning caution (synthesis, not a direct quote):** the table's "9.0" is
+shorthand for the whole 9.0.x patch line (same convention as every other row, e.g. "8.9" =
+8.9.x), but the IDE dialog named the ceiling **"AGP 9.0.0"** specifically — and 9.0.1 is what
+`developer.android.com`'s AGP-9.0 page currently documents (see (4) — Google keeps one living page
+per AGP *minor*, updated in place through patches). If downgrading, **pin exactly `9.0.0`**; treat
+`9.0.1` as unverified-to-open-in-Panda-1 until tested.
+
+*(4) Fallback data — AGP 9.0.0/9.0.1 compatibility* (raw `<table>`,
+`developer.android.com/build/releases/agp-9-0-0-release-notes`, "Last updated 2026-07-15 UTC" — note
+the page's own `<title>` is now **"Android Gradle plugin 9.0.1 (January 2026)"**, i.e. this URL is
+the living page for the whole 9.0.x line, not a preserved 9.0.0-only snapshot):
+```
+Gradle          min 9.1.0   default 9.1.0
+SDK Build Tools min 36.0.0  default 36.0.0
+NDK             default 28.2.13676358
+JDK             min 17      default 17
+```
+"The maximum API level that Android Gradle plugin 9.0 supports is API level 36.1." (AGP 9.3 raises
+this to 37 — see point 1 above.)
+
+**Built-in Kotlin — IDENTICAL in 9.0.0 and 9.3.0; introduced AT 9.0, unchanged since.** Verbatim
+from the AGP-9.0 page: "Android Gradle plugin 9.0 introduces built-in Kotlin support and enables it
+by default. That means you no longer have to apply the `org.jetbrains.kotlin.android` (or
+`kotlin-android`) plugin in your build files to compile Kotlin source files." And: "Ensure your
+project is compatible with built-in Kotlin: The `org.jetbrains.kotlin.android` plugin is not
+compatible with the new DSL." Exact hard-error text (`developer.android.com/build/migrate-to-built-in-kotlin`
+— the same error this ledger's AGP-9-built-in-Kotlin entry below already recorded independently, now
+docs-confirmed verbatim):
+```
+Failed to apply plugin 'com.jetbrains.kotlin.android'
+> The 'org.jetbrains.kotlin.android' plugin is no longer required for Kotlin support since AGP 9.0.
+```
+**AGP 9.3.0's own release notes page has ZERO mentions of "Kotlin," "KGP," or "built-in Kotlin"**
+(grepped the raw HTML — no matches) — nothing changed for this feature between 9.0 and 9.3. **One
+real but non-behavioral difference found:** the bundled/minimum Kotlin Gradle Plugin (KGP) runtime
+dependency crept upward — AGP 9.0's page states "a runtime dependency on Kotlin Gradle plugin (KGP)
+2.2.10"; AGP 9.2.0's own Fixed-Issues table lists issue #483083119, **"Update Kotlin Gradle plugin
+dependency to 2.3.10."** Not relevant to this project either way — Kotlin 2.4.10 (pinned) clears
+both floors. **Conclusion: dropping `kotlin-android` from `plugins{}` is correct and required on AGP
+9.0.0 exactly as much as on 9.3.0 — that part of the build does NOT need to change if AGP is
+downgraded to 9.0.0 as a fallback.**
+
+*(5) The AGP ceiling is an Android-Studio-IDE gate, not a Gradle/AGP gate — CLI builds are believed
+unaffected (docs-supported inference, not a verbatim guarantee).* No single sentence says "CLI is
+exempt," but: the compatibility page's own policy note names the actor explicitly — "If your
+project's AGP version is incompatible, **Android Studio** will require you to update AGP" (subject =
+the IDE). Corroborating: the canonical CLI-build doc, `developer.android.com/build/building-cmdline`
+("Build your app from the command line," documents this project's own `gradlew assembleDebug`),
+contains **zero** mentions of "Android Studio," version ceilings, or compatibility tables anywhere in
+its raw HTML. **Practical read: `.\gradlew.bat assembleDebug` from a terminal should build fine
+against AGP 9.3.0 even while Studio 2025.3.1 refuses to *sync the project in the IDE*** — Gradle has
+no knowledge of "which Android Studio is installed" when invoked headlessly. **Not yet verified by
+actually running the build** — flagging as a docs-grounded inference for the caller to confirm
+empirically.
+
+*(6) No documented override — updating Studio (or downgrading AGP) are the only supported paths.*
+Checked every relevant official page (`/studio/releases`, `/build/releases/about-agp`,
+`/build/agp-upgrade-assistant`, `/studio/known-issues`) — **none document a flag, VM option, or
+Gradle property to make an older Studio accept a newer AGP.** The AGP Upgrade Assistant only steps a
+project's AGP forward *within* what the current Studio already supports — not an escape hatch for an
+already-too-new AGP. The compatibility page's "still open... using an older version of Android
+Studio" note is the OPPOSITE case (an old AGP a new Studio dropped under the 3-year policy) and does
+not apply here. Non-official corroboration only (not developer.android.com, context not source of
+truth): Google's public issue tracker has an open **feature request**, "Implement flag to disable AGP
+minimum version checking" (`issuetracker.google.com/issues/295373352`) — a request, not a shipped
+feature, consistent with "no such flag exists."
+
+Sources (raw HTML via `curl`, read 2026-07-17):
+[developer.android.com/studio/releases](https://developer.android.com/studio/releases) (compat table
++ stable-channel statement, updated 2026-07-16);
+[.../fixed-bugs/studio/2026.1.2](https://developer.android.com/studio/releases/fixed-bugs/studio/2026.1.2)
+(channel history, updated 2026-07-14);
+[.../past-releases/as-panda-1-release-notes](https://developer.android.com/studio/releases/past-releases/as-panda-1-release-notes)
+("Panda 1 (February 2026)");
+[.../past-releases/as-quail-1-release-notes](https://developer.android.com/studio/releases/past-releases/as-quail-1-release-notes)
+("Quail 1 (June 2026)");
+[developer.android.com/build/releases/agp-9-3-0-release-notes](https://developer.android.com/build/releases/agp-9-3-0-release-notes)
+(updated 2026-07-15);
+[developer.android.com/build/releases/agp-9-0-0-release-notes](https://developer.android.com/build/releases/agp-9-0-0-release-notes)
+(updated 2026-07-15, currently shows 9.0.1);
+[developer.android.com/build/releases/agp-9-2-0-release-notes](https://developer.android.com/build/releases/agp-9-2-0-release-notes)
+(KGP 2.3.10 fixed-issue);
+[developer.android.com/build/migrate-to-built-in-kotlin](https://developer.android.com/build/migrate-to-built-in-kotlin)
+(verbatim hard-error text);
+[developer.android.com/build/building-cmdline](https://developer.android.com/build/building-cmdline)
+(CLI build doc, silent on Studio version);
+[developer.android.com/build/releases/about-agp](https://developer.android.com/build/releases/about-agp);
+[developer.android.com/build/agp-upgrade-assistant](https://developer.android.com/build/agp-upgrade-assistant);
+[developer.android.com/studio/known-issues](https://developer.android.com/studio/known-issues).
+
 ---
 
 ### Android Auto Backup (progress.db cloud backup) — read 2026-07-17
@@ -971,3 +1106,20 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   settings file existed yet.
   **Fix/prevention:** write a minimal `settings.gradle.kts` first, then run `gradle wrapper`.
   (seen 1x)
+
+- **2026-07 · When pinning/bumping the Android toolchain, check Android Studio's AGP ceiling too
+  — not just Gradle/JDK/Build-Tools.** A0 pinned the newest AGP (9.3.0), verified against
+  Gradle/JDK/SDK-Build-Tools, but never checked AGP ↔ Studio; the installed IDE (Panda 1 |
+  2025.3.1, ceiling AGP 9.0) refused to sync — "Latest supported version is AGP 9.0.0" — blocking
+  code completion/previews/Run for an app this laptop builds via Studio (CLAUDE.md `build_env`).
+  Only Studio Quail 2 (2026.1.2, current stable) reaches AGP 9.3 — "newest AGP" outran the
+  installed IDE by 2 feature drops. The CLI build was NEVER broken (verified: `gradlew
+  verifyOfflineGuarantees`/`assembleDebug` both succeeded under AGP 9.3.0 throughout) — a Studio
+  AGP-ceiling dialog means "update Studio or downgrade AGP," not "the build is broken."
+  **Fix/prevention:** before pinning, read the INSTALLED Studio's build off this machine
+  (`C:\Program Files\Android\Android Studio\build.txt`) and look its row up on
+  developer.android.com/studio/releases — the IDE is as binding a constraint as Gradle/JDK for an
+  IDE-developed app, and newest-available ≠ newest-installed. No override flag exists (Google
+  issuetracker #295373352, open/unshipped) — only fix is update Studio or downgrade AGP. On any
+  IDE version complaint, confirm with `gradlew` from a terminal FIRST, before touching a pin. Full
+  compat table: playbook "Android build toolchain" note, §8. (seen 1x)
