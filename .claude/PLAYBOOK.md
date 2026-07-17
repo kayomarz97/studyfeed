@@ -1602,3 +1602,21 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   verified anything. Same family as this ledger's `--rerun-tasks` rule: the question is never
   "did it say success," it is "did the assertion actually execute." A test that CAN skip must
   have its skip surfaced as loudly as a failure in whatever reads the results. (seen 1x)
+
+- **2026-07 · A test suite that only exercises states it created itself will never see the state
+  a fresh user starts in — test the ZERO state explicitly.** At A1, `FeedReader` ATTACHes
+  `progress_<EXAM>.db` beside the pack DB and needs both files to exist, but Room creates the
+  progress file LAZILY (first query/write, not `databaseBuilder().build()`). On a freshly
+  imported pack with nothing studied yet, the file didn't exist, `openDatabase()` failed, and the
+  feed silently reported "0 items" over a real 32,957-item pack — invisible to 44 green tests
+  because every one of them called `upsertCard(...)` in setup, which created the progress file as
+  a side effect and silently satisfied the precondition production code was missing. Only running
+  the real APK found it.
+  **Fix/prevention:** `ProgressDatabase.ensureExists(context, examCode)` forces the file into
+  existence (open the RoomDatabase, touch `openHelper.writableDatabase`, close explicitly — Room
+  is not `Closeable`, `use {}` won't compile) before `FeedReader` opens. For any feature, write a
+  dedicated zero-state test (fresh install / nothing imported / nothing studied) that asserts the
+  precondition does NOT hold before acting (e.g. `assertFalse(file.isFile)`), so it can't quietly
+  start passing by inheriting setup from elsewhere. Lazy-initialised files (Room DBs, caches) are
+  a trap for any code that reaches them by path (ATTACH, export, size check) — never assume they
+  exist before first use. (seen 1x)

@@ -829,3 +829,72 @@ foundation "switch exam" needs) · a pack with **no figures directory imports fi
 broken; a future pack may ship without images) · progress reports through to FINALISING.
 
 **Next:** the progress DB (Room) + registry on the now-proven D4 reader, then manifest-driven UI.
+
+### 2026-07-17 — A1 FEATURE-COMPLETE: release APK built, installed, and driven end-to-end
+
+**User directive:** *"continue, stop only when final apk is built and tested."* Done — and testing the
+real APK earned its keep immediately by finding a bug every test had missed (below).
+
+**THE RELEASE APK — built, signed, and VERIFIED ON THE ARTIFACT ITSELF, not the config:**
+- `app-release.apk` **0.94 MB** (R8 + resource shrink); `app-debug.apk` 12.34 MB.
+- **Signed:** `CN=StudyFeed, O=StudyFeed`, SHA-256 `ba4f05a5…83e3` — **the same key A0 recorded**, so an
+  in-place upgrade still works and `progress.db` is not stranded (§11d).
+- **`aapt2` on the shipped APK: NO INTERNET permission**; the only `uses-permission` is the app-scoped
+  `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` (AGP-injected, not network). **0 `<service>`, 0
+  `<receiver>`**, 1 provider (the allowlisted `androidx.startup.InitializationProvider`).
+- `verifyOfflineGuarantees`: 120 release modules, none forbidden.
+
+**THE FULL SAF IMPORT WAS DRIVEN END-TO-END ON THE RELEASE BUILD — the real user path, not a shortcut.**
+This matters because R8 can break what debug never does. `run-as` **refused** the release APK ("package
+not debuggable" — correct, and reassuring), so there was no way to cheat the pack into storage: after
+`adb uninstall` (wiping all data) and a clean release install, the pack could only arrive via the picker.
+Tapped through: Import → Download → MRCP_PART1 → **Allow** → 141 MB copied → sha256 verified against
+`manifest.json.checksum` → schema gated → atomic rename. Result on screen: **"Imported MRCP(UK) Part 1."**
+and **`pack 0.1.0 · 32957 items · 0 seen`**, with all **16 subjects**, **5 tags** and **7 capabilities** —
+every label read from `pack_manifest`, none of them in the code. **No crash, no R8 stripping errors.**
+
+**§11e export driven through the release UI:** wrote `studyfeed-progress-MRCP_PART1-2026-07-17.zip`,
+magic `504b 0304`, entries `export.json` + `db/progress_MRCP_PART1.db` + its WAL sidecars.
+
+**D2 confirmed by accident, and pleasingly:** `adb shell ls` on the release app's `filesDir` returns
+**"Permission denied"** (and `adb root` is refused on a production build). The copyrighted pack really is
+unreadable by anything but the app — which is exactly why `filesDir` was chosen over external storage.
+
+**🔴 THE BUG ONLY THE REAL APK FOUND — and why it matters more than it looks.** The app displayed
+**"0 items"** while holding **32,957**. `FeedReader` ATTACHes progress + pack and needs BOTH files, but
+**Room creates `progress_<EXAM>.db` LAZILY, on first write** — so a freshly imported pack has no progress
+file, the ATTACH could not open, and the feed read as empty. **Every test missed it because every test
+wrote progress first**, which created the file as a side effect and hid the gap. The fresh-install path —
+the one every user meets exactly once, on their very first launch — was the only one that exposed it, and
+it would have made **A2's feed blank on day one**. Fixed with `ProgressDatabase.ensureExists()`; regression
+test added (`a_freshly_imported_pack_reports_its_full_size_before_any_progress_exists`) precisely because
+no other test naturally reaches that path. **Verified on screen: 32957 items.**
+*Lesson, logged: a test suite that only exercises states it created itself will never see the state the
+user starts in.*
+
+**Also found by running it — zip-slip, and a guard I nearly shipped untested.** The instrumented test
+asserted OUR canonical-path guard refuses a traversal archive. It failed: **Android's own ZipInputStream
+rejects `..` entries first** (*"Invalid zip entry path"*, API 36) — so our guard never executed and was
+**dead code that had never once run**. It must NOT be deleted as redundant: **minSdk is 26**, and on
+Android versions predating the platform check our guard is the *only* protection. Resolution: the guard
+is now a pure, visible `isWithin()` proven **directly** by 9 JVM tests where no platform layer can
+intercept the input; the instrumented test now asserts the **outcome** (refused, nothing escapes),
+deliberately not which layer caught it.
+*Also corrected: I had asserted an absolute entry name escapes. It does not —* `File(parent, child)`
+*converts an absolute child to relative, so `/etc/passwd` lands INSIDE the destination. My belief was
+wrong, not the guard; the test now documents the real semantics.*
+
+**Everything green (counts from XML, never from "BUILD SUCCESSFUL"):** JVM **24 tests / 0 failures**;
+instrumented **45 tests / 42 RAN / 0 failures** (3 `RealPackTest` skip under Gradle because its own
+uninstall wipes the fixture — re-run directly: RAN and PASSED against the real 141 MB pack).
+
+**⚠ UNMEASURED, and needs the real phone (D6):** first launch on the real pack took **~15 s** to show
+counts (cold start, Room schema creation, `COUNT` + `JOIN` over 32,957 rows on a 141 MB DB). Emulator
+numbers are host-disk fiction — **do not quote them as device timings**. If it is genuinely this slow on
+hardware, cache `feedSize`/`seenCount` rather than recomputing them on every open. Also still unmeasured:
+`DocumentsContract` traversal of 1,121 figures, and throughput through the attached-DB reader.
+
+**A1 status: feature-complete against §8 A1** — SAF import ✅ · schema-version gate ✅ · UI config from
+`pack_manifest` ✅ · per-exam progress DB, never wiped ✅ · switch-exam registry ✅ · §11e export/import ✅ ·
+capability detection per pack ✅. **A2 (the Study Feed) is next, and needs the phone** — "made excellent"
+is a judgement about a real AMOLED panel and a real thumb, which no emulator can make.
