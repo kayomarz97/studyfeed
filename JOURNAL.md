@@ -1291,3 +1291,37 @@ renders bold facts + muted citations + safe alleles, sections once each.
 node size = centrality, colour = importance, tap node → summary + typed edges → "Quiz me" pulls
 `interlink_quizzes`. Then A6 → A7 (design pass). A3+A4 committed on `dev`, **not yet pushed** (user:
 "build A4, push later").
+
+### 2026-07-18 — **A5 Concept Map COMPLETE** (walkable ego-graph)
+
+Built the concept map (§8 A5) as a **walkable ego-graph explorer** (user's choice): focus concept + its
+top-12 neighbours on a pan/zoom Compose Canvas, force-directed (`concept/ForceLayout.kt`, pure Kotlin
+Fruchterman–Reingold, focus pinned centre), node size = centrality, colour = importance, typed+directional
+edges. **Tap a neighbour → walk to it; tap the centre → info sheet** (typed-edge list, "Open dossier" →
+A4, "Quiz me on these links" → `interlink_quizzes` in a read-only interlink viewer). Pack-only reader
+`concept/ConceptRepository.kt`. Entry = a "Map" button in the feed top bar (global nav = A7).
+
+**Why ego-graph, not the whole thing:** 37,795 concepts / 67,795 edges — full force layout is O(n²),
+impossible on a phone. So every read is ego-scoped; hubs (degree up to 314) are **capped at K=12** with a
+"+N more" note.
+
+**⚠ FINDING — `concepts.summary_md` ships EMPTY (0 / 37,795).** The spec's "tap node → summary" can't use
+it. Instead the node panel uses the concept's **typed edges** + a link to its **dossier** (8,194 concepts
+have a `topic_page`). Documented so a future session doesn't hunt for a summary that isn't there. (Also:
+only **2,998 of 67,795 edges** carry an `interlink_quiz`, so "Quiz me" is available on some concepts, not
+all — the viewer shows "No link-quizzes for this concept" otherwise.)
+
+**Verified:** `ForceLayoutTest` 6/6 JVM (0 skipped) — deterministic (no RNG), finite, focus pinned,
+neighbours spread + distinct, bounded. `ConceptRealPackTest` **OK (5 tests)** on the real 37,795-concept
+pack — top concepts central+searchable, ego caps neighbours + reports more, dossier link resolves, quiz
+refs load as interlink cards (read-only, no FSRS), layout matches node count. `verifyOfflineGuarantees`
+green, **zero new deps** (Compose Canvas + pure-Kotlin layout, no graph/physics library). Live smoke on
+`emulator-5554`: RA map renders (ring of 12 typed neighbours), centre → info sheet (Open dossier + Quiz
+me + connections), Quiz me → interlink card. **A7 polish owed:** the layout is compact / labels collide
+near the centre (spread + label de-collision are design, deferred).
+
+**Resume point:** A5 done. **Next = A6 (Mistakes, mastery, stats, §8 A6)** — mistakes review = feed
+filtered to unresolved `mistakes` (re-drill until resolved), per-subject mastery bars (FSRS stability +
+accuracy), forgetting-curve view, "high-importance gaps" list, tasteful local gamification (streaks/daily
+goal/XP). Then A7 (design pass). A3+A4+A5 committed on `dev`, **not yet pushed** (user: "build A4, push
+later" → still holding).

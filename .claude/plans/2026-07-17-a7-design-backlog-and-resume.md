@@ -48,11 +48,12 @@ of A2 (markdown renderer, filters, sort, star/tag, blob quiz-back are all pure S
   code. Fix: push figures in smaller batches, or accept it (a real user imports figures via SAF with the
   pack, where it's a one-time local copy, not wifi).
 
-**Next stages to BUILD (functional), in order:** ~~A3 (feed ordering engine)~~ **✅ DONE** (engine
-`feed/FeedScheduler.kt`) → ~~A4 (topic dossier reader)~~ **✅ DONE 2026-07-17** (`dossier/` +
-`ui/dossier/`; **PATCH 05**: dossier corpus needs its own `DossierMarkdown`; 9 JVM + 4 real-pack tests;
-see JOURNAL "A4 Topic Dossier reader COMPLETE") → **A5 (concept map) ← NEXT** → A6 (mistakes/mastery/
-stats) → A7 (settings + **the design pass below**).
+**Next stages to BUILD (functional), in order:** ~~A3 (feed ordering engine)~~ **✅ DONE** → ~~A4 (topic
+dossier reader)~~ **✅ DONE** (PATCH 05) → ~~A5 (concept map)~~ **✅ DONE 2026-07-18** (`concept/` +
+`ui/concept/`; walkable ego-graph, `ForceLayout`; finding: `concepts.summary_md` empty → edges+dossier;
+6 JVM + 5 real-pack tests; see JOURNAL "A5 Concept Map COMPLETE") → **A6 (mistakes/mastery/stats) ← NEXT**
+→ A7 (settings + **the design pass below**). A5 has an A7 polish item: map layout is compact / labels
+collide near centre (spread + de-collision = design).
 
 ---
 

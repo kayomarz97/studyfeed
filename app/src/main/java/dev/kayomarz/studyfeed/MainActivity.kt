@@ -41,6 +41,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.kayomarz.studyfeed.pack.PackImporter
 import dev.kayomarz.studyfeed.ui.PackUiState
+import dev.kayomarz.studyfeed.ui.concept.ConceptMapScreen
+import dev.kayomarz.studyfeed.ui.concept.ConceptMapViewModel
 import dev.kayomarz.studyfeed.ui.dossier.DossierScreen
 import dev.kayomarz.studyfeed.ui.dossier.DossierViewModel
 import dev.kayomarz.studyfeed.ui.dossier.ItemDetailScreen
@@ -88,6 +90,7 @@ private sealed interface Screen {
     data object Feed : Screen
     data object Manage : Screen
     data object Library : Screen
+    data object ConceptMap : Screen
     data class Dossier(val topicPageId: Long) : Screen
     data class ItemDetail(val type: String, val refId: Long) : Screen
 }
@@ -98,11 +101,18 @@ private fun Root() {
     // Remembered so the Reference viewer's Back returns to the dossier it was opened from.
     var currentDossierId by remember { mutableStateOf(0L) }
     val dossierVm: DossierViewModel = viewModel()
+    val conceptVm: ConceptMapViewModel = viewModel()
 
     when (screen) {
         Screen.Feed -> FeedScreen(
             onNoPack = { screen = Screen.Manage },
             onOpenLibrary = { screen = Screen.Library },
+            onOpenMap = { screen = Screen.ConceptMap },
+        )
+        Screen.ConceptMap -> ConceptMapScreen(
+            vm = conceptVm,
+            onOpenDossier = { pid -> currentDossierId = pid; dossierVm.openDossier(pid); screen = Screen.Dossier(pid) },
+            onBack = { screen = Screen.Feed },
         )
         Screen.Manage -> PackScreen(onOpenFeed = { screen = Screen.Feed })
         Screen.Library -> LibraryScreen(

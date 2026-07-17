@@ -52,6 +52,7 @@ fun FeedScreen(
     vm: FeedViewModel = viewModel(),
     onNoPack: () -> Unit,
     onOpenLibrary: () -> Unit = {},
+    onOpenMap: () -> Unit = {},
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
 
@@ -66,6 +67,7 @@ fun FeedScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = onOpenLibrary) { Text("Search") }
+                TextButton(onClick = onOpenMap) { Text("Map") }
                 FeedControls(
                     query = ui.query,
                     subjects = ui.subjects,
