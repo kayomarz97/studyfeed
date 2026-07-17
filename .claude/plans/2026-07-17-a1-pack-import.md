@@ -123,11 +123,15 @@ What the compiler actually emits is those three **directly inside `compiler/dist
 `pack_MRCP_PART1/` wrapper. It matters because SAF import means "user picks a directory", and the app
 must decide what it accepts.
 
-**Recommendation:** the app should **not** care about the parent directory's name — accept any directory
-containing exactly one `pack_*.db` + `manifest.json` (+ optional `figures/`), and derive `exam_code` from
-`pack_manifest`, never from a filename. Filename-derived identity is precisely the "same filename ≠ same
-file" trap already in the mistakes ledger from C1. **Ask to confirm**, since it means the spec's tree
-diagram is illustrative rather than normative.
+**✅ DECIDED 2026-07-17 — judge the directory by its contents, never its name.** User's call. Accept any
+picked directory containing exactly one `pack_*.db` + `manifest.json` (+ optional `figures/`); derive
+`exam_code` from **`pack_manifest`**, never from a filename. Filename-derived identity is precisely the
+**"same filename ≠ same file"** trap already in the mistakes ledger from C1 — that mistake cost a
+misclassification of an entire drop, and it is the same shape of error here.
+**Follow-up owed:** add a line to `spec/SPEC.md` §1 saying its tree diagram is **illustrative, not
+normative** — the compiler emits the three files directly into `dist/` with no `pack_<EXAM_CODE>/`
+wrapper, and the app does not require one. (Do this when A1 lands, so the contract and the code agree in
+the same commit — global rule 6.)
 
 ### 3.3 TRAP: there are two different `checksum` fields and they hold different values 🔴
 
@@ -144,7 +148,22 @@ Verifying the file hash on import is worth doing (it is what caught nothing toda
 truncated `adb push`) — but it must read `manifest.json`, not the DB row. Documenting here because this
 is a ~30-minute debugging trap disguised as a one-line check.
 
-### 3.4 DECISION: Room + `ATTACH` — the stack's sharpest edge 🔴
+### 3.4 ✅ DECIDED 2026-07-17 — **Option A: Room for progress only; raw SQLite for the pack**
+
+> **User's call.** Room owns `progress_<EXAM>.db` (typed DAOs, verified schema, real migrations — it is
+> the only DB whose shape will evolve). The pack is opened read-only via
+> `SQLiteDatabase.openDatabase(…, OPEN_READONLY)` and `ATTACH`-ed for cross-DB joins.
+> **Consequences accepted:** two access idioms in one codebase; cross-DB joins are hand-written SQL.
+> **Versions — RESEARCHED 2026-07-17, not guessed** (full citations: PLAYBOOK "Android app A1
+> dependencies"): **Room 2.8.4** · **KSP 2.3.10** (pairs with Kotlin 2.4.10). **KSP2 is mandatory, not a
+> choice** — KSP1's own README rules out Kotlin ≥2.3.0 and AGP ≥9.0, and **kapt is a hard error** under
+> AGP 9's built-in Kotlin. KSP 2.3.10's release notes explicitly fix "R-class resolution in KSP when AGP
+> 9 built-in Kotlin is enabled" — the closest thing to official confirmation our combination works.
+> **Do NOT add `room-ktx`** — merged into `room-runtime` at 2.7.0; adding it cargo-cults a dead artifact.
+> **Guard note:** Room is not a networking dep and must not trip `CheckDependencyDenylistTask`; if it
+> false-positives, the guard is right and the dep list is wrong — investigate, never disable the guard.
+
+<details><summary>Original options as presented (kept as the record of the decision)</summary>
 
 `SPEC.md` §2 requires the app to **`ATTACH` the read-only content DB beside the read-write progress DB
 and join across them**. `CLAUDE.md` names the stack "Room + FSRS-6". **These fight each other:** Room
@@ -165,8 +184,9 @@ Three honest options (my recommendation is A):
 - **C. No Room at all; raw SQLite both sides.** Simplest mental model, fewest deps, and hand-rolls
   migrations + mapping that Room gives free — on the one DB whose schema will actually evolve.
 
-**Ask:** A, B, or C? This is the load-bearing architecture call of A1 and it is genuinely yours. It also
-decides whether `androidx.room` enters `libs.versions.toml` (it is **not** there today).
+</details>
+
+**Chosen: A.**
 
 ### 3.5 DECISION: importing means copying ~370 MB. How should that feel? 🟡
 
@@ -188,8 +208,42 @@ No supported way around it — so `ACTION_OPEN_DOCUMENT_TREE` → stream `pack_*
   Recommend up-front.
 - **Storage check first:** refuse politely with a real number if free space < pack size × 1.1.
 
-**Ask:** confirm up-front full copy with progress + cancel, `filesDir` (private, hidden from other apps)
-vs `getExternalFilesDir` (user-visible, easier to inspect/clear).
+**✅ DECIDED 2026-07-17 — `filesDir` (app-private).** User's call. Up-front full copy, with progress +
+cancel, into `getFilesDir()`. **Why it is the right fit beyond preference:** the pack is derived from
+**copyrighted** sources, and `filesDir` is the only option not readable by other apps — the same instinct
+that keeps `compiler/dist/` out of git. **Consequences accepted:** the pack can't be inspected or
+hand-swapped without `adb`, and it counts against app storage in Settings. **Consequence that needs
+handling:** `allowBackup=false` + `filesDir` means an uninstall takes the pack with it — a 370 MB
+re-import, not a data loss (the pack is reproducible; progress is not — that's what §11e protects).
+
+### 3.7 ✅ DECIDED 2026-07-17 — the ATTACH problem, and how the cross-DB join actually works 🔴
+
+**Found by `docs-researcher`, not by assumption — this would have been discovered mid-build otherwise.**
+`SPEC.md` §2's "ATTACH and join across" collides with the stack we chose:
+
+- **SQLite's own docs:** `ATTACH` is scoped to **one connection**. Room **pools** connections ⇒ an
+  ATTACH on one pooled connection is **invisible** to a query served by another.
+- **Android's `SQLiteDatabase.enableWriteAheadLogging()` javadoc, verbatim:** *"If the database has any
+  attached databases, then execution of queries in parallel is **not** possible."* Room enables WAL by
+  default.
+- **Documented gap, flagged not papered over:** no official Room doc addresses Room + ATTACH at all.
+
+**Decision (user's call): a dedicated, non-pooled, READ-ONLY connection serves every cross-DB read.**
+
+- One `SQLiteDatabase` opened on `progress_<EXAM>.db`, with the pack `ATTACH`-ed **read-only**; used
+  **exclusively** for feed/priority `SELECT`s. It **never writes** — so it cannot contend with Room.
+- **Room's pool owns every write.** WAL permits concurrent readers alongside a single writer, so the two
+  coexist by design rather than by luck.
+- **Why this works where the naive version doesn't:** the ATTACH lives on exactly one connection that we
+  own and never hand back to a pool, so it cannot vanish. The javadoc's "no parallel queries" warning is
+  a **throughput** note about that one connection — not a correctness problem, and irrelevant to a
+  single-user reader.
+
+⚠ **This rests on a documented gap and MUST be spiked on the real device before anything is built on
+it** (step 1 below). The claim to falsify: *a dedicated read-only connection with an ATTACH can read
+`progress_<EXAM>.db` while Room's WAL pool writes it, without error or stale reads.* If the spike fails,
+fall back to joining in Kotlin (`fsrs_cards` is sparse and 32,957 rows fit in memory) and amend
+`SPEC.md` §2 — **do not** work around it by disabling WAL, which would degrade every write in the app.
 
 ### 3.6 DECISION: the schema gate's exact semantics 🟡
 
@@ -219,30 +273,43 @@ to Int; never compare across representations. Refusal must **name both versions*
 
 Nothing here starts until §3 is answered.
 
-0. **`docs-researcher` FIRST** — per the golden loop, before any code touches an undocumented API.
-   Needed: **Room** (version for Kotlin 2.4.10 / AGP 9.3.0 / minSdk 26; `ATTACH` story; KSP vs KAPT),
-   **SAF** (`ACTION_OPEN_DOCUMENT_TREE`, persistable URI permissions, `DocumentFile` traversal cost at
-   1,121 files), **`SQLiteDatabase.openDatabase` read-only + `ATTACH`** semantics, and **ZIP** for §11e.
-   None are in `PLAYBOOK.md` today (it has Batch API, Docling, FSRS-6, Android toolchain). Findings land
-   in the PLAYBOOK so this search happens once. **Also `syntax-compatibility-checker`** on any new dep —
-   the AGP-ceiling entry is a fresh reminder that "newest" is not automatically compatible here.
-1. **Pack contract layer** — data classes for `pack_manifest`, `subjects`, `tag_defs`; parse both
+0. ✅ **`docs-researcher` — DONE 2026-07-17.** Findings + citations recorded in PLAYBOOK "Android app A1
+   dependencies — Room+KSP, SQLite ATTACH, SAF, ZIP, Storage". Headlines: Room 2.8.4 / KSP 2.3.10 (KSP2
+   mandatory, kapt a hard error, no `room-ktx`); **Room+ATTACH is a documented gap → §3.7**; use
+   `DocumentsContract` + projection, **not** `DocumentFile` (its own javadoc says it "has substantial
+   overhead"); SQLite **cannot** open a `content://` URI (hence the copy); zip-slip mitigation is
+   official, verbatim code; `StorageManager.getAllocatableBytes()` (API 26+, our exact floor) beats
+   `File.getUsableSpace()` per Google's javadoc — it counts reclaimable cache.
+
+1. **SPIKE the ATTACH assumption FIRST — throwaway code, on the real phone (§3.7).** Everything else
+   rests on it, and it rests on a documented gap. **Falsify this:** *a dedicated read-only connection
+   with an ATTACH can read `progress_<EXAM>.db` while Room's WAL pool writes it, without error or stale
+   reads.* Pass ⇒ build step 4 on it. Fail ⇒ Kotlin-side join + amend `SPEC.md` §2; **never** "fix" it by
+   disabling WAL. Also measure the real `DocumentsContract` traversal of 1,121 figures here — cheap to
+   learn now, expensive to discover in step 3.
+2. **Pack contract layer** — data classes for `pack_manifest`, `subjects`, `tag_defs`; parse both
    representations. No UI. Unit-testable without a device.
-2. **The schema gate** (§3.6) — one constant, refusal messages, the type-parsing. **Tests first**: a v1
+3. **The schema gate** (§3.6) — one constant, refusal messages, the type-parsing. **Tests first**: a v1
    pack loads; a v2 pack is refused by message, not by crash; a `pack_manifest`-less DB is refused; the
    TEXT/INTEGER mismatch does not false-refuse.
-3. **SAF import + copy** (§3.5) — temp dir, progress, cancel, atomic rename, storage precheck, file-hash
-   verify against `manifest.json`. Guard must stay green (no WorkManager).
-4. **Progress DB + registry** — per-`exam_code` `progress_<EXAM>.db` from SPEC.md §2's DDL verbatim.
-   `ATTACH` proven by a real cross-DB join. **Test the invariant that justifies the whole two-DB design:
-   re-import must not wipe progress.**
-5. **Manifest-driven UI** — app bar from `exam_name`, filter chips from `subjects`, tag chips from
-   `tag_defs`, availability from `counts_json`/actual rows (§3.1). **Zero exam strings** — assert it in a
-   test, don't just promise it.
-6. **"Switch exam" screen** — lists registry, switches active pack. Empty state matters: A1 ships with a
+4. **SAF import + copy** (§3.5) — `DocumentsContract` + projection (**not** `DocumentFile` — its own
+   javadoc says it "has substantial overhead"), temp dir, progress, cancel, atomic rename,
+   `StorageManager.getAllocatableBytes()` precheck, file-hash verify against **`manifest.json.checksum`**
+   (§3.3 — *not* `pack_manifest.checksum`). Guard stays green: no WorkManager.
+5. **Progress DB + registry + the dedicated read-only ATTACH connection** (§3.7) — per-`exam_code`
+   `progress_<EXAM>.db` from SPEC.md §2's DDL verbatim, Room-owned for writes; the spiked read-only
+   connection for cross-DB reads. **Test the invariant that justifies the whole two-DB design: re-import
+   must not wipe progress.**
+6. **Manifest-driven UI + capability detection** (§3.1a) — app bar from `exam_name`, filter chips from
+   `subjects`, tag chips from `tag_defs`; **availability from actual rows**, cross-checked against
+   `counts_json`/`feature_flags_json`. **Zero exam strings, zero hardcoded asset assumptions** — assert
+   both in tests, don't promise them.
+7. **"Switch exam" screen** — lists registry, switches active pack. Empty state matters: A1 ships with a
    real pack but a fresh install has none.
-7. **§11e export/import ZIP** — `progress.db` + `note_images/`, to Downloads via SAF. Per-pack.
-   Acceptance test 12: export → wipe → reinstall → import → note **and its image** return.
+8. **§11e export/import ZIP** — `progress.db` + `note_images/`, to Downloads via SAF
+   (`ACTION_CREATE_DOCUMENT`). Per-pack. **Zip-slip mitigation mandatory on import** — canonical-path
+   containment, per Google's official verbatim code (PLAYBOOK). Acceptance test 12: export → wipe →
+   reinstall → import → the note **and its image** return.
 
 **§11e is not optional and not deferrable.** Its "safe to defer" premise was "no real pack exists". A
 real 32,957-item pack is now on this laptop; the moment it is studied, progress becomes real and losable

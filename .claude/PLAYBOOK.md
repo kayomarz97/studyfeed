@@ -894,6 +894,407 @@ of `progress.db` via Storage Access Framework, which is signature-independent.
 
 ---
 
+### Android app A1 dependencies — Room+KSP, SQLite ATTACH, SAF, ZIP, Storage — read 2026-07-17
+
+Researched for §8 A1 against the pinned toolchain (AGP 9.3.0 built-in Kotlin, Kotlin 2.4.10,
+minSdk 26/compileSdk 36, fully-offline build-enforced). Five sub-topics below, each independently
+sourced and dated.
+
+**1. Room version + KSP under AGP 9's built-in Kotlin.**
+
+Latest stable Room: **2.8.4** (released 2025-11-19). Requires Kotlin ≥2.0 (satisfied by 2.4.10):
+> "Room now targets Kotlin language 2.0 and will require projects to also compile with Kotlin 2.0
+> and equivalent or higher language version. Support for KSP2 is also added and is recommended
+> when using Room with Kotlin 2.0 or higher." (Room 2.7.0 release notes)
+Room's own minSdk floor is **API 23** (raised from 21 in 2.8.0-rc02) — well under our minSdk 26, no
+conflict. `androidx.room:room-ktx` was merged into `androidx.room:room-runtime` as of 2.7.0-alpha01
+("the artifact is now blank. Please remove it from your dependency list.") — **do not add
+`room-ktx` as a separate dependency**, `room-runtime` alone brings the coroutine/Flow APIs.
+```kotlin
+// build.gradle.kts
+dependencies {
+    val room_version = "2.8.4"
+    implementation("androidx.room:room-runtime:$room_version")
+    ksp("androidx.room:room-compiler:$room_version")
+}
+```
+(exact block from `/training/data-storage/room#declaring_dependencies`; the room release-notes page
+separately documents an *optional* Room **Gradle plugin** — `id("androidx.room") version "2.8.4"`,
+used only for schema-export tooling — whose own minimum AGP requirement was raised "from 8.1 to
+8.4" in 2.8.0-rc02. That plugin is not required for basic Room usage and its AGP floor (8.4) is far
+below our pinned 9.3.0, so no conflict either way.)
+
+**KAPT is a hard error under built-in Kotlin — KSP is not optional, it's the only path:**
+> "The `org.jetbrains.kotlin.kapt` (or `kotlin-kapt`) plugin is incompatible with built-in Kotlin.
+> If you use `kapt`, we recommend that you migrate your project to KSP."
+(`developer.android.com/build/migrate-to-built-in-kotlin`)
+
+**KSP1 is explicitly dead for our toolchain — KSP2 (the default since "beginning of 2025") is
+mandatory, not just recommended:**
+> "KSP1 will not be compatible with: Kotlin version `2.3.0` and higher. Android Gradle plugin (AGP)
+> version `9.0` and higher. Projects using KSP1 may not behave correctly (or fail the build) if you
+> upgrade to these or any subsequent versions of AGP or Kotlin."
+(`github.com/google/ksp` README, "Deprecation notice for KSP1"). Our stack is Kotlin 2.4.10 + AGP
+9.3.0 — **both** of KSP1's stated cutoffs. KSP2 has been the default since KSP 2.0.0 (`ksp {
+useKsp2 = false }` is the opt-out, not opt-in), so a plain `id("com.google.devtools.ksp")`
+application already gets KSP2 with no extra flag.
+
+**KSP version to pair with Kotlin 2.4.10 — direct answer, from kotlinlang.org's own live
+quickstart example** (fetched raw HTML, not a summarizer — verbatim `<pre>` block):
+```kotlin
+plugins {
+    kotlin("jvm") version "2.4.10"
+    id("com.google.devtools.ksp") version "2.3.10"
+}
+```
+i.e. **KSP 2.3.10** is the version kotlinlang.org's own docs pair with Kotlin 2.4.10 as of this
+read. Corroborating: KSP switched its version-numbering scheme at 2.3.0 — every release from
+`2.2.21-2.0.5` onward through the `2.3.x` line is a bare version (`2.3.0`...`2.3.10`, confirmed via
+`repo1.maven.org` maven-metadata.xml for `com.google.devtools.ksp.com.google.devtools.ksp.gradle.plugin`),
+no longer a `<kotlin>-<ksp>` compound like the pre-2.3 releases — KSP no longer claims to track one
+exact Kotlin patch per release. KSP 2.3.10's own GitHub release notes (fetched via GitHub API,
+`google/ksp` tag `2.3.10`, published 2026-07-09) list two directly relevant fixes:
+- `"Sanitize ':' in internal-name module suffix so KSP works with Kotlin 2.4.0 default module
+  names (#2964)"` — explicit compatibility work for Kotlin 2.4.0.
+- `"Fix R-class resolution in KSP when AGP 9 built-in Kotlin is enabled (#2857)"` — **direct,
+  explicit confirmation that KSP has been fixed to work under AGP 9's built-in Kotlin**, which is
+  as close to an official "yes, KSP works under built-in Kotlin" statement as exists anywhere.
+**Gap — not stated as a table anywhere official:** no compatibility MATRIX (as opposed to one
+worked example) was found; `kotlinlang.org/docs/ksp-and-kotlin-versions.html` (the URL a
+prior-generation compat table lived at) now 404s, consistent with the versioning-scheme change
+above. Treat KSP 2.3.10 (the version in kotlinlang.org's live Kotlin-2.4.10 example) as the
+correct pin; if a future KSP patch release (`2.3.11`+) exists by build time, prefer whatever
+kotlinlang.org's quickstart example pairs with Kotlin 2.4.10 at that time over this snapshot.
+
+**How KSP is applied — completely normal, built-in Kotlin does NOT change plugin wiring for
+third-party Gradle plugins.** Checked `/build/migrate-to-built-in-kotlin` explicitly for any
+special KSP wiring instructions: none exist — the page's only third-party-plugin guidance is the
+kapt-incompatibility note above. KSP is applied exactly as any other Gradle plugin:
+```kotlin
+plugins {
+    alias(libs.plugins.android.application)
+    // no kotlin-android — built-in Kotlin
+    alias(libs.plugins.compose.compiler)
+    id("com.google.devtools.ksp") version "2.3.10"
+}
+dependencies {
+    ksp("androidx.room:room-compiler:2.8.4")   // the `ksp(...)` configuration, not annotationProcessor
+}
+```
+Sources: [developer.android.com/jetpack/androidx/releases/room](https://developer.android.com/jetpack/androidx/releases/room)
+(raw HTML, "Version 2.7"/"Version 2.8" sections + Declaring dependencies, read 2026-07-17);
+[developer.android.com/training/data-storage/room](https://developer.android.com/training/data-storage/room);
+[developer.android.com/build/migrate-to-built-in-kotlin](https://developer.android.com/build/migrate-to-built-in-kotlin);
+[developer.android.com/build/migrate-to-ksp](https://developer.android.com/build/migrate-to-ksp);
+[github.com/google/ksp README](https://github.com/google/ksp/blob/main/README.md) (raw, read
+2026-07-17); [github.com/google/ksp/releases](https://github.com/google/ksp/releases) +
+GitHub API `repos/google/ksp/releases/tags/2.3.10` (release body, read 2026-07-17);
+[repo1.maven.org/.../ksp.gradle.plugin/maven-metadata.xml](https://repo1.maven.org/maven2/com/google/devtools/ksp/com.google.devtools.ksp.gradle.plugin/maven-metadata.xml);
+[kotlinlang.org/docs/ksp-quickstart.html](https://kotlinlang.org/docs/ksp-quickstart.html) (raw
+HTML `<pre>` block, read 2026-07-17) — `kotlinlang.org/docs/ksp-and-kotlin-versions.html` checked
+and confirmed 404 as of this read.
+
+---
+
+**2. SQLite ATTACH across a read-only content pack + a Room-managed progress DB — THE risky
+unknown, and it resolves to a hard "don't rely on Room's pooled connection for this."**
+
+**Ground truth, SQLite's own docs (`sqlite.org/lang_attach.html`, read 2026-07-17):**
+> "The ATTACH DATABASE statement adds another database file to the current database connection."
+ATTACH is scoped to **one connection**, full stop — this is stated as the very first sentence of
+the spec page, not an inference. A `DETACH DATABASE` on that same connection is the only way to
+remove it; nothing in the SQLite docs suggests ATTACH state propagates to any other connection,
+pooled or not.
+> "There is a limit, set using `sqlite3_limit()` and `SQLITE_LIMIT_ATTACHED`, to the number of
+> databases that can be simultaneously attached to a single database connection."
+Default limit (`sqlite.org/limits.html`): **`SQLITE_MAX_ATTACHED` = 10** by default, **hard ceiling
+125** (`sqlite3_limit()` can only lower it, never raise past 125). One ATTACH (the content pack)
+is nowhere near this limit.
+> "Transactions involving multiple attached databases are atomic, assuming that the main database
+> is not `:memory:` and the journal_mode is not WAL. If the main database is `:memory:` or if the
+> journal_mode is WAL, then transactions continue to be atomic **within each individual database
+> file**. But if the host computer crashes in the middle of a COMMIT where two or more database
+> files are updated, some of those files might get the changes where others might not."
+So ATTACH + WAL is not *forbidden* at the SQLite engine level, but a multi-DB transaction loses
+cross-file atomicity under WAL — acceptable here since the content pack is read-only (nothing to
+roll back) and only `progress.db` is ever written.
+
+**Android framework-level finding — the crux, and it is explicit, not inferred.** The stock
+`android.database.sqlite.SQLiteDatabase.enableWriteAheadLogging()` javadoc (fetched raw HTML,
+`developer.android.com/reference/android/database/sqlite/SQLiteDatabase`, read 2026-07-17) states
+outright:
+> "Parallel execution of queries is performed by opening multiple connections to the database and
+> using a different database connection for each query... **If the database has any attached
+> databases, then execution of queries in parallel is NOT possible.** Likewise, write-ahead logging
+> is not supported for read-only databases or memory databases. In such cases,
+> `enableWriteAheadLogging()` returns false."
+This is a documented, verbatim statement (not our own inference) that **WAL's multi-connection
+parallel-read pool and ATTACH DATABASE are mutually exclusive** at the framework
+(`android.database.sqlite`) level: a `SQLiteDatabase` with anything attached cannot run queries in
+parallel across pooled connections — meaning if you `ATTACH` on one connection, that connection
+stops being one of many interchangeable pool members and effectively serializes queries that need
+the attached schema. Combined with SQLite's own "ATTACH is per-connection" fact above, the
+practical implication for a Room database (which pools connections under WAL by default) is: **an
+ATTACH issued via one pooled connection is invisible to queries that land on a different pooled
+connection, and forcing everything through one connection to keep the ATTACH visible defeats
+Room/WAL's whole reason for existing.**
+
+`OPEN_READONLY` — confirmed exact constant + purpose (raw reference HTML):
+> "Open flag: Flag for `openDatabase(File, OpenParams)` to open the database for reading only.
+> This is the only reliable way to open a database if the disk may be full."
+All three `SQLiteDatabase.openDatabase(...)` overloads take a `String path` or `File path` — **no
+overload accepts a `Uri`** (confirmed from the reference page's own method-signature listing, an
+inference from the API surface itself rather than a stated "no" sentence — see also point 3 below
+re: content:// + SQLite).
+
+**Room + this driver-level fact — GAP, not covered by any official Room doc found.** Checked
+`developer.android.com/training/data-storage/room`, the Room release notes
+(`/jetpack/androidx/releases/room`), and `developer.android.com/kotlin/multiplatform/sqlite`
+explicitly for any mention of "ATTACH," multi-database queries, or interaction between Room's
+connection pool and attached databases: **none exists in any of these pages.** Room 2.7+ is built
+on a pluggable `androidx.sqlite.SQLiteDriver` (`AndroidSQLiteDriver` — wraps the framework
+`android.database.sqlite` API above — vs. the "recommended" `BundledSQLiteDriver`, a from-source
+cross-platform SQLite build in `androidx.sqlite:sqlite-bundled`). Docs state `BundledSQLiteDriver`
+is recommended ("It includes the SQLite library compiled from source, offering the most up-to-date
+version and consistency across all the supported KMP platforms") but **do not document its
+connection-pooling model, its WAL defaults, or whether it shares the same "ATTACH disables
+parallel queries" behavior as the framework driver** — that behavior was only confirmed for
+`android.database.sqlite.SQLiteDatabase` above, not for `BundledSQLiteDriver`. Also unconfirmed:
+what driver a plain `RoomDatabase.Builder` uses if `setDriver()` is never called (no official
+sentence found stating the no-`setDriver()` default).
+
+**Practical read (synthesis, not a doc quote) for A1's design:** do not attempt to ATTACH the
+content pack onto Room's own pooled connection and JOIN through Room's DAO layer — the pool can
+silently route the query to a connection that never saw the ATTACH, and even where it works,
+having anything attached forces that connection out of parallel rotation (documented above). The
+two safer, docs-grounded patterns are (a) open a **separate, dedicated, single, non-pooled**
+`SQLiteDatabase` connection specifically for cross-DB reads (`openDatabase(path, ..., flags)` with
+no `ENABLE_WRITE_AHEAD_LOGGING` flag, so it's a single ordinary connection you fully control, issue
+`ATTACH DATABASE '<contentPackPath>' AS content` on that one connection via `execSQL()`, then run
+`rawQuery()`s that reference `content.<table>` on that same connection only — never Room's pool),
+or (b) avoid ATTACH+JOIN entirely and instead query the two DBs independently (Room for
+`progress.db`, a second read-only `SQLiteDatabase.openDatabase(..., OPEN_READONLY)` for the content
+pack) and join the two result sets in Kotlin. **This is a docs gap, flagged rather than guessed** —
+no official Room source states which pattern it recommends; the recommendation above follows
+directly from the two verbatim facts quoted (ATTACH is per-connection; ATTACH disables parallel
+pooled queries), not from a Room-authored best-practice doc.
+
+Sources: [sqlite.org/lang_attach.html](https://sqlite.org/lang_attach.html) (read 2026-07-17);
+[sqlite.org/limits.html](https://sqlite.org/limits.html);
+[sqlite.org/c3ref/c_limit_attached.html](https://sqlite.org/c3ref/c_limit_attached.html);
+[developer.android.com/reference/android/database/sqlite/SQLiteDatabase](https://developer.android.com/reference/android/database/sqlite/SQLiteDatabase)
+(raw HTML, `enableWriteAheadLogging()` + `OPEN_READONLY` + `openDatabase` overload list, read
+2026-07-17); [developer.android.com/training/data-storage/room](https://developer.android.com/training/data-storage/room);
+[developer.android.com/kotlin/multiplatform/sqlite](https://developer.android.com/kotlin/multiplatform/sqlite)
+(driver table + "recommended: BundledSQLiteDriver" quote); Room release notes (as cited in §1)
+checked and confirmed silent on ATTACH/multi-DB.
+
+---
+
+**3. Storage Access Framework — pick a directory, persist access, list ~1,121 files fast, and
+confirm SQLite cannot open a `content://` URI directly.**
+
+`ACTION_OPEN_DOCUMENT_TREE` — exact intent pattern (`/training/data-storage/shared/documents-files`,
+raw HTML, read 2026-07-17):
+```kotlin
+val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+    putExtra(DocumentsContract.EXTRA_INITIAL_URI, pickerInitialUri)   // optional
+}
+startActivityForResult(intent, your-request-code)
+```
+> "When using `ACTION_OPEN_DOCUMENT_TREE`, your app gains access only to the files in the directory
+> that the user selects."
+Access restrictions on API 30+ (verbatim): cannot request the internal-storage root, a "reliable"
+SD-card root, or the `Download` directory as a *tree*; cannot pick individual files from
+`Android/data/` or `Android/obb/` subtrees.
+
+**Performance caution — official, direct:**
+> "Caution: If you iterate through a large number of files within the directory that's accessed
+> using `ACTION_OPEN_DOCUMENT_TREE`, your app's performance might be reduced."
+And from the `androidx.documentfile.provider.DocumentFile` class-level javadoc itself (fetched raw,
+`developer.android.com/reference/androidx/documentfile/provider/DocumentFile`, read 2026-07-17) —
+this is the officially documented reason and the officially documented faster alternative, in the
+API's own words:
+> "This is a utility class designed to emulate the traditional `File` interface. It offers a
+> simplified view of a tree of documents, but **it has substantial overhead**. For optimal
+> performance and a richer feature set, use the `android.provider.DocumentsContract` methods and
+> constants directly."
+So for ~1,121 files, prefer `DocumentsContract.buildChildDocumentsUriUsingTree(treeUri,
+parentDocumentId)` + `ContentResolver.query(childrenUri, projection, ...)` (a normal cursor query —
+takes a projection array, so request only the columns needed, e.g. `Document.COLUMN_DOCUMENT_ID` +
+`COLUMN_DISPLAY_NAME` + `COLUMN_SIZE`) over `DocumentFile.listFiles()`/`.findFile()`, which the
+library's own docs say to avoid for anything beyond casual use. Exact signature (raw reference
+HTML):
+```java
+public static Uri buildChildDocumentsUriUsingTree(Uri treeUri, String parentDocumentId)
+```
+> "Build URI representing the children of the target directory in a document provider... This is
+> typically used to access documents under a user-selected directory tree, since it doesn't
+> require the user to separately confirm each new document access."
+**Not officially confirmed (flagging, not asserting):** a non-official but directly relevant
+technical note (CommonsWare blog, not developer.android.com — cited for context only, not as
+authority) explains that even `DocumentsContract` queries cost **two IPC hops** (app → system
+`ContentProvider` → the actual `DocumentsProvider`), so "faster than `DocumentFile`" does not mean
+free — no official page quantifies the actual throughput for ~1,121 files, so budget/measure this
+empirically during A1 rather than assuming a specific number.
+
+`takePersistableUriPermission` — exact snippet + limits (raw HTML):
+```kotlin
+val contentResolver = applicationContext.contentResolver
+val takeFlags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+contentResolver.takePersistableUriPermission(uri, takeFlags)
+```
+> "Caution: Even after calling `takePersistableUriPermission()`, your app doesn't retain access to
+> the URI if the associated document is moved or deleted. In those cases, you need to ask
+> permission again to regain access to the URI."
+Without this call, the docs state the grant "lasts until the user's device restarts" — persisting
+it is what survives reboots, which is required since this app must re-copy/re-verify the pack
+directory across app restarts without re-prompting the picker every time.
+
+**Can SQLite open a `content://` URI directly — confirmed NO, by omission from the API surface,
+not a verbatim "no" sentence.** Every `SQLiteDatabase.openDatabase(...)` overload (checked all
+three in the raw reference HTML — §2 above) takes `String path` or `File path`; none accepts a
+`Uri`. No official page states "SQLite cannot open content:// URIs" in so many words, but the
+absence of any `Uri`-accepting `openDatabase` overload, combined with SQLite itself being a C
+library that opens paths via `sqlite3_open()`/`sqlite3_open_v2()` (not a URI-content-provider
+abstraction — confirmed on `sqlite.org/lang_attach.html`'s own reference to
+`sqlite3_open()`/`sqlite3_open_v2()` filename semantics), is why the compiled 135MB content pack
+`.db` (and the ~1,121 supporting files) **must be copied into `filesDir` (or another
+directly-openable path) before SQLite can touch it** — opening it in place from inside the
+SAF-picked tree is not possible through any documented SQLite/Android API.
+
+Sources: [developer.android.com/training/data-storage/shared/documents-files](https://developer.android.com/training/data-storage/shared/documents-files)
+(raw HTML, read 2026-07-17); [developer.android.com/reference/androidx/documentfile/provider/DocumentFile](https://developer.android.com/reference/androidx/documentfile/provider/DocumentFile)
+(raw HTML, class javadoc + `listFiles()`, read 2026-07-17); [developer.android.com/reference/android/provider/DocumentsContract](https://developer.android.com/reference/android/provider/DocumentsContract)
+(raw HTML, `buildChildDocumentsUriUsingTree`, read 2026-07-17); [developer.android.com/reference/android/database/sqlite/SQLiteDatabase](https://developer.android.com/reference/android/database/sqlite/SQLiteDatabase)
+(as cited in §2); [sqlite.org/lang_attach.html](https://sqlite.org/lang_attach.html).
+
+---
+
+**4. ZIP export/import (§11e) — java.util.zip + zip-slip. Google has a dedicated official page for
+exactly this, with copy-paste-correct mitigation code.**
+
+`developer.android.com/privacy-and-security/risks/zip-path-traversal` (raw HTML, read 2026-07-17),
+verbatim:
+> "The Zip Path Traversal vulnerability, also known as ZipSlip... The underlying reason for this
+> problem is that inside ZIP archives, each packed file is stored with a fully qualified name,
+> which allows special characters such as slashes and dots. **The default library from the
+> `java.util.zip` package doesn't check the names of the archive entries for directory traversal
+> characters (`../`)**, so special care must be taken when concatenating the name extracted from
+> the archive with the targeted directory path."
+> "Impact: The Zip Path Traversal vulnerability can be used to achieve arbitrary file overwrite...
+> in many cases this vulnerability can lead to major security issues such as code execution."
+
+**Official mitigation — exact code, both required parts (path-containment check + empty-destination
+check):**
+```kotlin
+companion object {
+    @Throws(IOException::class)
+    fun newFile(targetPath: File, zipEntry: ZipEntry): File {
+        val name: String = zipEntry.name
+        val f = File(targetPath, name)
+        val canonicalPath = f.canonicalPath
+        if (!canonicalPath.startsWith(targetPath.canonicalPath + File.separator)) {
+            throw ZipException("Illegal name: $name")
+        }
+        return f
+    }
+}
+```
+> "To mitigate this issue, before extracting each entry, you should always verify that the target
+> path is a child of the destination directory. The code below assumes that the destination
+> directory is safe — writable by your app only and not under attacker control — otherwise your
+> app could be prone to other vulnerabilities such as symlink attacks."
+
+Second required check (verbatim), with its own code sample:
+> "To avoid accidentally overwriting existing files, you should also make sure that the destination
+> directory is empty before starting the extraction process. Otherwise you risk potential app
+> crashes, or in extreme cases, an application compromise."
+```kotlin
+fun unzip(inputStream: InputStream?, destinationDir: File) {
+    if (!destinationDir.isDirectory) throw IOException("Destination is not a directory.")
+    val files = destinationDir.list()
+    if (files != null && files.isNotEmpty()) throw IOException("Destination directory is not empty.")
+    ZipInputStream(inputStream).use { zipInputStream ->
+        var zipEntry: ZipEntry
+        while (zipInputStream.nextEntry.also { zipEntry = it } != null) {
+            val targetFile = File(destinationDir, zipEntry.name)   // pass through newFile() above
+            // ...
+        }
+    }
+}
+```
+**Applied to §11e specifically:** both checks matter for import — `newFile()`'s canonical-path
+check on every entry (`progress.db`, every `note_images/*` file) before extraction, AND the
+empty-destination-directory check, since import targets a location this app fully controls
+(`filesDir`) rather than merging into a live directory. For export (writing our own zip via
+`ZipOutputStream` to a SAF `ACTION_CREATE_DOCUMENT` target), zip-slip does not apply — it is only a
+risk when *reading* entry names from an externally-supplied (untrusted) archive.
+
+Source: [developer.android.com/privacy-and-security/risks/zip-path-traversal](https://developer.android.com/privacy-and-security/risks/zip-path-traversal)
+(raw HTML, "last updated September 24, 2024" per the page's own footer at last check, content
+re-verified live 2026-07-17).
+
+---
+
+**5. `getFilesDir()` + free-space check before a ~370MB copy — `getAllocatableBytes`/`allocateBytes`
+(API 26+) is Google's own recommended API over `File.getUsableSpace()`, and API 26 exactly matches
+our minSdk floor.**
+
+`getFilesDir()` semantics (`/training/data-storage/app-specific`, raw HTML, read 2026-07-17):
+> "Other apps cannot access files stored within internal storage... Keep in mind, however, that
+> these directories tend to be small. Before writing app-specific files to internal storage, your
+> app should query the free space on the device."
+> "When the user uninstalls your app, the files saved in app-specific storage are removed."
+```kotlin
+val file = File(context.filesDir, filename)
+```
+
+**Free-space check — exact recommended API, exact code, exact API-level floor (confirmed from the
+raw `StorageManager` reference page — every method below is "Added in API level 26"):**
+```kotlin
+// App needs N bytes within internal storage.
+val storageManager = applicationContext.getSystemService<StorageManager>()!!
+val appSpecificInternalDirUuid: UUID = storageManager.getUuidForPath(filesDir)
+val availableBytes: Long = storageManager.getAllocatableBytes(appSpecificInternalDirUuid)
+if (availableBytes >= NUM_BYTES_NEEDED_FOR_MY_APP) {
+    storageManager.allocateBytes(appSpecificInternalDirUuid, NUM_BYTES_NEEDED_FOR_MY_APP)
+} else {
+    // launch ACTION_MANAGE_STORAGE with EXTRA_UUID + EXTRA_REQUESTED_BYTES to involve the user
+}
+```
+`getAllocatableBytes(UUID)` javadoc, verbatim, and this is the direct head-to-head comparison
+against `File.getUsableSpace()` the task asked for:
+> "Return the maximum number of new bytes that your app can allocate for itself on the given
+> storage volume. **This value is typically larger than `File.getUsableSpace()`, since the system
+> may be willing to delete cached files to satisfy an allocation request.** You can then allocate
+> space for yourself using `allocateBytes(UUID,long)` or `allocateBytes(FileDescriptor,long)`."
+> "This method is best used as a pre-flight check... Attempts to allocate disk space beyond the
+> returned value will fail."
+> "This method may take several seconds to complete, so it should only be called from a worker
+> thread."
+`allocateBytes(...)` (two overloads — `FileDescriptor` or `UUID` form) reserves the space so a
+concurrent allocator can't steal it out from under you between the check and the write; both are
+API 26 same as `getAllocatableBytes`.
+
+**Neither is strictly required — official escape hatch documented too:**
+> "Note: You aren't required to check the amount of available space before you save your file. You
+> can instead try writing the file right away, then catch an `IOException` if one occurs."
+
+**Recommendation for the ~370MB copy (content pack `.db` + supporting files from the SAF tree into
+`filesDir`):** use `getAllocatableBytes()`/`allocateBytes()` (both exactly at our minSdk-26 floor,
+no fallback needed for older devices) rather than `File.getUsableSpace()` — Google's own javadoc
+states the StorageManager API returns a **larger, more accurate figure** because it accounts for
+reclaimable cache space the raw filesystem free-space number doesn't see, and pairs the check with
+an actual reservation (`allocateBytes`) that `File.getUsableSpace()` has no equivalent for.
+
+Sources: [developer.android.com/training/data-storage/app-specific](https://developer.android.com/training/data-storage/app-specific)
+(raw HTML, read 2026-07-17); [developer.android.com/reference/android/os/storage/StorageManager](https://developer.android.com/reference/android/os/storage/StorageManager)
+(raw HTML, `getAllocatableBytes(UUID)` + `allocateBytes` overloads + "Added in API level 26", read
+2026-07-17).
+
+---
+
 ## Mistakes ledger (real traps in THIS repo, with the fix)
 
 Maintained by the **`mistake-tracker`** agent. Entry shape:
