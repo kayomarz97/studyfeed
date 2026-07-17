@@ -97,6 +97,18 @@ def build(cfg: Config, db_path: Path) -> dict:
         "body_start_page,back_matter_start_page,usage_profile_json) "
         "VALUES(" + ",".join("?" * 19) + ")", src_rows)
 
+    # ── figures (deferred tail; vision-captioned) — insert first so atoms/mcqs/dossiers can link them ──
+    fig_rows, fig_by_srcpage = [], {}
+    for fid_i, fg in enumerate(_load("figures.jsonl")):
+        fig_rows.append((fid_i, fg.get("path"), fg.get("caption_md"), fg["source_id"], str(fg["page"])))
+        fig_by_srcpage.setdefault((fg["source_id"], fg["page"]), fid_i)   # first figure on a page
+    cur.executemany("INSERT INTO figures(id,path,caption_md,source_id,page_ref) VALUES(?,?,?,?,?)", fig_rows)
+    kc_map = {r["idx"]: r for r in _load("mcq_key_conflicts.jsonl")}       # staleness key_conflict flags
+
+    def _fig(source_id, page_ref):
+        mm = re.match(r"\d+", str(page_ref or ""))
+        return fig_by_srcpage.get((source_id, int(mm.group()))) if mm else None
+
     # ── atoms + citations (atoms_merged line-aligned with atom_importance) ─────
     atoms = _load("atoms_merged.jsonl")
     aimp = _load("atom_importance.jsonl")
@@ -117,7 +129,7 @@ def build(cfg: Config, db_path: Path) -> dict:
                       a.get("distinct_source_count", 1), a.get("distinct_work_count", 1),
                       a.get("distinct_publisher_count", 1), 0, None, None, None,
                       float(sig.get("centrality", 0) or 0), m.get("importance", 1),
-                      m.get("importance_score", 0), _j(sig), None))
+                      m.get("importance_score", 0), _j(sig), _fig(a["source_id"], a.get("page_ref"))))
         for c in a.get("citations", []):
             crows.append((i, c.get("source_id"), c.get("page_ref")))
     cur.executemany(
@@ -171,14 +183,15 @@ def build(cfg: Config, db_path: Path) -> dict:
             n += 1
             sk = _skey(m.get("stem", "") + f" #{n}", canon, m.get("page_ref"))
         stable.add(sk)
-        p, co, im = mpyq.get(i, {}), mcor.get(i, {}), mimp.get(i, {})
+        p, co, im, kc = mpyq.get(i, {}), mcor.get(i, {}), mimp.get(i, {}), kc_map.get(i, {})
         ci = _LET.get(str(m.get("answer", "")).strip().lower())
         mrows.append((i, subj_id.get(wsubj.get(m["source_id"], "")), m["source_id"], sk, "curated", None,
                       "body", 1 if p.get("is_pyq") else 0, _j(p.get("pyq_years", [])), co.get("cluster_id"),
-                      co.get("member_count", 1), co.get("distinct_work_count", 1), 0, None, m.get("stem"),
+                      co.get("member_count", 1), co.get("distinct_work_count", 1),
+                      1 if kc.get("key_conflict") else 0, kc.get("note"), m.get("stem"),
                       m.get("opt_a"), m.get("opt_b"), m.get("opt_c"), m.get("opt_d"), m.get("opt_e"), ci,
                       m.get("explanation"), None, im.get("importance", 1), im.get("importance_score", 0),
-                      _j(im.get("signals", {})), None))
+                      _j(im.get("signals", {})), _fig(m["source_id"], m.get("page_ref"))))
         curated_kept.add(i)
     for jx, g in enumerate(_load("gen_mcqs.jsonl")):
         gid = GEN_MCQ_ID_OFFSET + jx
@@ -209,12 +222,24 @@ def build(cfg: Config, db_path: Path) -> dict:
     for i, d in enumerate(dossiers):
         stable.add(d["stable_key"])
         rel_mcq = [mi for mi in d.get("related_mcq_idxs", []) if mi in curated_kept]
-        tp_rows.append((i, d.get("concept_id"), d.get("title"), _j(d.get("aliases", [])), d["stable_key"],
-                        d.get("body_md"), _j(d.get("subjects_covered", [])), _j([]), _j(rel_mcq), _j([]),
-                        d.get("importance", 1), d.get("importance_score", 0), _j(d.get("importance_signals") or {})))
+        page_figs = []                                   # figures on the pages this dossier's atoms cite
+        sect_rows = []
         for s in d.get("sections", []):
-            ts_rows.append((i, subj_id.get((s.get("subject") or "").strip().lower()), s.get("heading"),
-                            s.get("body_md"), _j([]), s.get("ord", 0)))
+            sfigs = []
+            for ar in s.get("atom_refs", []):
+                fid = _fig(ar.get("source_id"), ar.get("page_ref"))
+                if fid is not None:
+                    if fid not in sfigs:
+                        sfigs.append(fid)
+                    if fid not in page_figs:
+                        page_figs.append(fid)
+            sect_rows.append((i, subj_id.get((s.get("subject") or "").strip().lower()), s.get("heading"),
+                              s.get("body_md"), _j(sfigs[:12]), s.get("ord", 0)))
+        ts_rows.extend(sect_rows)
+        tp_rows.append((i, d.get("concept_id"), d.get("title"), _j(d.get("aliases", [])), d["stable_key"],
+                        d.get("body_md"), _j(d.get("subjects_covered", [])), _j(page_figs[:20]), _j(rel_mcq),
+                        _j([]), d.get("importance", 1), d.get("importance_score", 0),
+                        _j(d.get("importance_signals") or {})))
     cur.executemany(
         "INSERT INTO topic_pages(id,concept_id,title,aliases_json,stable_key,body_md,subjects_covered_json,"
         "figure_ids_json,related_mcq_ids_json,related_flashcard_ids_json,importance,importance_score,"
@@ -271,8 +296,10 @@ def build(cfg: Config, db_path: Path) -> dict:
     content_checksum = hashlib.sha256("\n".join(sorted(stable)).encode("utf-8")).hexdigest()
     counts = {t: cur.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in
               ("atoms", "concepts", "concept_edges", "mcqs", "flashcards", "reels", "text_blobs",
-               "blob_quizzes", "interlink_quizzes", "topic_pages", "topic_sections", "feed_items",
+               "blob_quizzes", "interlink_quizzes", "figures", "topic_pages", "topic_sections", "feed_items",
                "sources", "atom_citations", "mcq_distractors")}
+    counts["mcqs_key_conflict"] = cur.execute("SELECT count(*) FROM mcqs WHERE key_conflict=1").fetchone()[0]
+    counts["atoms_with_figure"] = cur.execute("SELECT count(*) FROM atoms WHERE figure_id IS NOT NULL").fetchone()[0]
     hist = {str(b): cur.execute("SELECT count(*) FROM feed_items WHERE importance=?", (b,)).fetchone()[0]
             for b in range(1, 6)}
     weights = {"weights": cfg.weights, "thresholds": cfg.thresholds,
@@ -301,7 +328,7 @@ def _schema_version() -> int:
 def _feature_flags(counts: dict) -> dict:
     return {"has_concept_map": counts["concept_edges"] > 0, "has_dossiers": counts["topic_pages"] > 0,
             "has_flashcards": counts["flashcards"] > 0, "has_reels": counts["reels"] > 0,
-            "has_generated_mcqs": True, "has_figures": False,
+            "has_generated_mcqs": True, "has_figures": counts.get("figures", 0) > 0,
             "has_blobs": counts.get("text_blobs", 0) > 0,
             "has_interlink": counts.get("interlink_quizzes", 0) > 0}
 
