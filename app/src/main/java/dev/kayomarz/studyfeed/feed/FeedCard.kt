@@ -90,7 +90,17 @@ sealed interface FeedCard {
         val title: String?,
         val bodyMd: String,
         val estReadSeconds: Int?,
+        /** The quiz-back for this passage (§8 A2). Null if the pack shipped none for this blob. */
+        val quiz: BlobQuiz?,
     ) : FeedCard
+
+    /** A passage's check-your-understanding question (`blob_quizzes`). */
+    data class BlobQuiz(
+        val questionMd: String,
+        val options: List<String>,
+        val correctIdx: Int,
+        val answerMd: String,
+    )
 
     data class Interlink(
         override val itemType: String = "interlink",

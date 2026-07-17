@@ -246,6 +246,22 @@ class FeedRepository private constructor(
                 due = fsrs.due, stability = fsrs.stability,
                 title = c.getString(0), bodyMd = c.getString(1).orEmpty(),
                 estReadSeconds = if (c.isNull(2)) null else c.getInt(2),
+                quiz = blobQuiz(id),
+            )
+        }
+
+    /** The passage's quiz-back, if the pack shipped one. `blob_quizzes.blob_id` = the text_blobs id. */
+    private fun blobQuiz(blobId: Long): FeedCard.BlobQuiz? =
+        db.rawQuery(
+            "SELECT question_md, answer_md, opt_a, opt_b, opt_c, opt_d, correct_idx FROM $PACK.blob_quizzes WHERE blob_id = ? LIMIT 1",
+            arrayOf(blobId.toString()),
+        ).use { c ->
+            if (!c.moveToFirst()) return null
+            val opts = listOf(c.getString(2), c.getString(3), c.getString(4), c.getString(5))
+                .filterNotNull().filter { it.isNotBlank() }
+            FeedCard.BlobQuiz(
+                questionMd = c.getString(0).orEmpty(), answerMd = c.getString(1).orEmpty(),
+                options = opts, correctIdx = c.getInt(6),
             )
         }
 

@@ -140,10 +140,16 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun markBlobRead(card: FeedCard.Blob) = viewModelScope.launch(Dispatchers.IO) {
-        // §8 A2 step 9: record the read; A3 schedules the quiz-back + re-read from this. In-app only —
-        // no notification, no alarm (the offline guard forbids background components).
-        dao?.putBlobRead(BlobRead(blob_id = card.itemId, read_at = Instant.now().toString(),
-            quizzed_at = null, reread_due = null))
+        // §8 A2 step 9: record the read and schedule a re-read for NEXT SESSION. The resurfacing is
+        // in-app on next open — never a notification or alarm (the offline guard forbids background
+        // components). A3's ordering engine consumes reread_due to place the passage back in the feed.
+        val now = Instant.now()
+        dao?.putBlobRead(BlobRead(
+            blob_id = card.itemId,
+            read_at = now.toString(),
+            quizzed_at = null,
+            reread_due = now.plus(java.time.Duration.ofDays(1)).toString(),
+        ))
     }
 
     fun toggleStar(card: FeedCard) = viewModelScope.launch(Dispatchers.IO) {

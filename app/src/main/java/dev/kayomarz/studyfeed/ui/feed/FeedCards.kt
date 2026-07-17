@@ -326,9 +326,14 @@ fun ReelCard(
 // ── Blob (passage) ───────────────────────────────────────────────────────────────────────────────────
 
 /**
- * A passage to read. §8 A2: on scroll-past, the feed schedules its `blob_quiz` a few cards later and a
- * re-read next session — that scheduling is the feed layer's job (A2 step 9), driven by [onRead]. The
- * card just reports it was read.
+ * A passage to read, then its quiz-back (§8 A2 / Acceptance 7).
+ *
+ * **Scope boundary:** [onRead] records the read + schedules the re-read (blob_reads, done in the feed
+ * layer). §8 A2 also says the quiz-back should appear "a few cards later" and the passage should
+ * "resurface next session" — that **spaced insertion into the feed stream is A3's ordering job**, not a
+ * card's. So A2 presents the quiz-back on the same card right after reading (a real, testable quiz on
+ * the pack's `blob_quiz` data); A3 later moves it to the correct spaced position. A blob with no
+ * quiz-back in the pack just shows "Mark read".
  */
 @Composable
 fun BlobCard(
@@ -337,6 +342,7 @@ fun BlobCard(
     actions: CardActionsState,
     onRead: () -> Unit,
 ) {
+    var read by remember(card.itemId) { mutableStateOf(false) }
     CardScaffold(card, actions, onImportanceClick) {
         card.title?.takeIf { it.isNotBlank() }?.let {
             Text(it, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
@@ -348,7 +354,45 @@ fun BlobCard(
         }
         MarkdownText(card.bodyMd, style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(24.dp))
-        Button(onClick = onRead, colors = ButtonDefaults.buttonColors()) { Text("Mark read") }
+
+        if (!read) {
+            Button(onClick = { read = true; onRead() }) { Text("Mark read") }
+        } else if (card.quiz != null) {
+            androidx.compose.material3.HorizontalDivider()
+            Spacer(Modifier.height(16.dp))
+            Text("QUICK CHECK", fontSize = 11.sp, letterSpacing = 1.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+            BlobQuizBack(card.quiz!!)
+        } else {
+            Text("Read ✓ — you'll see this again next session.", fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** The passage quiz-back: pick an option → correct/wrong marked inline + the answer note. */
+@Composable
+private fun BlobQuizBack(quiz: FeedCard.BlobQuiz) {
+    var chosen by remember { mutableStateOf<Int?>(null) }
+    val revealed = chosen != null
+    MarkdownText(quiz.questionMd, style = MaterialTheme.typography.bodyLarge)
+    Spacer(Modifier.height(12.dp))
+    quiz.options.forEachIndexed { idx, opt ->
+        OptionRow(
+            label = ('A' + idx).toString(),
+            text = opt,
+            state = optionState(idx, chosen, quiz.correctIdx, revealed),
+            enabled = !revealed,
+            onClick = { if (chosen == null) chosen = idx },
+        )
+        Spacer(Modifier.height(8.dp))
+    }
+    AnimatedVisibility(revealed) {
+        Column {
+            Spacer(Modifier.height(8.dp))
+            MarkdownText(quiz.answerMd, style = MaterialTheme.typography.bodyMedium)
+        }
     }
 }
 

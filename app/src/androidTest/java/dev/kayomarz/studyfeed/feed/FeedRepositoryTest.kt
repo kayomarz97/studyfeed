@@ -175,6 +175,28 @@ class FeedRepositoryTest {
     }
 
     @Test
+    fun blob_cards_carry_their_quiz_back() {
+        // §8 A2 / Acceptance 7: a passage has a quiz-back. The pack ships 2,997 blob_quizzes for 2,997
+        // blobs, so every blob card should carry one. Assert SHAPE, never content (copyright).
+        val repo = openRepo()
+        assumeTrue("real pack not pushed — skipping", repo != null)
+        repo!!.use { r ->
+            var offset = 0
+            var blob: FeedCard.Blob? = null
+            while (blob == null && offset < 32957) {
+                blob = r.page(offset, 500).filterIsInstance<FeedCard.Blob>().firstOrNull()
+                offset += 500
+            }
+            assertNotNull("the feed must contain blob passages", blob)
+            val q = blob!!.quiz
+            assertNotNull("a blob must carry its quiz-back", q)
+            assertTrue("the quiz has a question", q!!.questionMd.isNotBlank())
+            assertTrue("the quiz has 2..4 options", q.options.size in 2..4)
+            assertTrue("the correct index is within the options", q.correctIdx in q.options.indices)
+        }
+    }
+
+    @Test
     fun figures_that_are_reachable_resolve_to_real_files_on_disk() {
         val repo = openRepo()
         assumeTrue("real pack not pushed — skipping", repo != null)

@@ -1137,3 +1137,27 @@ pack content). `verifyOfflineGuarantees` green (124/120, no new dep). JVM 37/0.
 **A2 status:** five card types ✅ · FSRS wiring ✅ · importance/PYQ chrome + why-sheet ✅ · filters + sort
 (Acceptance 4) ✅ · one-tap star/tag (Acceptance 5) ✅. **Remaining:** blob quiz-back timing (leans into
 A3's ordering), figures-on-cards (235MB push deferred), and the on-phone long-MCQ scroll re-check.
+
+### 2026-07-17 — A2 blob quiz-back (Acceptance 7 core), verified on device
+
+Blob passages now carry and show their quiz-back. `FeedCard.Blob` gained `quiz: BlobQuiz?` (question +
+options + answer from `blob_quizzes`, loaded in `loadBlob`). The card: read the passage → "Mark read" →
+a "QUICK CHECK" quiz-back appears (pick → correct/wrong marked inline + the answer note). `markBlobRead`
+records `read_at` AND a `reread_due` = +1 day, so the passage resurfaces next session — **in-app only,
+no notification/alarm** (the offline guard forbids background components).
+
+**Scope boundary held (standing order #2):** §8 A2 says the quiz-back should appear "a few cards later"
+and the passage "resurface next session" — that **spaced insertion into the feed stream is A3's ordering
+engine**, not a card's job. A2 presents the quiz-back on the same card immediately after reading (real,
+testable, on the pack's own data) and writes `reread_due` for A3 to consume. Marked clearly in the
+BlobCard KDoc.
+
+**Verified:** instrumented `blob_cards_carry_their_quiz_back` on the real pack (RAN, not skipped — a blob
+carries a quiz with a question, 2–4 options, valid correct index). On-device: filtered to Passages →
+a titled passage ("~27s read", markdown intact incl. `DRB1*04:01` asterisks preserved) → Mark read →
+QUICK CHECK quiz-back rendered with its options. Also observed: the star + "Must revisit" tag from the
+earlier session persisted across a fresh launch (Acceptance 5 durability), and the per-card star is
+correctly independent (the blob was unstarred while the interlink stayed starred).
+
+`verifyOfflineGuarantees` green (124/120, no new dep). A2 remaining: figures-on-cards (235MB deferred),
+on-phone long-MCQ scroll re-check.
