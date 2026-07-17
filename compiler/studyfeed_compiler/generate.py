@@ -130,6 +130,84 @@ def prep_mcqs(cfg: Config | None = None, min_star: int = 4, top_n: int = 2000, c
     return info
 
 
+_BULLET = re.compile(r"^- \*\*(.+?)\*\*", re.M)
+
+
+def _eff_importance() -> dict[int, tuple[int, float]]:
+    """Effective concept importance = the concept's DOSSIER importance where it has one (max-of-atoms),
+    else its concept_importance. The concept-importance tail is known-noisy (C12) → this is the better
+    signal for the substantial concepts blobs/interlinks cover. Returns {concept_id: (star, score)}."""
+    eff = {}
+    for l in open(WORK_DIR / "concept_importance.jsonl", encoding="utf-8"):
+        r = json.loads(l)
+        eff[r["id"]] = (r["importance"], r["importance_score"])
+    for l in open(WORK_DIR / "dossiers.jsonl", encoding="utf-8"):
+        d = json.loads(l)
+        eff[d["concept_id"]] = (d.get("importance", 1), d.get("importance_score", 0))  # dossier wins
+    return eff
+
+
+def prep_blobs(cfg: Config | None = None, top_n: int = 3000, chunk_size: int = 150) -> dict:
+    """Blobs from the top-N dossiers by importance; each carries the top ~12 grounded fact-bullets."""
+    dossiers = [json.loads(l) for l in open(WORK_DIR / "dossiers.jsonl", encoding="utf-8")]
+    dossiers.sort(key=lambda d: (-d.get("importance", 1), -d.get("importance_score", 0), d["concept_id"]))
+    items = []
+    for d in dossiers[:top_n]:
+        facts = _BULLET.findall(d.get("body_md", ""))[:12]
+        if not facts:
+            continue
+        items.append({"ref": d["concept_id"], "title": d.get("title"),
+                      "subjects": d.get("subjects_covered", []), "importance": d.get("importance", 1),
+                      "score": d.get("importance_score", 0), "facts": facts})
+    info = _chunk_and_manifest("blobs", items, chunk_size, {"top_n": top_n})
+    print(f"[C11 prep blobs] {info['count']} concepts -> {len(info['chunks'])} chunks "
+          f"(pending={sum(c['status']=='pending' for c in info['chunks'])})", flush=True)
+    return info
+
+
+def prep_interlink(cfg: Config | None = None, top_n: int = 3000, chunk_size: int = 200) -> dict:
+    """Interlink quizzes from the best concept_edges (exclude vague 'associated_with'); ranked by both-
+    endpoints-substantial, corroboration, endpoint importance. ref = edge line index (→ interlink.edge_id)."""
+    concepts = {c["id"]: c["name"] for c in (json.loads(l) for l in
+                open(WORK_DIR / "concepts.jsonl", encoding="utf-8"))}
+    eff = _eff_importance()
+    seen, cand = set(), []
+    for i, l in enumerate(open(WORK_DIR / "concept_edges.jsonl", encoding="utf-8")):
+        e = json.loads(l)
+        s, o, rel = e.get("src_concept_id"), e.get("dst_concept_id"), e.get("relation")
+        if rel == "associated_with" or s not in concepts or o not in concepts:
+            continue
+        key = (s, rel, o)
+        if key in seen:
+            continue
+        seen.add(key)
+        si, oi = eff.get(s, (1, 0)), eff.get(o, (1, 0))
+        both_dossier = int(s in eff and o in eff)
+        imp = max(1, min(5, round((si[0] + oi[0]) / 2)))
+        cand.append({"ref": i, "src": s, "dst": o, "relation": rel, "src_name": concepts[s],
+                     "dst_name": concepts[o], "rationale": e.get("rationale", ""), "importance": imp,
+                     "_rank": (both_dossier, e.get("distinct_source_count", 1), si[0] + oi[0])})
+    cand.sort(key=lambda x: (-x["_rank"][0], -x["_rank"][1], -x["_rank"][2], x["ref"]))
+    items = [{k: v for k, v in c.items() if k != "_rank"} for c in cand[:top_n]]
+    info = _chunk_and_manifest("interlink", items, chunk_size, {"top_n": top_n})
+    print(f"[C11 prep interlink] {info['count']} edges -> {len(info['chunks'])} chunks "
+          f"(pending={sum(c['status']=='pending' for c in info['chunks'])})", flush=True)
+    return info
+
+
+def _input_map(asset: str, keys: tuple) -> dict:
+    """ref -> selected input fields, loaded from the prepped gen_input chunks (for validation/importance)."""
+    out = {}
+    for c in _read_manifest().get(asset, {}).get("chunks", []):
+        p = Path(c["in"])
+        if not p.exists():
+            continue
+        for l in open(p, encoding="utf-8"):
+            r = json.loads(l)
+            out[r["ref"]] = {k: r.get(k) for k in keys}
+    return out
+
+
 def validate_flashcards() -> dict:
     """Deterministic grounding gate: ref resolves; front/back non-empty; back shares >=1 salient token
     with its atom (statement+detail). Ungrounded/malformed -> rejected + logged (evidence floor §5)."""
@@ -277,9 +355,79 @@ def validate_mcqs() -> dict:
     return {"kept": kept, "stats": stats}
 
 
+def validate_blobs() -> dict:
+    """Grounding gate for blobs: ref resolves; body 40-220 words + shares a salient token with its source
+    facts; quiz has 4 distinct non-empty options + correct_idx in 0..3 + non-empty answer."""
+    src = _input_map("blobs", ("facts", "title", "subjects", "importance", "score"))
+    kept, rej, seen = [], {"parse": 0, "bad_ref": 0, "missing_field": 0, "bad_quiz": 0,
+                           "ungrounded": 0, "dup_ref": 0}, set()
+    for r in _iter_output("blobs"):
+        if r.get("__parse_error__"):
+            rej["parse"] += 1; continue
+        ref, body = r.get("ref"), (r.get("body_md") or "").strip()
+        meta = src.get(ref)
+        if meta is None:
+            rej["bad_ref"] += 1; continue
+        if not body or not (40 <= len(body.split()) <= 220):
+            rej["missing_field"] += 1; continue
+        q = r.get("quiz") or {}
+        opts = [(q.get(f"opt_{k}") or "").strip() for k in "abcd"]
+        ci = q.get("correct_idx")
+        if (not (q.get("question_md") or "").strip() or not (q.get("answer_md") or "").strip()
+                or any(not o for o in opts) or len(set(opts)) != 4 or not isinstance(ci, int)
+                or not (0 <= ci <= 3)):
+            rej["bad_quiz"] += 1; continue
+        if ref in seen:
+            rej["dup_ref"] += 1; continue
+        fact_sal = _salient(" ".join(meta.get("facts") or []))
+        if fact_sal and not (_salient(body) & fact_sal):
+            rej["ungrounded"] += 1; continue
+        seen.add(ref)
+        words = len(body.split())
+        kept.append({"ref": ref, "title": r.get("title") or meta.get("title"), "body_md": body,
+                     "est_read_seconds": max(15, round(words / 3.3)), "concept_ids": [ref],
+                     "quiz": {"question_md": q["question_md"].strip(), "answer_md": q["answer_md"].strip(),
+                              "opt_a": opts[0], "opt_b": opts[1], "opt_c": opts[2], "opt_d": opts[3],
+                              "correct_idx": ci},
+                     "importance": meta.get("importance", 1), "importance_score": meta.get("score", 0)})
+    stats = {"kept": len(kept), "rejected": sum(rej.values()), "reject_breakdown": rej}
+    print(f"[C11 validate blobs] {json.dumps(stats)}", flush=True)
+    return {"kept": kept, "stats": stats}
+
+
+def validate_interlink() -> dict:
+    """Grounding gate for interlink: ref resolves; question+answer non-empty and together mention BOTH
+    endpoint concept names (the edge it must test)."""
+    src = _input_map("interlink", ("src_name", "dst_name", "importance"))
+    kept, rej, seen = [], {"parse": 0, "bad_ref": 0, "missing_field": 0, "ungrounded": 0, "dup_ref": 0}, set()
+    for r in _iter_output("interlink"):
+        if r.get("__parse_error__"):
+            rej["parse"] += 1; continue
+        ref = r.get("ref")
+        meta = src.get(ref)
+        if meta is None:
+            rej["bad_ref"] += 1; continue
+        qm, am = (r.get("question_md") or "").strip(), (r.get("answer_md") or "").strip()
+        if not qm or not am:
+            rej["missing_field"] += 1; continue
+        if ref in seen:
+            rej["dup_ref"] += 1; continue
+        blob = (qm + " " + am).lower()
+        a, b = (meta.get("src_name") or "").lower(), (meta.get("dst_name") or "").lower()
+        if not (a in blob and b in blob):        # must test the actual A—B link
+            rej["ungrounded"] += 1; continue
+        seen.add(ref)
+        kept.append({"ref": ref, "question_md": qm, "answer_md": am,
+                     "importance": meta.get("importance", 1)})
+    stats = {"kept": len(kept), "rejected": sum(rej.values()), "reject_breakdown": rej}
+    print(f"[C11 validate interlink] {json.dumps(stats)}", flush=True)
+    return {"kept": kept, "stats": stats}
+
+
 def collect(asset: str) -> dict:
-    """Validate + write work/gen_<asset>.jsonl for reels/mcqs (flashcards has collect_flashcards)."""
-    res = {"reels": validate_reels, "mcqs": validate_mcqs}[asset]()
+    """Validate + write work/gen_<asset>.jsonl for reels/mcqs/blobs/interlink (flashcards: collect_flashcards)."""
+    res = {"reels": validate_reels, "mcqs": validate_mcqs, "blobs": validate_blobs,
+           "interlink": validate_interlink}[asset]()
     out = WORK_DIR / f"gen_{asset}.jsonl"
     with open(out, "w", encoding="utf-8") as f:
         for r in res["kept"]:
@@ -305,14 +453,17 @@ if __name__ == "__main__":
     cfg = Config.for_exam("mrcp_part1")
     cmd = sys.argv[1] if len(sys.argv) > 1 else "prep"
     asset = sys.argv[2] if len(sys.argv) > 2 else "flashcards"
-    _PREP = {"flashcards": prep_flashcards, "reels": prep_reels, "mcqs": prep_mcqs}
+    _PREP = {"flashcards": prep_flashcards, "reels": prep_reels, "mcqs": prep_mcqs,
+             "blobs": prep_blobs, "interlink": prep_interlink}
     _COLLECT = {"flashcards": collect_flashcards, "reels": lambda: collect("reels"),
-                "mcqs": lambda: collect("mcqs")}
-    _VALIDATE = {"flashcards": validate_flashcards, "reels": validate_reels, "mcqs": validate_mcqs}
+                "mcqs": lambda: collect("mcqs"), "blobs": lambda: collect("blobs"),
+                "interlink": lambda: collect("interlink")}
+    _VALIDATE = {"flashcards": validate_flashcards, "reels": validate_reels, "mcqs": validate_mcqs,
+                 "blobs": validate_blobs, "interlink": validate_interlink}
     if cmd == "prep" and asset in _PREP:
         _PREP[asset](cfg)
     elif cmd == "prep-all":
-        for a in ("flashcards", "reels", "mcqs"):
+        for a in ("blobs", "interlink"):
             _PREP[a](cfg)
     elif cmd == "validate" and asset in _VALIDATE:
         _VALIDATE[asset]()

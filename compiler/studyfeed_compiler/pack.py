@@ -235,21 +235,44 @@ def build(cfg: Config, db_path: Path) -> dict:
     cur.executemany("INSERT INTO reels(id,subject_id,atom_id,hook_md,detail_md,importance,importance_score,"
                     "importance_signals_json) VALUES(?,?,?,?,?,?,?,?)", reel_rows)
 
-    # ── feed_items: one row per playable card (mcq/flashcard/reel) ─────────────
+    # ── text_blobs (+ quiz-backs) and interlink_quizzes (deferred C11 assets) ──
+    blob_rows, bq_rows = [], []
+    for i, b in enumerate(_load("gen_blobs.jsonl")):
+        blob_rows.append((i, None, b.get("title"), b.get("body_md"), b.get("est_read_seconds"),
+                          _j(b.get("concept_ids", [])), b.get("importance", 1), b.get("importance_score", 0),
+                          _j({"rule": "eff_concept_importance"})))
+        qz = b.get("quiz") or {}
+        bq_rows.append((i, i, qz.get("question_md"), qz.get("answer_md"), qz.get("opt_a"), qz.get("opt_b"),
+                        qz.get("opt_c"), qz.get("opt_d"), qz.get("correct_idx")))
+    cur.executemany("INSERT INTO text_blobs(id,subject_id,title,body_md,est_read_seconds,concept_ids_json,"
+                    "importance,importance_score,importance_signals_json) VALUES(?,?,?,?,?,?,?,?,?)", blob_rows)
+    cur.executemany("INSERT INTO blob_quizzes(id,blob_id,question_md,answer_md,opt_a,opt_b,opt_c,opt_d,"
+                    "correct_idx) VALUES(?,?,?,?,?,?,?,?,?)", bq_rows)
+    il_rows = [(i, il["ref"], None, il.get("question_md"), il.get("answer_md"), il.get("importance", 1),
+                round(il.get("importance", 1) / 5.0, 4)) for i, il in enumerate(_load("gen_interlink.jsonl"))]
+    cur.executemany("INSERT INTO interlink_quizzes(id,edge_id,subject_id,question_md,answer_md,importance,"
+                    "importance_score) VALUES(?,?,?,?,?,?,?)", il_rows)
+
+    # ── feed_items: one row per playable card ─────────────────────────────────
     feed = [("mcq", *r) for r in cur.execute(
         "SELECT id,subject_id,importance,importance_score,is_pyq FROM mcqs").fetchall()]
     feed += [("flashcard", r[0], r[1], r[2], r[3], 0) for r in cur.execute(
         "SELECT id,subject_id,importance,importance_score FROM flashcards").fetchall()]
     feed += [("reel", r[0], r[1], r[2], r[3], 0) for r in cur.execute(
         "SELECT id,subject_id,importance,importance_score FROM reels").fetchall()]
+    feed += [("blob", r[0], r[1], r[2], r[3], 0) for r in cur.execute(
+        "SELECT id,subject_id,importance,importance_score FROM text_blobs").fetchall()]
+    feed += [("interlink", r[0], r[1], r[2], r[3], 0) for r in cur.execute(
+        "SELECT id,subject_id,importance,importance_score FROM interlink_quizzes").fetchall()]
     cur.executemany("INSERT INTO feed_items(item_type,ref_id,subject_id,importance,importance_score,is_pyq) "
                     "VALUES(?,?,?,?,?,?)", feed)
 
     # ── manifest row (content checksum = the reproducibility anchor) ───────────
     content_checksum = hashlib.sha256("\n".join(sorted(stable)).encode("utf-8")).hexdigest()
     counts = {t: cur.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in
-              ("atoms", "concepts", "concept_edges", "mcqs", "flashcards", "reels", "topic_pages",
-               "topic_sections", "feed_items", "sources", "atom_citations", "mcq_distractors")}
+              ("atoms", "concepts", "concept_edges", "mcqs", "flashcards", "reels", "text_blobs",
+               "blob_quizzes", "interlink_quizzes", "topic_pages", "topic_sections", "feed_items",
+               "sources", "atom_citations", "mcq_distractors")}
     hist = {str(b): cur.execute("SELECT count(*) FROM feed_items WHERE importance=?", (b,)).fetchone()[0]
             for b in range(1, 6)}
     weights = {"weights": cfg.weights, "thresholds": cfg.thresholds,
@@ -278,7 +301,9 @@ def _schema_version() -> int:
 def _feature_flags(counts: dict) -> dict:
     return {"has_concept_map": counts["concept_edges"] > 0, "has_dossiers": counts["topic_pages"] > 0,
             "has_flashcards": counts["flashcards"] > 0, "has_reels": counts["reels"] > 0,
-            "has_generated_mcqs": True, "has_figures": False, "has_blobs": False, "has_interlink": False}
+            "has_generated_mcqs": True, "has_figures": False,
+            "has_blobs": counts.get("text_blobs", 0) > 0,
+            "has_interlink": counts.get("interlink_quizzes", 0) > 0}
 
 
 def write_manifest(cfg: Config, db_path: Path, res: dict) -> Path:
