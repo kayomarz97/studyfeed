@@ -48,6 +48,22 @@ def _load(name: str) -> list[dict]:
     return [json.loads(l) for l in open(p, encoding="utf-8")] if p.exists() else []
 
 
+def excluded_atom_indices(cfg: Config) -> set[int]:
+    """atoms_merged line-indices whose §5j stable_key is in profile.data_corrections (verified-wrong facts).
+    Shared by dossier.py (drop the bullet) and pack.py (drop the atom + derived assets) so a rebuild scrubs
+    them everywhere by content, not fragile line numbers."""
+    keys = set(cfg.raw.get("data_corrections", {}).get("exclude_atom_stable_keys", []))
+    if not keys:
+        return set()
+    cmap = workgroups.canonical_map()
+    out = set()
+    for i, a in enumerate(_load("atoms_merged.jsonl")):
+        canon = cmap.get(a["source_id"], a["source_id"])
+        if _skey(a.get("statement", ""), canon, a.get("page_ref")) in keys:
+            out.add(i)
+    return out
+
+
 def _j(v) -> str:
     return json.dumps(v, ensure_ascii=False)
 
@@ -55,6 +71,8 @@ def _j(v) -> str:
 def build(cfg: Config, db_path: Path) -> dict:
     """Build the pack at db_path. Returns {counts, histogram, content_checksum, stable_keys(set)}."""
     cmap = workgroups.canonical_map()
+    excl_keys = set(cfg.raw.get("data_corrections", {}).get("exclude_atom_stable_keys", []))  # verified-wrong
+    excluded_atoms = set()  # atom line-idx dropped as a verified factual error (+ its derived assets)
 
     # ── subjects + tags from profile ──────────────────────────────────────────
     subj_id = {}  # lower name -> id (1-based)
@@ -117,6 +135,9 @@ def build(cfg: Config, db_path: Path) -> dict:
     for i, a in enumerate(atoms):
         canon = cmap.get(a["source_id"], a["source_id"])
         sk, n = _skey(a.get("statement", ""), canon, a.get("page_ref")), 0
+        if sk in excl_keys:                      # verified-wrong atom (data_corrections) — drop it + derived assets
+            excluded_atoms.add(i)
+            continue
         while sk in stable:                      # deterministic collision break (identical text+prov)
             n += 1
             sk = _skey(a.get("statement", "") + f" #{n}", canon, a.get("page_ref"))
@@ -194,6 +215,8 @@ def build(cfg: Config, db_path: Path) -> dict:
                       _j(im.get("signals", {})), _fig(m["source_id"], m.get("page_ref"))))
         curated_kept.add(i)
     for jx, g in enumerate(_load("gen_mcqs.jsonl")):
+        if g["ref"] in excluded_atoms:           # generated from a verified-wrong atom
+            continue
         gid = GEN_MCQ_ID_OFFSET + jx
         prov = atom_stable.get(g["ref"], g["ref"])
         sk, n = _skey(g.get("stem_md", ""), "generated", prov), 0
@@ -251,12 +274,13 @@ def build(cfg: Config, db_path: Path) -> dict:
     fc_rows = [(i, subj_id.get((f.get("subject") or "").strip().lower()), f["ref"], f.get("front_md"),
                 f.get("back_md"), int(f.get("is_cloze", 0)), f.get("importance", 1),
                 f.get("importance_score", 0), _j(f.get("importance_signals", {})))
-               for i, f in enumerate(_load("gen_flashcards.jsonl"))]
+               for i, f in enumerate(x for x in _load("gen_flashcards.jsonl") if x["ref"] not in excluded_atoms)]
     cur.executemany("INSERT INTO flashcards(id,subject_id,atom_id,front_md,back_md,is_cloze,importance,"
                     "importance_score,importance_signals_json) VALUES(?,?,?,?,?,?,?,?,?)", fc_rows)
     reel_rows = [(i, subj_id.get((r.get("subject") or "").strip().lower()), r["ref"], r.get("hook_md"),
                   r.get("detail_md"), r.get("importance", 1), r.get("importance_score", 0),
-                  _j(r.get("importance_signals", {}))) for i, r in enumerate(_load("gen_reels.jsonl"))]
+                  _j(r.get("importance_signals", {})))
+                 for i, r in enumerate(x for x in _load("gen_reels.jsonl") if x["ref"] not in excluded_atoms)]
     cur.executemany("INSERT INTO reels(id,subject_id,atom_id,hook_md,detail_md,importance,importance_score,"
                     "importance_signals_json) VALUES(?,?,?,?,?,?,?,?)", reel_rows)
 
@@ -300,6 +324,7 @@ def build(cfg: Config, db_path: Path) -> dict:
                "sources", "atom_citations", "mcq_distractors")}
     counts["mcqs_key_conflict"] = cur.execute("SELECT count(*) FROM mcqs WHERE key_conflict=1").fetchone()[0]
     counts["atoms_with_figure"] = cur.execute("SELECT count(*) FROM atoms WHERE figure_id IS NOT NULL").fetchone()[0]
+    counts["excluded_wrong_atoms"] = len(excluded_atoms)
     hist = {str(b): cur.execute("SELECT count(*) FROM feed_items WHERE importance=?", (b,)).fetchone()[0]
             for b in range(1, 6)}
     weights = {"weights": cfg.weights, "thresholds": cfg.thresholds,

@@ -50,6 +50,15 @@ staleness:
   guideline_sensitive_cues: ["first-line", "target", "threshold", "recommended", "guideline",
                              "management of", "treatment of", "screening", "cut-off"]
 
+data_corrections:                    # web-verified FACTUAL errors in source atoms -> excluded from the pack
+  # keyed by §5j stable_key (content-derived, survives rebuild). Verified 2026-07-17 (NICE/StatPearls/ARUP).
+  # The CORRECT facts remain via other atoms (8 MPA-pANCA, 6 coeliac-DQ2). See JOURNAL [SOURCE-FACTS-VERIFIED].
+  exclude_atom_stable_keys:
+    - "ebf9814ada53c70a"   # "cANCA vs PR3 40% in MPA" — MPA is pANCA/anti-MPO predominant, NOT cANCA
+    - "69593d00e1455bf8"   # "MPA associated with cANCA 40% and pANCA" — the cANCA-for-MPA claim is wrong
+    - "abcec8602d074123"   # "MPA positive for cANCA in 40%" — wrong (that pattern is GPA, not MPA)
+    - "e86811639a1befb8"   # "coeliac most strongly associated with HLA-DR2" — coeliac is HLA-DQ2/DQ8
+
 nomenclature:
   canonicalize_orthography: true   # deterministic ae/oe->e, -ise->-ize, -our->-or (match key only)
   display_convention: uk           # ALWAYS display UK spelling — that's what the exam is sat in

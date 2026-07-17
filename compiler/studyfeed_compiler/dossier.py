@@ -124,8 +124,12 @@ def build(cfg: Config | None = None) -> dict:
     # gather constituent atoms per concept (atoms_merged line-aligned with atom_importance)
     atoms = [json.loads(l) for l in open(WORK_DIR / "atoms_merged.jsonl", encoding="utf-8")]
     aimp = [json.loads(l) for l in open(WORK_DIR / "atom_importance.jsonl", encoding="utf-8")]
+    from . import pack
+    excluded = pack.excluded_atom_indices(cfg)                   # verified-wrong atoms (data_corrections) — no bullet
     cid_atoms: dict[int, list[int]] = defaultdict(list)          # concept id -> [atom index]
     for i, a in enumerate(atoms):
+        if i in excluded:
+            continue
         for cid in stmt2cids.get((a.get("statement", "") or "")[:240], ()):
             cid_atoms[cid].append(i)
 

@@ -34,7 +34,7 @@ imports and renders offline. Everything exam-specific lives in the profile → p
 | `spec/SPEC.md` | Human contract: 2-DB model, manifest, versioning, runtime invariants, progress-DB schema. |
 | `spec/manifest.schema.json` | JSON Schema for `manifest.json` shipped beside each pack. |
 | `spec/SCORING.md` | The deterministic 1–5 importance model + worked examples. |
-| `profiles/mrcp_part1.yaml` | First exam profile: tiers, weights, floors, scripts, dedupe, zoning, aliases, tags. |
+| `profiles/mrcp_part1.yaml` | First exam profile: tiers, weights, floors, scripts, dedupe, zoning, aliases, tags, `data_corrections` (§5j stable_keys of web-verified-wrong atoms, excluded at pack). |
 | `compiler/pyproject.toml` | uv project (py≥3.11); deps unpinned until `uv lock` + verify (pre-C2). |
 | `compiler/studyfeed_compiler/run.py` | Resumable stage DAG + ⛔ gates. `--list` / `--from` / `--only`. |
 | `compiler/studyfeed_compiler/state.py` | **Sole writer** of `.compiler_state.json` (atomic) + JOURNAL appender. |
