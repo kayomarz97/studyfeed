@@ -10,6 +10,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import java.io.File
 
 /**
@@ -38,13 +40,24 @@ import java.io.File
         FsrsCard::class, Review::class, Mistake::class, Star::class, ItemTag::class,
         SubjectMastery::class, StudySession::class, BlobRead::class, FeedState::class, Setting::class,
     ],
-    version = 1,
-    exportSchema = false, // A1: no migrations to test against yet. Revisit when version 2 lands.
+    version = 2,
+    exportSchema = false, // migrations are hand-written + tested (MigrationTest); no schema-JSON needed.
 )
 abstract class ProgressDatabase : RoomDatabase() {
     abstract fun dao(): ProgressDao
 
     companion object {
+
+        /**
+         * v1 → v2 (A6): add `mistakes.resolved_count` for the "re-drill correct N times → resolved"
+         * counter. A plain additive `ALTER TABLE` — existing rows default to 0, nothing is dropped. This
+         * is the non-destructive migration the two-DB design demands (NEVER `fallbackToDestructiveMigration`).
+         */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE mistakes ADD COLUMN resolved_count INTEGER NOT NULL DEFAULT 0")
+            }
+        }
         /**
          * Opens (creating on first use) the progress DB for [examCode].
          *
@@ -54,7 +67,9 @@ abstract class ProgressDatabase : RoomDatabase() {
          * user's hand.
          */
         fun open(context: Context, examCode: String): ProgressDatabase =
-            Room.databaseBuilder(context, ProgressDatabase::class.java, fileName(examCode)).build()
+            Room.databaseBuilder(context, ProgressDatabase::class.java, fileName(examCode))
+                .addMigrations(MIGRATION_1_2)
+                .build()
 
         /**
          * Force the progress file into existence, creating an empty schema if it isn't there.
@@ -126,6 +141,11 @@ data class Mistake(
     val chosen_idx: Int?,
     val ts: String,
     val resolved: Int = 0,
+    /**
+     * A6: consecutive correct re-drills toward resolution. Reset to 0 on a wrong answer; the item is
+     * `resolved = 1` once it reaches the re-drill threshold N (added in schema v2, MIGRATION_1_2).
+     */
+    val resolved_count: Int = 0,
 )
 
 @Entity(tableName = "stars", primaryKeys = ["item_type", "item_id"])
@@ -235,4 +255,40 @@ interface ProgressDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putFeedState(state: FeedState)
+
+    // ---- A6: mistake re-drill resolution + stats aggregates ----------------------------------------
+
+    /**
+     * A correct re-drill: advance the item's single unresolved mistake toward resolution; mark it
+     * `resolved` once it reaches [n] consecutive corrects. Returns rows affected (0 = item wasn't a
+     * pending mistake). CASE reads the OLD `resolved_count`, so new_count = old+1 and resolved = (old+1≥n).
+     */
+    @Query(
+        """UPDATE mistakes SET resolved_count = resolved_count + 1,
+              resolved = CASE WHEN resolved_count + 1 >= :n THEN 1 ELSE 0 END
+           WHERE item_type = :type AND item_id = :id AND resolved = 0"""
+    )
+    suspend fun advanceResolution(type: String, id: Long, n: Int): Int
+
+    /** A wrong answer restarts the drill: reset an existing unresolved mistake to 0/N. Returns rows hit. */
+    @Query("UPDATE mistakes SET resolved_count = 0, ts = :ts, chosen_idx = :chosen WHERE item_type = :type AND item_id = :id AND resolved = 0")
+    suspend fun resetUnresolved(type: String, id: Long, ts: String, chosen: Int?): Int
+
+    @Query("SELECT COUNT(*) FROM mistakes WHERE resolved = 0")
+    suspend fun unresolvedMistakeCount(): Int
+
+    /** Resolved mistakes — a "recovered weak spot", worth XP. */
+    @Query("SELECT COUNT(*) FROM mistakes WHERE resolved = 1")
+    suspend fun resolvedMistakeCount(): Int
+
+    /** All review timestamps (ISO), newest first — the streak + daily-goal source. */
+    @Query("SELECT ts FROM reviews ORDER BY ts DESC")
+    suspend fun reviewTimestamps(): List<String>
+
+    @Query("SELECT COUNT(*) FROM reviews")
+    suspend fun totalReviews(): Int
+
+    /** Lapses (rated Again = 1) — the accuracy denominator's failures. */
+    @Query("SELECT COUNT(*) FROM reviews WHERE rating = 1")
+    suspend fun totalLapses(): Int
 }

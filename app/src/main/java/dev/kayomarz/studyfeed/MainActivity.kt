@@ -47,7 +47,11 @@ import dev.kayomarz.studyfeed.ui.dossier.DossierScreen
 import dev.kayomarz.studyfeed.ui.dossier.DossierViewModel
 import dev.kayomarz.studyfeed.ui.dossier.ItemDetailScreen
 import dev.kayomarz.studyfeed.ui.dossier.LibraryScreen
+import dev.kayomarz.studyfeed.feed.FeedFilter
 import dev.kayomarz.studyfeed.ui.feed.FeedScreen
+import dev.kayomarz.studyfeed.ui.feed.FeedViewModel
+import dev.kayomarz.studyfeed.ui.stats.StatsScreen
+import dev.kayomarz.studyfeed.ui.stats.StatsViewModel
 import dev.kayomarz.studyfeed.ui.theme.StudyFeedTheme
 
 /**
@@ -91,6 +95,7 @@ private sealed interface Screen {
     data object Manage : Screen
     data object Library : Screen
     data object ConceptMap : Screen
+    data object Stats : Screen
     data class Dossier(val topicPageId: Long) : Screen
     data class ItemDetail(val type: String, val refId: Long) : Screen
 }
@@ -100,14 +105,23 @@ private fun Root() {
     var screen by remember { mutableStateOf<Screen>(Screen.Feed) }
     // Remembered so the Reference viewer's Back returns to the dossier it was opened from.
     var currentDossierId by remember { mutableStateOf(0L) }
+    val feedVm: FeedViewModel = viewModel()
     val dossierVm: DossierViewModel = viewModel()
     val conceptVm: ConceptMapViewModel = viewModel()
+    val statsVm: StatsViewModel = viewModel()
 
     when (screen) {
         Screen.Feed -> FeedScreen(
+            vm = feedVm,
             onNoPack = { screen = Screen.Manage },
             onOpenLibrary = { screen = Screen.Library },
             onOpenMap = { screen = Screen.ConceptMap },
+            onOpenStats = { statsVm.load(); screen = Screen.Stats },
+        )
+        Screen.Stats -> StatsScreen(
+            vm = statsVm,
+            onReviewMistakes = { feedVm.setFilter(FeedFilter(mistakesOnly = true)); screen = Screen.Feed },
+            onBack = { screen = Screen.Feed },
         )
         Screen.ConceptMap -> ConceptMapScreen(
             vm = conceptVm,

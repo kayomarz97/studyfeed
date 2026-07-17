@@ -48,12 +48,16 @@ of A2 (markdown renderer, filters, sort, star/tag, blob quiz-back are all pure S
   code. Fix: push figures in smaller batches, or accept it (a real user imports figures via SAF with the
   pack, where it's a one-time local copy, not wifi).
 
-**Next stages to BUILD (functional), in order:** ~~A3 (feed ordering engine)~~ **✅ DONE** → ~~A4 (topic
-dossier reader)~~ **✅ DONE** (PATCH 05) → ~~A5 (concept map)~~ **✅ DONE 2026-07-18** (`concept/` +
-`ui/concept/`; walkable ego-graph, `ForceLayout`; finding: `concepts.summary_md` empty → edges+dossier;
-6 JVM + 5 real-pack tests; see JOURNAL "A5 Concept Map COMPLETE") → **A6 (mistakes/mastery/stats) ← NEXT**
-→ A7 (settings + **the design pass below**). A5 has an A7 polish item: map layout is compact / labels
-collide near centre (spread + de-collision = design).
+**Next stages to BUILD (functional), in order:** ~~A3~~ **✅** → ~~A4~~ **✅** (PATCH 05) → ~~A5~~ **✅**
+(ego-graph) → ~~A6 (mistakes/mastery/stats)~~ **✅ DONE 2026-07-18** (`stats/` + `ui/stats/`; first DB
+migration v1→v2 `resolved_count`; re-drill N=3; forgetting curve; 3 instrumented tests; see JOURNAL "A6
+… COMPLETE") → **A7 (settings + THE DESIGN PASS below) ← NEXT, LAST STAGE.**
+
+**A7 now also carries these functional-polish items surfaced during A3–A6 (do them in the A7 pass):**
+- A5 concept map: layout is compact / labels collide near the centre → spread + label de-collision.
+- A6 daily-goal target is a constant (50) → wire it to the A3 deadline pace (daily new-MCQ budget).
+- A6 Progress screen may fold into the home page (backlog 2.1); re-drill N=3 → expose as a setting.
+- Deadline (`feed.deadline`) + re-drill N + feed intensity/burst → Settings knobs (§8 A7).
 
 ---
 

@@ -1325,3 +1325,38 @@ filtered to unresolved `mistakes` (re-drill until resolved), per-subject mastery
 accuracy), forgetting-curve view, "high-importance gaps" list, tasteful local gamification (streaks/daily
 goal/XP). Then A7 (design pass). A3+A4+A5 committed on `dev`, **not yet pushed** (user: "build A4, push
 later" → still holding).
+
+### 2026-07-18 — **A6 Mistakes / Mastery / Stats COMPLETE** (+ first real DB migration)
+
+Built the Progress screen (§8 A6). **Mistakes review** reuses the A2 feed's `mistakesOnly` filter (no
+second feed); A6 adds the **re-drill resolution**: a correct MCQ answer advances the item's mistake,
+**resolved after N=3 consecutive corrects** (user's choice), a wrong answer resets it to 0/3. Per-subject
+**mastery bars** (FSRS stability + accuracy), a **forgetting-curve** Canvas chart (FSRS retrievability
+`R(t)=(1+19/81·t/S)^-0.5`), a **high-importance gaps** list (5★ items with an open mistake), and tasteful
+**streak / daily goal / XP** derived from `reviews`. Entry = a "Stats" button in the feed top bar.
+
+**First schema migration (done right):** the re-drill counter needed `mistakes.resolved_count`. Bumped
+`@Database` to **v2** with `MIGRATION_1_2` (`ALTER TABLE mistakes ADD COLUMN resolved_count INTEGER NOT
+NULL DEFAULT 0`) + `.addMigrations(...)`. **Additive, non-destructive — NEVER `fallbackToDestructive`**
+(the two-DB rule). Tested: the exact ALTER preserves existing rows + defaults 0.
+
+**New:** `stats/StatsRepository.kt` (cross-DB ATTACH read — mastery/gaps/curve join `fsrs_cards`↔pack
+`feed_items` for subject+importance, like FeedRepository), `ui/stats/{StatsScreen, StatsViewModel}`.
+DAO: `advanceResolution`, `resetUnresolved`, `unresolved/resolvedMistakeCount`, `reviewTimestamps`,
+`totalReviews/Lapses`. Feed answer flow now calls `onMcqAnswered(card, chosen, correct)`.
+
+**Verified:** `MistakeResolutionTest` **OK** (migration ALTER preserves data; 3× correct → resolved; wrong
+resets the drill) + `StatsRealPackTest` **OK** (seeded FSRS/reviews/mistakes on real pack items → mastery
+0..1, the 5★ gap surfaces, forgetting curve = 6 horizons decaying from ~1.0, all 0..1) — `OK (3 tests)` via
+`am instrument -r`. `verifyOfflineGuarantees` green, **zero new deps** (Canvas chart, no charting lib).
+Live smoke on `emulator-5554`: answered an MCQ + rated an interlink Good → Progress shows Streak 1 · XP 10
+· 100% acc · 2 mistakes → Review · a rendered forgetting curve · 5★ gaps. (Mastery bars show "No subject
+data yet" when the session's reviews are sparse — graceful empty sub-state; the populated case is proven
+by the test.) **A7 note:** the daily-goal target is a constant (50) — A7 can wire it to the A3 deadline
+pace; and the Progress screen may fold into the home page (backlog 2.1).
+
+**Resume point:** A6 done. **Next = A7 (Settings + THE DESIGN PASS, §8 A7)** — AMOLED settings, deadline/
+intensity/redrill-N knobs, export/import entry points, release APK; AND execute the deferred design
+backlog (home page, subject/PYQ redesign, tags-to-bottom, flashcard/reel differentiation, tap-anywhere,
+concept-map spread, stats-as-home) — see `.claude/plans/2026-07-17-a7-design-backlog-and-resume.md`.
+A3–A6 committed on `dev`, **not yet pushed** (user still holding the push).

@@ -232,12 +232,24 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
             rating = rating.ordinal + 1, ts = now.toString(), elapsed_ms = null))
     }
 
-    /** A wrong MCQ answer → the mistake ledger (§8 A2 → A6). */
-    fun recordMistake(card: FeedCard.Mcq, chosenIdx: Int) = viewModelScope.launch(Dispatchers.IO) {
-        dao?.insertMistake(
-            Mistake(item_type = "mcq", item_id = card.itemId, subject_id = null,
-                chosen_idx = chosenIdx, ts = Instant.now().toString(), resolved = 0)
-        )
+    /**
+     * An MCQ answer feeds the mistake re-drill (§8 A2 → A6). **Correct** → advance the item's pending
+     * mistake toward resolution (resolved after [REDRILL_N] consecutive corrects). **Wrong** → restart
+     * the drill: reset an existing unresolved mistake to 0/N, or open a fresh one. So answering a
+     * mistaken item correctly N times in the Mistakes review clears it from the pile.
+     */
+    fun onMcqAnswered(card: FeedCard.Mcq, chosenIdx: Int, correct: Boolean) = viewModelScope.launch(Dispatchers.IO) {
+        val d = dao ?: return@launch
+        if (correct) {
+            d.advanceResolution("mcq", card.itemId, REDRILL_N)
+        } else {
+            val now = Instant.now().toString()
+            val reset = d.resetUnresolved("mcq", card.itemId, now, chosenIdx)
+            if (reset == 0) d.insertMistake(
+                Mistake(item_type = "mcq", item_id = card.itemId, subject_id = null,
+                    chosen_idx = chosenIdx, ts = now, resolved = 0)
+            )
+        }
     }
 
     fun markBlobRead(card: FeedCard.Blob) = viewModelScope.launch(Dispatchers.IO) {
@@ -306,6 +318,7 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
         const val PREFETCH = 10
         const val ENGINE_KEY = "engine"          // feed_state row holding the serialised engine state
         const val DEADLINE_KEY = "feed.deadline" // settings row: the editable MCQ finish line (ISO date)
+        const val REDRILL_N = 3                  // A6: correct N times to resolve a mistake (A7-tunable)
     }
 }
 

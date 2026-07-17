@@ -53,6 +53,7 @@ fun FeedScreen(
     onNoPack: () -> Unit,
     onOpenLibrary: () -> Unit = {},
     onOpenMap: () -> Unit = {},
+    onOpenStats: () -> Unit = {},
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
 
@@ -68,6 +69,7 @@ fun FeedScreen(
             ) {
                 TextButton(onClick = onOpenLibrary) { Text("Search") }
                 TextButton(onClick = onOpenMap) { Text("Map") }
+                TextButton(onClick = onOpenStats) { Text("Stats") }
                 FeedControls(
                     query = ui.query,
                     subjects = ui.subjects,
@@ -130,7 +132,7 @@ private fun FeedPager(ui: FeedViewModel.Ui, vm: FeedViewModel) {
                 onWhy = { vm.showWhy(card) },
                 onRate = { vm.rate(card, it) },
                 onAnswered = { chosen, correct ->
-                    if (!correct && card is FeedCard.Mcq) vm.recordMistake(card, chosen)
+                    if (card is FeedCard.Mcq) vm.onMcqAnswered(card, chosen, correct)
                 },
                 onRead = { if (card is FeedCard.Blob) vm.markBlobRead(card) },
             )
