@@ -22,12 +22,19 @@ compiler/dist/
 *.aab
 app/build/
 build-logic/build/
+# The ROOT project's own build dir. Gradle writes build/reports/ here (e.g. the configuration-cache
+# problems report) even though the root project has no code. Anchored with a LEADING SLASH so it
+# matches ONLY this directory at the repo root — see the warning below for why a bare `build/` is
+# not safe here.
+/build/
 .gradle/
 local.properties
-# ⚠ Do NOT "simplify" the two lines above into `**/build/` or a bare `build/`. The guard's own
-# source lives in build-logic/src/main/kotlin/dev/kayomarz/studyfeed/**build**/ — a package named
-# `build` — and a glob rule would silently stop new files there from ever being committed.
-# List build output directories explicitly, one per module.
+# ⚠ Do NOT "simplify" the three build lines above into `**/build/` or a bare, unanchored `build/`.
+# The guard's own source lives in build-logic/src/main/kotlin/dev/kayomarz/studyfeed/**build**/ — a
+# package named `build` — and an unanchored rule would match it, silently stopping new files there
+# from ever being committed. `/build/` is anchored to the repo root and does NOT match that package;
+# a bare `build/` would match it at any depth and IS unsafe. List output dirs explicitly, one per
+# module, anchoring where a name collides with real source.
 
 # ── signing: losing these is bad, committing them is worse ──
 *.jks
