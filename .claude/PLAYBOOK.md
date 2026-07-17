@@ -1620,3 +1620,17 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   start passing by inheriting setup from elsewhere. Lazy-initialised files (Room DBs, caches) are
   a trap for any code that reaches them by path (ATTACH, export, size check) — never assume they
   exist before first use. (seen 1x)
+
+- **2026-07 · Never paste a real pack fragment into a tracked doc — quote the FORM, never the
+  bytes.** At A2 planning, to justify "in-house markdown renderer, not a library" (pack markdown
+  has medical notation a renderer would corrupt), I copied verbatim MCQ stem/explanation
+  fragments from `mcqs.stem_md`/`explanation_md` straight into BUILD_PROMPT.md, CLAUDE.md,
+  JOURNAL.md, and the A2 plan — tracked files, unlike the gitignored compiler dirs the whole
+  design otherwise keeps copyrighted text out of. One fragment even carried a specific
+  patient-vignette shape, squarely "question stem." `secret-scanner` caught it pre-push; I hadn't
+  caught it while writing.
+  **Fix/prevention:** the compiler's own bright line (counts/IDs/decisions only, never book
+  content) applies to ALL tracked text — commit messages, JOURNAL.md, plans, PLAYBOOK, code
+  comments, test fixtures. When an argument needs an example, invent a synthetic FORM (e.g.
+  `<count> * 10^9/L`, `> <N>: <interpretation>`) that cannot be a substring of any real pack row —
+  never a real excerpt, no matter how short or "obviously fair use." (seen 1x)

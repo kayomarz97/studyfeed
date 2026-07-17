@@ -961,3 +961,48 @@ Scanned **68,893** real markdown fields across all 11 `*_md` columns before choo
 2★ 3,736 · 1★ 4,418** — **71% is 4★**, so §8 A2's "4★+" filter selects ~74% of the deck and is nearly a
 no-op, while "5★ only" selects 1,046 (3%). That histogram is the audited, intended `pyq_min` floor (the
 Opus importance-scorer called it *defensible*) — expected, not a bug. `is_pyq=1` → **4,306**.
+
+### 2026-07-17 — A2 build begins: markdown renderer + the feed query, proven on the real phone
+
+**The phone reconnected (S23 Ultra), so the feed query was tested on REAL HARDWARE** — which answered the
+perf question A1 left open. `FeedRepositoryTest`: **5/5 pass in 1.8 s**, and those tests page through the
+full 32,957-item feed *several times over* (find all 5 types, hunt a PYQ, scan 20k items for a figure).
+**The `LIMIT/OFFSET` windowing (D11) is fast on the real pack** — the ~15 s seen earlier was emulator
+cold-start (process launch + Room DB creation), NOT query throughput. D11's "revisit if it stutters" risk
+is retired for the query itself. (Set `stay_on_while_plugged_in` on the phone so the wifi-adb link
+survives a session.)
+
+**`PackMarkdown` — the renderer that must NOT be a markdown library (PATCH 04).** Supports exactly the
+corpus vocabulary (newlines, `- ` bullets, `1. ` lists); treats `*`, `<`, `>`, `~`, backtick as LITERAL.
+- **13 JVM tests** assert the exact corruption a library would cause does NOT happen — a lab value's
+  multiplication `*` survives, a `> N` threshold survives, a leading `* ` is a bullet while a mid-line `*`
+  is multiplication (the position distinction a markdown parser cannot make).
+- **Proven loss-preserving on the REAL corpus**: a Python mirror of the renderer's rules ran over all
+  68,893 real `*_md` fields — **1,893 multiplication asterisks in, 1,893 out; ZERO fields lose a clinical
+  or alphanumeric character.** Safety is verified against the actual pack, not just synthetic inputs.
+
+**The feed model + repository (A2 steps 1–2):**
+- `feed/FeedCard.kt` — sealed type per item type (**five**, PATCH 04) + `ImportanceSignals` (8 signals →
+  ranked human phrases for the "why" sheet). Figures are a `Figure` attachment on the owning card, not a
+  type.
+- `feed/FeedRepository.kt` — supersedes A1's `FeedReader` for A2's richer needs. Same D4 discipline: one
+  dedicated **read-only** connection, pack `ATTACH`ed, Room owns writes. `page(offset,limit)` loads each
+  item's real payload from its type table + FSRS state across the ATTACH; unknown future types are
+  skipped, not crashed on (types are open, D5). `figures.path` is relative → resolved against the pack
+  dir and **verified on disk** (a referenced-but-missing PNG degrades to no-figure, not a broken slot).
+- `feed/FeedRepositoryTest.kt` — 5 instrumented tests against the REAL pack: full size (32,957), page-1
+  loads fully + importance-first, all five types load with payloads, a PYQ MCQ carries years + the why
+  sheet has signals, and reachable figures resolve to real files.
+
+**One test caught a fixture gap, not a code bug** (and the distinction matters): the figures test failed
+first because I'd pushed the pack DB but not the `figures/` dir beside it — so `figureById` correctly hit
+its graceful-null path (no file → no figure). Pushed the 1,121 PNGs to match a real import's layout;
+5/5 green. The *code* was right — degrade to null on a missing file is the intended behaviour.
+
+**Verified:** JVM **37 tests / 0 failures**; instrumented `FeedRepositoryTest` **5/5 on the phone**;
+`verifyOfflineGuarantees` green (124 debug / 120 release modules — **no new dep**, the renderer and feed
+query add zero to the classpath, which is the whole point of not pulling a markdown/paging library).
+
+**Next (A2 steps 4–8):** the five card composables (AMOLED, on the phone), importance indicator + PYQ
+badge + why-sheet, filters + sort (Priority must differ from Importance ↓), one-tap star/tag, FSRS wiring
++ mistake ledger, blob quiz-back timing.
