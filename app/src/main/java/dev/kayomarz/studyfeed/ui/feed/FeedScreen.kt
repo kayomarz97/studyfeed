@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.PagerDefaults
@@ -53,47 +54,66 @@ fun FeedScreen(
     val ui by vm.ui.collectAsStateWithLifecycle()
 
     when {
-        ui.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
         !ui.hasPack -> LaunchedEffect(Unit) { onNoPack() } // hand off to the import screen
-        ui.cards.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-            Text("This pack has no playable items.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        else -> {
-            val pager = rememberPagerState(pageCount = { ui.cards.size })
-            LaunchedEffect(pager.currentPage) { vm.onReachedIndex(pager.currentPage) }
-
-            VerticalPager(
-                state = pager,
-                modifier = Modifier.fillMaxSize(),
-                pageSize = PageSize.Fill,
-                // Keep neighbours composed so a swipe reveals a ready card, not a flash of blank.
-                beyondViewportPageCount = 1,
-                // Advance on a SHORT swipe. Default (0.5) needs a slow drag past half the screen —
-                // on-device that felt like "swipe a long distance". 0.15 commits to the next card once
-                // ~15% of the page is dragged, which reads as a natural flick. (Reported by the user,
-                // 2026-07-17, studying on the S23 Ultra.)
-                flingBehavior = PagerDefaults.flingBehavior(
-                    state = pager,
-                    snapPositionalThreshold = 0.15f,
-                ),
-            ) { page ->
-                val card = ui.cards[page]
-                Box(Modifier.fillMaxSize()) {
-                    CardBody(
-                        card = card,
-                        onWhy = { vm.showWhy(card) },
-                        onRate = { vm.rate(card, it) },
-                        onAnswered = { chosen, correct ->
-                            if (!correct && card is FeedCard.Mcq) vm.recordMistake(card, chosen)
-                        },
-                        onRead = { if (card is FeedCard.Blob) vm.markBlobRead(card) },
-                    )
+        else -> Column(Modifier.fillMaxSize()) {
+            // The filter/sort bar rides above the pager and respects the status-bar inset. It stays
+            // visible while a filter narrows the deck to empty, so the user can always undo it.
+            FeedControls(
+                query = ui.query,
+                subjects = ui.subjects,
+                tags = ui.tags,
+                onFilter = vm::setFilter,
+                onSort = vm::setSort,
+                modifier = Modifier.statusBarsPadding().padding(top = 4.dp),
+            )
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                when {
+                    ui.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+                    ui.cards.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+                        Text(
+                            if (ui.query.filter.isAll) "This pack has no playable items."
+                            else "Nothing matches this filter.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    else -> FeedPager(ui, vm)
                 }
             }
         }
     }
 
     ui.whySheetFor?.let { WhySheet(it, onDismiss = vm::dismissWhy) }
+}
+
+@Composable
+private fun FeedPager(ui: FeedViewModel.Ui, vm: FeedViewModel) {
+    val pager = rememberPagerState(pageCount = { ui.cards.size })
+    LaunchedEffect(pager.currentPage) { vm.onReachedIndex(pager.currentPage) }
+
+    VerticalPager(
+        state = pager,
+        modifier = Modifier.fillMaxSize(),
+        pageSize = PageSize.Fill,
+        // Keep neighbours composed so a swipe reveals a ready card, not a flash of blank.
+        beyondViewportPageCount = 1,
+        // Advance on a SHORT swipe. Default (0.5) needs a slow drag past half the screen — on-device
+        // that felt like "swipe a long distance". 0.15 commits to the next card once ~15% of the page
+        // is dragged, which reads as a natural flick. (User confirmed "perfect", 2026-07-17, S23 Ultra.)
+        flingBehavior = PagerDefaults.flingBehavior(state = pager, snapPositionalThreshold = 0.15f),
+    ) { page ->
+        val card = ui.cards[page]
+        Box(Modifier.fillMaxSize()) {
+            CardBody(
+                card = card,
+                onWhy = { vm.showWhy(card) },
+                onRate = { vm.rate(card, it) },
+                onAnswered = { chosen, correct ->
+                    if (!correct && card is FeedCard.Mcq) vm.recordMistake(card, chosen)
+                },
+                onRead = { if (card is FeedCard.Blob) vm.markBlobRead(card) },
+            )
+        }
+    }
 }
 
 /** Dispatch to the right composable for the card's type. Five types (PATCH 04). */

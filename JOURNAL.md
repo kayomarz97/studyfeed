@@ -1074,3 +1074,46 @@ Studied on the real S23 Ultra panel and the user reported three things:
 Rebuilt + redeployed to the phone; no crash. Still owed on the phone: swipe-feel re-check (the user's
 thumb, not a screenshot), plus the remaining A2 pieces (filters/sort/star/tag, blob quiz-back) and
 figures on cards (the 235MB push timed out over wifi — deferred, affects ~1.7% of cards).
+
+### 2026-07-17 — swipe confirmed perfect; long-MCQ scroll still UNVERIFIED on device
+
+**User confirmed the short-swipe fix "is perfect"** — the pager tune (snapPositionalThreshold 0.15) is
+settled, don't touch it.
+
+⚠ **OPEN DEVICE-VERIFICATION ITEM — do not close A2 without it:** the **long-MCQ scroll** is still
+unchecked on hardware. The risk is specific and real: a tall MCQ (stem + 5 options + explanation +
+per-distractor why-wrong can exceed a screen) lives inside `CardScaffold`'s `verticalScroll`, which sits
+inside the `VerticalPager`. The two vertical gestures can fight — the inner scroll must move the card's
+content, and only at its top/bottom edge should the pager take over and flip cards. This is exactly the
+nested-scroll case that reads fine in code and misbehaves on device. **Must be checked by scrolling a
+genuinely tall MCQ on the phone** (importance-first buries MCQs below the 5★ interlinks/reels, so it
+takes some swiping to reach one). If it fights, the fix is `nestedScroll`/scroll-edge handling on the
+card, NOT disabling the pager. Flagged so a future session doesn't declare A2 done with this untested.
+
+### 2026-07-17 — A2 filters + sort (Acceptance 4), proven on the real pack
+
+Built the filter/sort layer. `FeedQuery` (filter + sort) → SQL in `FeedRepository`; `FeedControls` bar
+over the pager; `FeedViewModel` reloads the window from the top when either changes.
+
+**Acceptance 4 proven by instrumented tests on the REAL pack (7/7, genuinely ran — no skips):**
+- `the_five_star_filter_and_pyq_filter_narrow_the_feed`: "5★ only" selects **exactly 1,046**, "PYQ only"
+  selects **exactly 4,306** — and every card on a 5★ page is 5★.
+- `priority_sort_differs_from_importance_desc_once_progress_exists`: after seeding 15 top items as
+  well-known (high stability, 0 lapses), **Priority order ≠ Importance↓** — the proof that weakness is
+  folded in locally (§8 A2). Priority = `importance_score × weakness`, weakness from the row's own
+  stability + lapses (no clock needed → deterministic; A3 may add a retrievability/time term).
+- Also visually confirmed on-device: tapping "5★" selects the chip and surfaces an "✕ All" reset.
+
+**Filters** (all combine with AND, unset = no constraint): 5★ (exact) · 4★+ (min) · PYQ · Starred ·
+Mistakes · MCQs/Flashcards/Reels/Passages (type) · Subject ▾ · Tag ▾. Starred/Mistakes/Tag are
+progress-side facts → `EXISTS` against `main.` across the ATTACH (no FK — separate DBs).
+**Sorts:** Smart (= importance order; **A3 owns the real engine**, standing order #2) · Importance ↓ ·
+Importance ↑ · Priority · Random.
+
+**Layout fix folded in:** the controls bar now owns the status-bar inset (`statusBarsPadding` moved from
+the card scaffold to the bar — else the top gap doubled). Empty-filter-result shows "Nothing matches
+this filter" with the bar still visible so it's always undoable.
+
+`verifyOfflineGuarantees` green (124/120, **no new dependency** — filters/sort are pure SQL + Compose).
+JVM 37/0. Still to do in A2: one-tap star/tag ON cards, blob quiz-back timing, figures-on-cards (235MB
+push deferred), and the phone re-check of long-MCQ scroll.

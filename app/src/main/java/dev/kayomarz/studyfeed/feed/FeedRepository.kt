@@ -60,26 +60,40 @@ class FeedRepository private constructor(
         }
     }
 
-    /** Total playable items — A2's pager bound. */
+    /** Total playable items — A2's pager bound (unfiltered). */
     fun size(): Int = countOf("SELECT COUNT(*) FROM $PACK.feed_items")
 
+    /** Count matching a query — the pager bound when a filter is active. */
+    fun count(query: FeedQuery): Int {
+        val (where, args) = whereClause(query.filter)
+        return countOf("SELECT COUNT(*) FROM $PACK.feed_items f $where", args)
+    }
+
+    /** Convenience: a window of the default feed (Smart sort, no filter). */
+    fun page(offset: Int, limit: Int): List<FeedCard> = page(FeedQuery(), offset, limit)
+
     /**
-     * One window of the feed, importance-first (the pack's own order; A3 will make this smarter).
+     * One window of the feed for [query], the filter/sort applied in SQL.
      *
-     * Loads the feed_items page, then fetches each item's payload from its type table and its FSRS
-     * state from progress. LEFT-join semantics for progress: an unseen item still appears (a new user's
-     * feed cannot be empty).
+     * Loads the matching feed_items page, then each item's payload + FSRS state. LEFT-join semantics for
+     * progress: an unseen item still appears (a new user's feed cannot be empty). Weakness for the
+     * Priority sort is computed from the row's own stability + lapses — no clock needed, so the sort is
+     * deterministic (A3 may add a time-decay/retrievability term, which would need `now`).
      */
-    fun page(offset: Int, limit: Int): List<FeedCard> {
+    fun page(query: FeedQuery, offset: Int, limit: Int): List<FeedCard> {
+        val (where, whereArgs) = whereClause(query.filter)
+        val (join, order) = sortSql(query.sort)
         val refs = mutableListOf<FeedRepositoryRef>()
         db.rawQuery(
             """
-            SELECT item_type, id, ref_id, importance, importance_score, subject_id
-            FROM $PACK.feed_items
-            ORDER BY importance DESC, importance_score DESC, id
+            SELECT f.item_type, f.id, f.ref_id, f.importance, f.importance_score, f.subject_id
+            FROM $PACK.feed_items f
+            $join
+            $where
+            $order
             LIMIT ? OFFSET ?
             """.trimIndent(),
-            arrayOf(limit.toString(), offset.toString()),
+            (whereArgs + listOf(limit.toString(), offset.toString())).toTypedArray(),
         ).use { c ->
             while (c.moveToNext()) {
                 refs += FeedRepositoryRef(c.getString(0).orEmpty(), c.getLong(1), c.getLong(2),
@@ -98,6 +112,57 @@ class FeedRepository private constructor(
                 else -> null // an unknown future type is skipped, not crashed on (types are open, D5)
             }
         }
+    }
+
+    // ---- query → SQL --------------------------------------------------------------------------------
+
+    private fun whereClause(filter: FeedFilter): Pair<String, List<String>> {
+        val clauses = mutableListOf<String>()
+        val args = mutableListOf<String>()
+        filter.itemType?.let { clauses += "f.item_type = ?"; args += it }
+        filter.importanceExact?.let { clauses += "f.importance = ?"; args += it.toString() }
+        filter.importanceMin?.let { clauses += "f.importance >= ?"; args += it.toString() }
+        if (filter.pyqOnly) clauses += "f.is_pyq = 1"
+        filter.subjectId?.let { clauses += "f.subject_id = ?"; args += it.toString() }
+        // Starred / mistakes / tag are progress-side facts → EXISTS against the main (progress) DB,
+        // keyed by (item_type,item_id). No FK across the ATTACH — the pack and progress are separate DBs.
+        if (filter.starredOnly)
+            clauses += "EXISTS(SELECT 1 FROM main.stars s WHERE s.item_type=f.item_type AND s.item_id=f.id)"
+        if (filter.mistakesOnly)
+            clauses += "EXISTS(SELECT 1 FROM main.mistakes m WHERE m.item_type=f.item_type AND m.item_id=f.id AND m.resolved=0)"
+        filter.tagKey?.let {
+            clauses += "EXISTS(SELECT 1 FROM main.item_tags t WHERE t.item_type=f.item_type AND t.item_id=f.id AND t.tag_key=?)"
+            args += it
+        }
+        return if (clauses.isEmpty()) "" to emptyList()
+        else "WHERE " + clauses.joinToString(" AND ") to args
+    }
+
+    /** @return (JOIN clause, ORDER BY clause) — the JOIN goes before WHERE, the ORDER after it. */
+    private fun sortSql(sort: FeedQuery.Sort): Pair<String, String> = when (sort) {
+        // SMART default = the pack's importance order. A3 replaces this with the real engine.
+        FeedQuery.Sort.SMART,
+        FeedQuery.Sort.IMPORTANCE_DESC ->
+            "" to "ORDER BY f.importance DESC, f.importance_score DESC, f.id"
+        FeedQuery.Sort.IMPORTANCE_ASC ->
+            "" to "ORDER BY f.importance ASC, f.importance_score ASC, f.id"
+        FeedQuery.Sort.RANDOM -> "" to "ORDER BY RANDOM()"
+        // Priority = importance × weakness, composed HERE on the phone (§8 A2: "proving weakness is
+        // folded in locally"). Weakness rises with lapses and low stability; an unseen item gets a
+        // moderate baseline so it still surfaces. A2's implementation; A3 refines it. Needs the LEFT
+        // JOIN to progress for the weakness terms.
+        FeedQuery.Sort.PRIORITY ->
+            "LEFT JOIN main.fsrs_cards c ON c.item_type = f.item_type AND c.item_id = f.id" to
+            """
+            ORDER BY (
+                f.importance_score * (
+                    CASE WHEN c.item_id IS NULL THEN 0.6
+                    ELSE MIN(1.0, 0.2
+                        + COALESCE(c.lapses,0) * 0.15
+                        + CASE WHEN c.stability IS NOT NULL THEN 0.3 / (1.0 + c.stability) ELSE 0.2 END)
+                    END)
+            ) DESC, f.importance DESC, f.id
+            """.trimIndent()
     }
 
     // ---- per-type loaders --------------------------------------------------------------------------
@@ -244,9 +309,11 @@ class FeedRepository private constructor(
         }
     } catch (e: Exception) { null }
 
-    private fun countOf(sql: String): Int =
-        try { db.rawQuery(sql, null).use { if (it.moveToFirst()) it.getInt(0) else 0 } }
-        catch (e: SQLiteException) { 0 }
+    private fun countOf(sql: String, args: List<String> = emptyList()): Int =
+        try {
+            db.rawQuery(sql, if (args.isEmpty()) null else args.toTypedArray())
+                .use { if (it.moveToFirst()) it.getInt(0) else 0 }
+        } catch (e: SQLiteException) { 0 }
 
     override fun close() { runCatching { db.close() } }
 }

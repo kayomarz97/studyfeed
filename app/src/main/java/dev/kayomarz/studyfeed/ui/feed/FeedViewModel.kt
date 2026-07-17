@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.kayomarz.studyfeed.feed.FeedCard
+import dev.kayomarz.studyfeed.feed.FeedFilter
+import dev.kayomarz.studyfeed.feed.FeedQuery
 import dev.kayomarz.studyfeed.feed.FeedRepository
 import dev.kayomarz.studyfeed.pack.PackDatabase
 import dev.kayomarz.studyfeed.pack.PackRegistry
@@ -42,6 +44,10 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
         /** null = no pack imported; the screen shows an empty state and defers to the pack screen. */
         val hasPack: Boolean = true,
         val whySheetFor: FeedCard? = null,
+        val query: FeedQuery = FeedQuery(),
+        /** subjects/tags for the filter dropdowns — read from the pack, of course. */
+        val subjects: List<PackDatabase.Subject> = emptyList(),
+        val tags: List<PackDatabase.TagDef> = emptyList(),
     )
 
     private val registry = PackRegistry(app)
@@ -72,20 +78,35 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
             repo = FeedRepository.open(ProgressDatabase.fileFor(getApplication(), pack.examCode), pack.dbFile)
             (PackDatabase.open(pack.dbFile) as? PackDatabase.Result.Ok)?.pack
         }
-        val first = withContext(Dispatchers.IO) { repo?.page(0, PAGE) ?: emptyList() }
+        _ui.update {
+            it.copy(examName = loadedPack?.manifest?.examName,
+                subjects = loadedPack?.subjects.orEmpty(), tags = loadedPack?.tags.orEmpty())
+        }
+        reload(_ui.value.query)
+    }
+
+    /** (Re)load the feed from the top for [query] — on first load and whenever a filter/sort changes. */
+    private fun reload(query: FeedQuery) = viewModelScope.launch {
+        val r = repo
+        if (r == null) { _ui.update { it.copy(loading = false, hasPack = false) }; return@launch }
+        _ui.update { it.copy(loading = true, query = query) }
+        val (first, total) = withContext(Dispatchers.IO) { r.page(query, 0, PAGE) to r.count(query) }
         loaded = first.size
         _ui.update {
-            it.copy(loading = false, hasPack = true, examName = loadedPack?.manifest?.examName,
-                total = repo?.size() ?: 0, cards = first)
+            it.copy(loading = false, hasPack = true, cards = first, total = total, query = query)
         }
     }
+
+    fun setSort(sort: FeedQuery.Sort) = reload(_ui.value.query.copy(sort = sort))
+    fun setFilter(filter: FeedFilter) = reload(_ui.value.query.copy(filter = filter))
 
     /** Append the next window when the user is within [PREFETCH] of the end. */
     fun onReachedIndex(index: Int) {
         val r = repo ?: return
         if (index < loaded - PREFETCH || loaded >= _ui.value.total) return
+        val query = _ui.value.query
         viewModelScope.launch {
-            val next = withContext(Dispatchers.IO) { r.page(loaded, PAGE) }
+            val next = withContext(Dispatchers.IO) { r.page(query, loaded, PAGE) }
             if (next.isNotEmpty()) {
                 loaded += next.size
                 _ui.update { it.copy(cards = it.cards + next) }

@@ -122,6 +122,59 @@ class FeedRepositoryTest {
     }
 
     @Test
+    fun the_five_star_filter_and_pyq_filter_narrow_the_feed() {
+        // Acceptance 4: "5★ only" and "PYQ only" filters work.
+        val repo = openRepo()
+        assumeTrue("real pack not pushed — skipping", repo != null)
+        repo!!.use { r ->
+            val fiveStar = r.count(dev.kayomarz.studyfeed.feed.FeedQuery(
+                filter = dev.kayomarz.studyfeed.feed.FeedFilter(importanceExact = 5)))
+            val pyq = r.count(dev.kayomarz.studyfeed.feed.FeedQuery(
+                filter = dev.kayomarz.studyfeed.feed.FeedFilter(pyqOnly = true)))
+            val all = r.size()
+
+            assertEquals("5★ filter selects exactly the 5★ items", 1046, fiveStar)
+            assertEquals("PYQ filter selects exactly the PYQ items", 4306, pyq)
+            assertTrue("both are proper subsets of the whole deck", fiveStar < all && pyq < all)
+
+            // The page must actually honour the filter, not just the count.
+            r.page(dev.kayomarz.studyfeed.feed.FeedQuery(
+                filter = dev.kayomarz.studyfeed.feed.FeedFilter(importanceExact = 5)), 0, 50)
+                .forEach { assertEquals("every card on a 5★ page is 5★", 5, it.importance) }
+        }
+    }
+
+    @Test
+    fun priority_sort_differs_from_importance_desc_once_progress_exists() {
+        // Acceptance 4: Priority sort must DIFFER from Importance ↓ — the proof that weakness is folded
+        // in locally. With no progress the two are near-identical; after marking some items well-known
+        // (high stability, no lapses) they should sink under Priority relative to raw importance.
+        val repo = openRepo()
+        assumeTrue("real pack not pushed — skipping", repo != null)
+        repo!!.use { r ->
+            val byImportance = r.page(dev.kayomarz.studyfeed.feed.FeedQuery(
+                sort = dev.kayomarz.studyfeed.feed.FeedQuery.Sort.IMPORTANCE_DESC), 0, 40).map { it.itemType to it.itemId }
+
+            // Make the current top-of-importance items "well known": high stability, zero lapses.
+            val db = ProgressDatabase.open(ctx(), exam)
+            kotlinx.coroutines.runBlocking {
+                byImportance.take(15).forEach { (type, id) ->
+                    db.dao().upsertCard(dev.kayomarz.studyfeed.progress.FsrsCard(
+                        item_type = type, item_id = id, stability = 500.0, difficulty = 1.0,
+                        due = "2030-01-01", last_review = "2026-07-17", state = 2, reps = 9, lapses = 0))
+                }
+            }
+            db.close()
+
+            val byPriority = r.page(dev.kayomarz.studyfeed.feed.FeedQuery(
+                sort = dev.kayomarz.studyfeed.feed.FeedQuery.Sort.PRIORITY), 0, 40).map { it.itemType to it.itemId }
+
+            assertTrue("Priority order must differ from Importance ↓ once weakness is folded in",
+                byImportance != byPriority)
+        }
+    }
+
+    @Test
     fun figures_that_are_reachable_resolve_to_real_files_on_disk() {
         val repo = openRepo()
         assumeTrue("real pack not pushed — skipping", repo != null)

@@ -59,11 +59,9 @@ private fun CardScaffold(
     Column(
         Modifier
             .fillMaxSize()
-            // The true-black background bleeds full-screen (great on AMOLED), but the CONTENT must sit
-            // below the status bar — otherwise the importance chip is clipped by the notification bar
-            // (reported on-device 2026-07-17; targetSdk 36 forces edge-to-edge). statusBarsPadding()
-            // insets the content only; the black still fills behind the bar.
-            .statusBarsPadding()
+            // NOTE: no statusBarsPadding here — the FeedControls bar above the pager now owns the top
+            // inset (targetSdk 36 edge-to-edge). Adding it here too would double the top gap. The
+            // true-black background still bleeds full behind the status bar.
             .padding(20.dp)
             .verticalScroll(rememberScrollState()),
     ) {
