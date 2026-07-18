@@ -166,8 +166,8 @@ private fun Root() {
                 filter = FeedFilter(itemTypesIn = listOf("blob"))), "Passages"); screen = Screen.Feed },
             onReview = { feedVm.openQuick("review", FeedQuery(filter = FeedFilter(mistakesOnly = true)), "Review"); screen = Screen.Feed },
             onNoPack = { screen = Screen.Manage },
-            onOpenLibrary = { screen = Screen.Library },
-            onOpenMap = { conceptVm.browse(); screen = Screen.ConceptMap },
+            onOpenLibrary = { dossierVm.refresh(); screen = Screen.Library },
+            onOpenMap = { conceptVm.refresh(); conceptVm.browse(); screen = Screen.ConceptMap },
             onOpenStats = { statsVm.load(); screen = Screen.Stats },
             onOpenSettings = { settingsVm.load(); screen = Screen.Settings },
             onManagePacks = { screen = Screen.Manage },
@@ -201,7 +201,7 @@ private fun Root() {
             onHome = goHome,
             onOpenTopic = { tp -> currentDossierId = tp; dossierVm.openDossier(tp); screen = Screen.Dossier(tp) },
             onOpenMap = { cid -> conceptVm.focusOn(cid); screen = Screen.ConceptMap },
-            onOpenLibrary = { screen = Screen.Library },
+            onOpenLibrary = { dossierVm.refresh(); screen = Screen.Library },
         )
         Screen.Settings -> SettingsScreen(
             vm = settingsVm,
@@ -225,7 +225,7 @@ private fun Root() {
             onBack = goHome,
         )
         Screen.MockExam -> MockExamScreen(vm = mockVm, onExit = goHome)
-        Screen.Manage -> PackScreen(onOpenFeed = { screen = Screen.Feed })
+        Screen.Manage -> PackScreen(onOpenFeed = { feedVm.openMixed(); screen = Screen.Feed })
         Screen.Library -> LibraryScreen(
             vm = dossierVm,
             onOpenDossier = { id -> currentDossierId = id; dossierVm.openDossier(id); screen = Screen.Dossier(id) },

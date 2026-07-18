@@ -1560,6 +1560,25 @@ the render index (a pack section-reorder could misplace a mark — the hash stil
 font-size + jump-from-question-to-section NOT built** (P5 tail); release-APK signing still owed (§11d).
 Custom decks are the smart Starred/tag chips (the `decks` table exists for future user-defined decks).
 
-**Resume point:** A7 cycle 3 COMPLETE (P1–P5) + final APK delivered. NOT pushed to git (no explicit ask) —
-working tree dirty by design; plan doc + this journal are the resume truth. If asked to push: secret-scan →
-stage by name → `dev`.
+**Resume point:** A7 cycle 3 COMPLETE (P1–P5) + final APK delivered + pushed (`43c300d`, GitHub Release
+`a7-cycle3`). Then the fix below.
+
+## 2026-07-19  BUGFIX — fresh-install → import → "Study" did nothing (feed bounced to import)
+
+User reinstalled on the S23 (fresh), re-imported the pack (pushed to Downloads via adb over wireless
+debugging), then **"Study 32957 items" did nothing**. **Root cause:** the activity-scoped `FeedViewModel`
+runs `start()` once at app launch — on a fresh install that's BEFORE the import — so it cached `repo=null`
+/ `hasPack=false`; tapping Study → Feed → `!hasPack` → `onNoPack()` → bounced straight back to Manage.
+(A restart masked it, since the VM then re-init WITH the pack — but that's the bug, not a fix.) Same latent
+staleness in `DossierViewModel` (Library) + `ConceptMapViewModel` (Map).
+
+**Fix (self-heal on entry):** extracted `loadPack()` in FeedViewModel — a no-op once `repo` is set — and
+`reload()` now calls it if `repo==null`; `bindAndReload` sets `loading=true`+`hasPack=true` SYNCHRONOUSLY
+before the router swaps in the feed (so no first-frame bounce); `FeedScreen` bounces to import ONLY when
+`!hasPack && !loading`; the Manage "Study" button now calls `feedVm.openMixed()`. Dossier/Concept got the
+same `ensureLoaded()`/`refresh()` pattern (every data path routes through it; Library/Map entries call
+`refresh()`). **Verified on the phone (adb `input tap` walkthrough):** Home renders on the real pack
+(subject coverage, sessions, mock exam, drills, decks); MCQ tile → feed loads a real 5★ card; **Manage →
+"Study 32957 items" → Mixed feed loads** (real MCQ, no bounce); no FATAL in logcat. Fixed APK installed on
+the phone. **NOT yet pushed / release not yet refreshed** — the `a7-cycle3` release still holds the pre-fix
+APK; awaiting the user's go to push `dev` + `gh release upload --clobber`.

@@ -76,9 +76,20 @@ class DossierViewModel(app: Application) : AndroidViewModel(app) {
 
     init { start() }
 
-    private fun start() = viewModelScope.launch {
+    private fun start() = viewModelScope.launch { ensureLoaded() }
+
+    /** Re-check the pack when entering the Library — this VM may have been created before an import. */
+    fun refresh() = viewModelScope.launch { ensureLoaded() }
+
+    /**
+     * Open the pack + progress readers on demand. A no-op once [repo] is set. Self-heals a Library VM
+     * created before the pack was imported (fresh install → import → open Library), mirroring the feed's
+     * loadPack(). Every data-loading path routes through this instead of a bare `repo ?:` check.
+     */
+    private suspend fun ensureLoaded(): DossierRepository? {
+        repo?.let { return it }
         val pack = withContext(Dispatchers.IO) { registry.activePack() }
-        if (pack == null) { _library.update { it.copy(loading = false, hasPack = false) }; return@launch }
+            ?: run { _library.update { it.copy(loading = false, hasPack = false) }; return null }
         val (r, subjects, top) = withContext(Dispatchers.IO) {
             ProgressDatabase.ensureExists(getApplication(), pack.examCode)
             progressDb = ProgressDatabase.open(getApplication(), pack.examCode)
@@ -87,6 +98,7 @@ class DossierViewModel(app: Application) : AndroidViewModel(app) {
         }
         repo = r
         _library.update { it.copy(loading = false, hasPack = r != null, results = top, subjects = subjects) }
+        return r
     }
 
     fun search(query: String) {
@@ -108,7 +120,7 @@ class DossierViewModel(app: Application) : AndroidViewModel(app) {
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             delay(180)
-            val r = repo ?: return@launch
+            val r = ensureLoaded() ?: return@launch
             val s = _library.value
             val results = withContext(Dispatchers.IO) {
                 // A starred topic can sit anywhere in importance order, so widen the fetch then intersect
@@ -126,7 +138,7 @@ class DossierViewModel(app: Application) : AndroidViewModel(app) {
     fun openDossier(topicPageId: Long) {
         _dossier.value = DossierState(loading = true, dossier = null)
         viewModelScope.launch {
-            val r = repo ?: return@launch
+            val r = ensureLoaded() ?: return@launch
             val state = withContext(Dispatchers.IO) {
                 val d = r.loadDossier(topicPageId) ?: return@withContext DossierState(loading = false, dossier = null)
                 val auto = buildAuto(d, r.highYield(topicPageId))
@@ -200,7 +212,7 @@ class DossierViewModel(app: Application) : AndroidViewModel(app) {
     fun openItem(type: String, refId: Long) {
         _item.value = ItemState(loading = true, card = null)
         viewModelScope.launch {
-            val r = repo ?: return@launch
+            val r = ensureLoaded() ?: return@launch
             val card = withContext(Dispatchers.IO) { r.loadCardByRef(type, refId) }
             _item.value = ItemState(loading = false, card = card)
         }

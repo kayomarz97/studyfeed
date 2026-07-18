@@ -64,7 +64,9 @@ fun FeedScreen(
     val ui by vm.ui.collectAsStateWithLifecycle()
 
     when {
-        !ui.hasPack -> LaunchedEffect(Unit) { onNoPack() } // hand off to the import screen
+        // Bounce to import ONLY when there is genuinely no pack — never mid-load, or a feed entered right
+        // after import (while the pack self-heals) would flick back to the import screen.
+        !ui.hasPack && !ui.loading -> LaunchedEffect(Unit) { onNoPack() }
         else -> Column(Modifier.fillMaxSize()) {
             var showFilter by remember { mutableStateOf(false) }
             // A7 one-row controls: Home · Study ▾ (mode) · Filter. Everything fine-grained is in the

@@ -126,8 +126,19 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
     init { start() }
 
     private fun start() = viewModelScope.launch {
-        val pack = withContext(Dispatchers.IO) { registry.activePack() }
-        if (pack == null) { _ui.update { it.copy(loading = false, hasPack = false) }; return@launch }
+        loadPack()
+        reload(_ui.value.query, resume = true)
+    }
+
+    /**
+     * Open the active pack's reader + progress DB. A no-op once [repo] is set, so it is safe to call
+     * again. Invoked at init AND lazily from [reload] to **self-heal** a feed created before a pack was
+     * imported — the fresh-install → import → "Study" path, where this activity-scoped VM had cached
+     * "no pack" and the feed would otherwise bounce straight back to the import screen.
+     */
+    private suspend fun loadPack() {
+        if (repo != null) return
+        val pack = withContext(Dispatchers.IO) { registry.activePack() } ?: return
         examCode = pack.examCode
         val loadedPack = withContext(Dispatchers.IO) {
             ProgressDatabase.ensureExists(getApplication(), pack.examCode)
@@ -140,7 +151,6 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(examName = loadedPack?.manifest?.examName,
                 subjects = loadedPack?.subjects.orEmpty(), tags = loadedPack?.tags.orEmpty())
         }
-        reload(_ui.value.query, resume = true)
     }
 
     // ---- entering the feed (sessions / quick tiles) -------------------------------------------------
@@ -173,7 +183,10 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun bindAndReload(key: String, sid: Long?, query: FeedQuery, label: String) {
         sessionKey = key; sessionId = sid
-        _ui.update { it.copy(studyMode = modeForQuery(query), sessionName = label) }
+        // Set loading=true + hasPack=true SYNCHRONOUSLY (before the router swaps to the feed) so the feed
+        // shows a spinner — never a bounce back to import — while [reload] self-heals the pack on first
+        // entry after a fresh-install import. If there's genuinely no pack, reload flips hasPack back off.
+        _ui.update { it.copy(studyMode = modeForQuery(query), sessionName = label, loading = true, hasPack = true) }
         reload(query, resume = true)
     }
 
@@ -189,9 +202,10 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
 
     /** (Re)load the feed for [query]. [resume] restores the saved scroll position (filtered feeds). */
     private fun reload(query: FeedQuery, resume: Boolean = false) = viewModelScope.launch {
+        _ui.update { it.copy(loading = true, query = query, jumpTo = null) }
+        if (repo == null) loadPack()   // self-heal if this VM was created before the pack was imported
         val r = repo
         if (r == null) { _ui.update { it.copy(loading = false, hasPack = false) }; return@launch }
-        _ui.update { it.copy(loading = true, query = query, jumpTo = null) }
         engineExhausted = false
         data class Loaded(val cards: List<FeedCard>, val total: Int, val offset: Int)
         val res = withContext(Dispatchers.IO) {

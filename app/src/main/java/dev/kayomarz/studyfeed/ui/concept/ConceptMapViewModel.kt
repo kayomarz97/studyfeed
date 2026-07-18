@@ -54,17 +54,26 @@ class ConceptMapViewModel(app: Application) : AndroidViewModel(app) {
 
     init { start() }
 
-    private fun start() = viewModelScope.launch {
+    private fun start() = viewModelScope.launch { ensureLoaded() }
+
+    /** Re-check the pack when entering the map — this VM may have been created before an import. */
+    fun refresh() = viewModelScope.launch { ensureLoaded() }
+
+    /** Open the concept reader on demand. A no-op once [repo] is set — self-heals a map VM created
+     *  before the pack was imported (fresh install → import), mirroring the feed's loadPack(). */
+    private suspend fun ensureLoaded(): ConceptRepository? {
+        repo?.let { return it }
         val pack = withContext(Dispatchers.IO) { registry.activePack() }
-        if (pack == null) { _state.update { it.copy(loading = false, hasPack = false) }; return@launch }
+            ?: run { _state.update { it.copy(loading = false, hasPack = false) }; return null }
         val (r, subjects, top) = withContext(Dispatchers.IO) {
             val opened = ConceptRepository.open(pack.dbFile)
             Triple(opened, opened?.subjects().orEmpty(), opened?.list("") ?: emptyList())
         }
         repo = r
-        if (r == null) { _state.update { it.copy(loading = false, hasPack = false) }; return@launch }
+        if (r == null) { _state.update { it.copy(loading = false, hasPack = false) }; return null }
         // A7: open as a searchable list, not straight onto the top hub.
         _state.update { it.copy(loading = false, searchResults = top, browseMode = true, subjects = subjects) }
+        return r
     }
 
     /** Return to the searchable concept list (the Map's landing view). */
@@ -101,7 +110,7 @@ class ConceptMapViewModel(app: Application) : AndroidViewModel(app) {
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             delay(180)
-            val r = repo ?: return@launch
+            val r = ensureLoaded() ?: return@launch
             val s = _state.value
             val results = withContext(Dispatchers.IO) { r.list(s.query, s.filter) }
             _state.update { it.copy(searchResults = results) }
@@ -113,7 +122,7 @@ class ConceptMapViewModel(app: Application) : AndroidViewModel(app) {
         val ego = _state.value.ego ?: return
         _quiz.value = QuizState(loading = true, open = true, conceptName = ego.focus.name)
         viewModelScope.launch {
-            val r = repo ?: return@launch
+            val r = ensureLoaded() ?: return@launch
             val cards = withContext(Dispatchers.IO) {
                 r.quizRefsForConcept(ego.focus.id).mapNotNull { r.loadInterlink(it) }
             }
