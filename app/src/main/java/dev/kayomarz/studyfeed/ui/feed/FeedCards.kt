@@ -308,10 +308,18 @@ fun FlashcardCard(
     onRate: (Rating) -> Unit,
 ) {
     var flipped by remember(card.itemId) { mutableStateOf(false) }
+    val cloze = card.isCloze || Cloze.hasCloze(card.frontMd)
+    // Cloze cards blank the answer on the front and fill it back in on reveal; plain cards keep the
+    // front as-is and show the back on reveal.
+    val front = when {
+        cloze && !flipped -> Cloze.mask(card.frontMd)
+        cloze -> Cloze.reveal(card.frontMd)
+        else -> card.frontMd
+    }
     CardScaffold(card, actions, revealed = flipped, onImportanceClick, onReveal = { flipped = true }) {
         Eyebrow("RECALL THIS", color = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(12.dp))
-        MarkdownText(card.frontMd, style = MaterialTheme.typography.titleMedium)
+        MarkdownText(front, style = MaterialTheme.typography.titleMedium)
         card.figure?.let { Spacer(Modifier.height(16.dp)); FigureImage(it) }
         if (!flipped) {
             Spacer(Modifier.height(16.dp))
@@ -320,10 +328,14 @@ fun FlashcardCard(
         }
         AnimatedVisibility(flipped) {
             Column {
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(16.dp))
-                MarkdownText(card.backMd, style = MaterialTheme.typography.bodyLarge)
+                // A cloze card's answer is already filled into the front above — showing back_md too
+                // would just repeat it, so only plain cards render the separate back.
+                if (!cloze) {
+                    Spacer(Modifier.height(16.dp))
+                    HorizontalDivider()
+                    Spacer(Modifier.height(16.dp))
+                    MarkdownText(card.backMd, style = MaterialTheme.typography.bodyLarge)
+                }
                 Spacer(Modifier.height(24.dp))
                 RatingBar(onRate)
             }

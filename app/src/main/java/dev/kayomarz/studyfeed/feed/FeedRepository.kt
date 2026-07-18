@@ -404,11 +404,26 @@ class FeedRepository private constructor(
             if (!c.moveToFirst()) return null
             val opts = listOf(c.getString(2), c.getString(3), c.getString(4), c.getString(5))
                 .filterNotNull().filter { it.isNotBlank() }
+            // A7: the pack authors blob quiz-backs with the correct option at index 0 ~89% of the time,
+            // so without this the answer is almost always "A". Shuffle deterministically by blob id — the
+            // order is stable per card (no jumping on re-view) but varied across cards.
+            val (shuffled, correct) = shuffleOptions(opts, c.getInt(6), blobId)
             FeedCard.BlobQuiz(
                 questionMd = c.getString(0).orEmpty(), answerMd = c.getString(1).orEmpty(),
-                options = opts, correctIdx = c.getInt(6),
+                options = shuffled, correctIdx = correct,
             )
         }
+
+    /**
+     * Deterministically shuffle [options] by [seed], returning the reordered list and the new index of
+     * the item that was at [correctIdx]. Falls back to the original order if [correctIdx] is out of range
+     * (a malformed row) so a bad quiz never mislabels its answer.
+     */
+    private fun shuffleOptions(options: List<String>, correctIdx: Int, seed: Long): Pair<List<String>, Int> {
+        if (correctIdx !in options.indices) return options to correctIdx
+        val order = options.indices.shuffled(kotlin.random.Random(seed))
+        return order.map { options[it] } to order.indexOf(correctIdx)
+    }
 
     private fun loadInterlink(id: Long, r: FeedRepositoryRef, fsrs: Fsrs): FeedCard.Interlink? =
         db.rawQuery(

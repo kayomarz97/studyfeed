@@ -1404,3 +1404,25 @@ seen running.** Delivered as a debug APK (GitHub Release) for the user to instal
 **Resume point:** A7 cycle 1 built + pushed. **Owed:** the on-device smoke (once the emulator revives or
 on the user's phone), then A7 cycle 2 if the user wants more (release APK signing, `§A8` notes). A7 is the
 last spec stage.
+
+### 2026-07-18 — **A7 cycle 1b: emulator revived + two card bugs fixed (user feedback)**
+
+User tested the A7 APK on their phone and flagged two bugs + that the UI isn't cohesive. **Emulator finally
+booted** — root cause of the earlier wedge was the **corrupted saved snapshot**; `-no-snapshot-load` (cold
+boot) gets past it (the lock-clearing alone did not — see PLAYBOOK). So the A7 UI is now **seen running**.
+
+Two bugs, both root-caused from the real pack DB (`compiler/dist/pack_MRCP_PART1.db`) and fixed:
+- **Flashcard answers leaked on the front.** 5,133 / 9,507 flashcards are **cloze** (`is_cloze=1`), storing
+  the answer inside Anki `{{c1::answer}}` markers in `front_md`; the card renderer treats `{`/`}` literal
+  (PATCH 04), so it printed the answer + raw markers. Fix: `ui/feed/Cloze.kt` — `mask()` blanks the answer
+  on the question side (`[ …… ]`), `reveal()` fills it in; `FlashcardCard` uses it (cloze cards don't also
+  show back_md — it'd repeat). **Verified on emulator:** front shows `HLA-[ …… ]`, reveal → `HLA-DR4`.
+- **Blob quiz-backs: correct option almost always "A".** `blob_quizzes.correct_idx` is **index-0 89%** of
+  the time (2674/2997). MCQs are fine (uniform A–E). Fix: `FeedRepository.shuffleOptions` — deterministic
+  per-blob shuffle (seed = blob id → stable per card, varied across), remaps `correct_idx`.
+
+**Verified:** `ClozeTest` (5 JVM) + `testDebugUnitTest` + `verifyOfflineGuarantees` green; cloze fix
+confirmed on `emulator-5554` (+ tags-to-bottom-post-reveal and tap-anywhere confirmed working live). Blob
+shuffle unit-verified. **Cohesiveness pass next** — a Fable agent is doing a full-app design walkthrough to
+produce the "where do you want what" questions for the user; UI-cohesion changes will follow from the
+user's answers.
