@@ -35,6 +35,8 @@ class ConceptMapViewModel(app: Application) : AndroidViewModel(app) {
         val searchResults: List<ConceptRef> = emptyList(),
         /** A7: the map opens as a searchable LIST; picking a concept switches to its ego-graph. */
         val browseMode: Boolean = true,
+        val filter: ConceptRepository.ConceptFilter = ConceptRepository.ConceptFilter(),
+        val subjects: List<String> = emptyList(),
     )
 
     data class QuizState(val loading: Boolean = false, val open: Boolean = false,
@@ -55,18 +57,24 @@ class ConceptMapViewModel(app: Application) : AndroidViewModel(app) {
     private fun start() = viewModelScope.launch {
         val pack = withContext(Dispatchers.IO) { registry.activePack() }
         if (pack == null) { _state.update { it.copy(loading = false, hasPack = false) }; return@launch }
-        val (r, top) = withContext(Dispatchers.IO) {
+        val (r, subjects, top) = withContext(Dispatchers.IO) {
             val opened = ConceptRepository.open(pack.dbFile)
-            opened to (opened?.topConcepts(40) ?: emptyList())
+            Triple(opened, opened?.subjects().orEmpty(), opened?.list("") ?: emptyList())
         }
         repo = r
-        if (r == null || top.isEmpty()) { _state.update { it.copy(loading = false, hasPack = r != null) }; return@launch }
+        if (r == null) { _state.update { it.copy(loading = false, hasPack = false) }; return@launch }
         // A7: open as a searchable list, not straight onto the top hub.
-        _state.update { it.copy(loading = false, searchResults = top, browseMode = true) }
+        _state.update { it.copy(loading = false, searchResults = top, browseMode = true, subjects = subjects) }
     }
 
     /** Return to the searchable concept list (the Map's landing view). */
     fun browse() = _state.update { it.copy(browseMode = true) }
+
+    /** Apply the A7 concept-list filters (importance / subject / PYQ). */
+    fun setConceptFilter(filter: ConceptRepository.ConceptFilter) {
+        _state.update { it.copy(filter = filter) }
+        reloadList()
+    }
 
     /** Load [conceptId]'s ego-graph and lay it out. Picking from the list, or "walking" a neighbour. */
     fun focusOn(conceptId: Long) = viewModelScope.launch {
@@ -86,11 +94,16 @@ class ConceptMapViewModel(app: Application) : AndroidViewModel(app) {
 
     fun search(q: String) {
         _state.update { it.copy(query = q) }
+        reloadList()
+    }
+
+    private fun reloadList() {
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             delay(180)
             val r = repo ?: return@launch
-            val results = withContext(Dispatchers.IO) { r.search(q) }
+            val s = _state.value
+            val results = withContext(Dispatchers.IO) { r.list(s.query, s.filter) }
             _state.update { it.copy(searchResults = results) }
         }
     }

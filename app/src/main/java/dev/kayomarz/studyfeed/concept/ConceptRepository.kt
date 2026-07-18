@@ -35,22 +35,84 @@ class ConceptRepository private constructor(
     }
 
     /** The highest-centrality hubs — the default landing focus + "jump to" suggestions. */
-    fun topConcepts(limit: Int = 40): List<ConceptRef> =
-        query("SELECT id, name, importance, centrality FROM concepts ORDER BY centrality DESC, importance DESC LIMIT ?",
-            arrayOf(limit.toString()))
+    fun topConcepts(limit: Int = 40): List<ConceptRef> = list("", ConceptFilter(), limit)
 
     /** Search concepts by name/alias (importance ↓, then centrality). */
-    fun search(q: String, limit: Int = 40): List<ConceptRef> {
-        val query = q.trim()
-        if (query.isBlank()) return topConcepts(limit)
-        val like = "%${query.replace("%", "\\%").replace("_", "\\_")}%"
-        return query(
-            """SELECT id, name, importance, centrality FROM concepts
-               WHERE name LIKE ? ESCAPE '\' OR aliases_json LIKE ? ESCAPE '\'
-               ORDER BY importance DESC, centrality DESC LIMIT ?""".trimIndent(),
-            arrayOf(like, like, limit.toString()),
-        )
+    fun search(q: String, limit: Int = 40): List<ConceptRef> = list(q, ConceptFilter(), limit)
+
+    /** The subjects the pack's dossiers cover — for the concept-list subject filter (A7). */
+    fun subjects(): List<String> = subjectNames.values.filter { it.isNotBlank() }.sorted()
+
+    /**
+     * A7 concept-list filters, mirroring the Library. Importance is direct on the concept; **subject** and
+     * **PYQ** are derived through the concept's topic page (`topic_pages.concept_id`) — so those filters
+     * narrow to concepts that HAVE a dossier (the meaningful ones; ~8,194 of 37,795).
+     */
+    data class ConceptFilter(
+        val importanceExact: Int? = null,
+        val importanceMin: Int? = null,
+        val subject: String? = null,
+        val pyqOnly: Boolean = false,
+    ) {
+        val isAll get() = importanceExact == null && importanceMin == null && subject == null && !pyqOnly
     }
+
+    /** Search + filter concepts (name/alias · importance · subject · PYQ). PYQ filtered in Kotlin. */
+    fun list(q: String, filter: ConceptFilter = ConceptFilter(), limit: Int = 40): List<ConceptRef> {
+        val query = q.trim()
+        val clauses = ArrayList<String>()
+        val args = ArrayList<String>()
+        if (query.isNotBlank()) {
+            val like = "%${query.replace("%", "\\%").replace("_", "\\_")}%"
+            clauses += "(c.name LIKE ? ESCAPE '\\' OR c.aliases_json LIKE ? ESCAPE '\\')"
+            args += like; args += like
+        }
+        filter.importanceExact?.let { clauses += "c.importance = ?"; args += it.toString() }
+        filter.importanceMin?.let { clauses += "c.importance >= ?"; args += it.toString() }
+        filter.subject?.let {
+            clauses += "EXISTS(SELECT 1 FROM topic_pages tp WHERE tp.concept_id = c.id AND tp.subjects_covered_json LIKE ?)"
+            args += "%\"$it\"%"
+        }
+        val where = if (clauses.isEmpty()) "" else "WHERE " + clauses.joinToString(" AND ")
+        val order = if (query.isNotBlank()) "c.importance DESC, c.centrality DESC" else "c.centrality DESC, c.importance DESC"
+        val sqlLimit = if (filter.pyqOnly) 1500 else limit
+        val out = ArrayList<ConceptRef>()
+        db.rawQuery(
+            "SELECT c.id, c.name, c.importance, c.centrality FROM concepts c $where ORDER BY $order LIMIT ?",
+            (args + listOf(sqlLimit.toString())).toTypedArray(),
+        ).use { cur ->
+            while (cur.moveToNext()) {
+                if (filter.pyqOnly && cur.getLong(0) !in pyqConceptIds) continue
+                out += ConceptRef(cur.getLong(0), cur.getString(1).orEmpty(), cur.getInt(2), cur.getDouble(3))
+                if (out.size >= limit) break
+            }
+        }
+        return out
+    }
+
+    /** Concept ids whose dossier has ≥1 PYQ related MCQ (A7 "PYQ" concept filter). Built once. */
+    private val pyqConceptIds: Set<Long> by lazy {
+        val pyqMcqs = HashSet<Long>()
+        try {
+            db.rawQuery("SELECT id FROM mcqs WHERE is_pyq = 1", null).use { c ->
+                while (c.moveToNext()) pyqMcqs += c.getLong(0)
+            }
+        } catch (e: SQLiteException) { /* no mcqs */ }
+        val out = HashSet<Long>()
+        try {
+            db.rawQuery("SELECT concept_id, related_mcq_ids_json FROM topic_pages WHERE concept_id IS NOT NULL", null).use { c ->
+                while (c.moveToNext()) {
+                    if (parseLongArray(c.getString(1)).any { it in pyqMcqs }) out += c.getLong(0)
+                }
+            }
+        } catch (e: SQLiteException) { /* no dossiers */ }
+        out
+    }
+
+    private fun parseLongArray(json: String?): List<Long> = try {
+        if (json.isNullOrBlank()) emptyList()
+        else org.json.JSONArray(json).let { a -> (0 until a.length()).map { a.getLong(it) } }
+    } catch (e: Exception) { emptyList() }
 
     private fun query(sql: String, args: Array<String>): List<ConceptRef> {
         val out = ArrayList<ConceptRef>()

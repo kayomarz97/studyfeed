@@ -16,7 +16,12 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -45,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.kayomarz.studyfeed.concept.ConceptRef
+import dev.kayomarz.studyfeed.concept.ConceptRepository
 import dev.kayomarz.studyfeed.concept.EgoGraph
 import dev.kayomarz.studyfeed.concept.ForceLayout
 import dev.kayomarz.studyfeed.ui.feed.Importance
@@ -86,6 +92,23 @@ fun ConceptMapScreen(
                 placeholder = { Text("Search a concept…") },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
             )
+            // A7: same filters as the Library — importance · PYQ · subject.
+            val cf = ui.filter
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(selected = cf.importanceExact == 5,
+                    onClick = { vm.setConceptFilter(cf.copy(importanceExact = if (cf.importanceExact == 5) null else 5, importanceMin = null)) },
+                    label = { Text("5★") })
+                FilterChip(selected = cf.importanceMin == 4,
+                    onClick = { vm.setConceptFilter(cf.copy(importanceMin = if (cf.importanceMin == 4) null else 4, importanceExact = null)) },
+                    label = { Text("4★+") })
+                FilterChip(selected = cf.pyqOnly,
+                    onClick = { vm.setConceptFilter(cf.copy(pyqOnly = !cf.pyqOnly)) },
+                    label = { Text("PYQ") })
+                ConceptSubjectFilter(cf, ui.subjects, vm::setConceptFilter)
+            }
             when {
                 !ui.hasPack -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                     Text("Import a pack to explore its concept map.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -133,6 +156,24 @@ fun ConceptMapScreen(
         onQuiz = { showInfo = false; vm.openQuiz() }) }
 
     if (quiz.open) ConceptQuizViewer(quiz, onClose = vm::closeQuiz)
+}
+
+@Composable
+private fun ConceptSubjectFilter(
+    f: ConceptRepository.ConceptFilter,
+    subjects: List<String>,
+    onFilter: (ConceptRepository.ConceptFilter) -> Unit,
+) {
+    if (subjects.isEmpty()) return
+    var open by remember { mutableStateOf(false) }
+    FilterChip(selected = f.subject != null, onClick = { open = true },
+        label = { Text(f.subject ?: "Subject") })
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        DropdownMenuItem(text = { Text("All subjects") }, onClick = { onFilter(f.copy(subject = null)); open = false })
+        subjects.forEach { s ->
+            DropdownMenuItem(text = { Text(s) }, onClick = { onFilter(f.copy(subject = s)); open = false })
+        }
+    }
 }
 
 @Composable
