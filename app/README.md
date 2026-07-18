@@ -13,6 +13,29 @@ The CLI-buildable intent of §8 A0 still binds and is enforced by `build-logic/`
 
 ---
 
+## What's built (A0–A7)
+
+Feature-complete for the first profile (MRCP Part 1). Everything below runs **fully offline** against an
+imported pack; nothing is generated at runtime. See `JOURNAL.md` (Phase 2) + `.claude/INDEX.md` for the map.
+
+- **A0** — skeleton + the build-enforced offline / no-background guarantee (below).
+- **A1** — pack import (SAF folder), the **two-DB model** (a read-only pack `ATTACH`-ed beside a
+  read-write `progress_<EXAM>.db` that Room owns), a schema-version gate, and §11e export/import of progress.
+- **A2 / A3** — the **Study Feed**: an infinite vertical pager over five item types (MCQ · flashcard · reel
+  · passage · interlink), FSRS-6 spaced repetition, and an ordering engine (due pool + importance-weighted
+  new drip + variety, paced to an editable deadline).
+- **A4 / A5** — the **Library** (pre-compiled cross-subject topic dossiers) and the **Concept map** (a
+  walkable ego-graph).
+- **A6 / A7** — a data-rich **Progress** screen, a dashboard **Home**, **Settings**, and the A7 design pass.
+- **A7 cycle 3** — **named, resumable study sessions**; **topic + per-line stars** with approximate PYQ/5★
+  line highlighting; a **mock exam** (blueprint-weighted, scored); weak-spot **drills** + leeches; custom
+  **decks**; and a branded opening screen. Progress DB migrates `v2 → v3` additively (never destructively).
+
+The pack is not in this repo — it is compiled by `compiler/` from copyrighted sources and imported at
+runtime. A fresh clone builds and runs; it just shows an "import a pack" screen until you give it one.
+
+---
+
 ## Prerequisites
 
 | Need | This machine has | Notes |
@@ -62,12 +85,12 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 `-r` reinstalls in place and **keeps app data**. It only works while the signing key stays the
 same — which is the whole point of §11d below.
 
-### Sizes as of A0 (skeleton, no pack)
+### Sizes
 
 | Artifact | Size |
 |---|---|
-| `app-debug.apk` | ~11.9 MB (unminified, includes Compose tooling) |
-| `app-release.apk` | ~0.73 MB (R8 minified + resource shrinking) |
+| `app-debug.apk` | ~13.2 MB (unminified, includes Compose tooling) |
+| `app-release.apk` | ~0.8 MB (R8 minified + resource shrinking) |
 
 The pack is **imported via SAF, never bundled into the APK** (§11c). If the APK ever jumps by the
 size of the pack, something has gone wrong.
@@ -151,8 +174,17 @@ recoverable even if the key is lost. It is not optional.
 ```
 app/src/main/java/dev/kayomarz/studyfeed/
     MainActivity.kt          the app's only component — no service/receiver/provider, ever
+    pack/                    import a pack (SAF), open it read-only, the schema-version gate
+    progress/                Room owns progress_<EXAM>.db (FSRS cards, mistakes, stars, sessions, …)
+    feed/ + ui/feed/         the Study Feed — ordering engine, five card types, sessions, FSRS bridge
+    dossier/ + ui/dossier/   the Library — topic dossiers + per-line stars/highlights
+    concept/ + ui/concept/   the Concept map (ego-graph explorer)
+    stats/ + ui/stats/       the data-rich Progress screen
+    exam/ + ui/exam/         the mock exam
+    ui/home/  ui/settings/   the dashboard Home + Settings
     ui/theme/                AMOLED true-black Material3 (dynamic colour deliberately off)
-app/src/test/java/.../fsrs/  FSRS-6 scheduling tests, incl. upstream's regression oracle
+app/src/test/…               JVM tests (FSRS oracle, markdown-safety, session config, line hash)
+app/src/androidTest/…        instrumented tests (real-pack readers, the v2→v3 migration, …)
 app/src/main/AndroidManifest.xml    zero permissions — read the comment before editing
 build-logic/                 the offline-guarantees Gradle plugin (an included build)
 gradle/libs.versions.toml    every version pinned; see .claude/PLAYBOOK.md for why each one
