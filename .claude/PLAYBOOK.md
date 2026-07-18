@@ -1646,3 +1646,43 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   **Fix/prevention:** never type `git push` without the immediately-preceding `secret-scanner` run
   on THAT push's commits — each push carries its own new diff and its own new risk; "scanned
   earlier," "just docs," and "in flow" are not exceptions. (seen 1x)
+
+- **2026-07 · An AVD's data directory is NOT `~/.android/avd/<avd-name>.avd` by name — read the
+  `.ini` for the real path, and never force-kill the emulator.** At A7, `Medium_Phone_API_36.1`
+  (per `emulator -list-avds`) would not boot across ~5 attempts: `qemu-system-x86_64` launched and
+  stayed alive but sat at ~0.8–1.0 CPU-seconds total (idle, not booting) and no adb port 5554–5560
+  ever opened, so `adb devices` stayed empty and `adb wait-for-device` blocked forever. Two causes
+  compounded: (a) the AVD's actual data dir is `~/.android/avd/Medium_Phone.avd` — NOT
+  `Medium_Phone_API_36.1.avd` — the real path only exists in
+  `~/.android/avd/Medium_Phone_API_36.1.ini`'s `path=` line; (b) prior sessions had force-killed
+  the emulator (`Stop-Process -Force`), which left stale `hardware-qemu.ini.lock` and
+  `multiinstance.lock` files in that real `.avd` dir, wedging the next boot. WHPX acceleration was
+  confirmed usable (`emulator -accel-check` → "installed and usable"), so accel was not the cause.
+  The same emulator had worked fine for A3–A6, so this is environmental drift, not a project
+  regression — and clearing the locks did NOT fully clear it this session, implying a deeper
+  transient machine-level wedge; only a laptop reboot (or Android Studio cold-boot/wipe-data)
+  reliably recovered it.
+  **Fix/prevention:** before spawning the emulator, read `~/.android/avd/<name>.ini`'s `path=` line
+  to get the REAL `.avd` dir — never assume the name-based default. Prefer graceful shutdown
+  (`adb emu kill`) over force-kill. If a boot hangs with qemu idle (CPU time not climbing) and no
+  adb port opens, clear `*.lock` in the REAL avd dir and relaunch once; if it still hangs, reboot
+  the laptop rather than repeatedly force-killing and relaunching — force-killing compounds the
+  lock problem instead of fixing it. (seen 1x)
+  **RESOLUTION (same A7 session, 2026-07-18):** the deeper wedge was a **corrupted SAVED SNAPSHOT** —
+  launching with **`emulator -avd <name> -no-snapshot-load`** (cold boot, ignore the snapshot) booted
+  reliably every time for the rest of the session (dozens of installs). So the fast recovery order is:
+  (1) clear stale `*.lock` in the real avd dir, (2) launch with **`-no-snapshot-load`** — NOT a reboot as
+  the first resort. Also: after `am start` on a fresh install, the first tap often lands mid-load (Home's
+  progress query is slower now) — wait for the screen to settle (or re-tap) before scripting taps.
+
+- **2026-07-18 · Real pack content leaked into tracked files AGAIN (caught by secret-scanner pre-push).**
+  A real flashcard fragment (a specific gene/disease association) slipped into a `Cloze.kt` doc-comment
+  example, a JOURNAL line, and a plan file while writing up the A7 cloze fix. This is the **already-promoted** rule ("never paste
+  real pack content into tracked files — use synthetic FORMS"), so it should not have recurred. The
+  `secret-scanner` agent caught it on the pre-push scan and it was redacted to synthetic wording
+  (`FOO-{{c1::BARBAZ}}`) before the push. **Why it recurred:** when documenting a *real bug reproduction*,
+  it's tempting to quote the exact card you tested against — that is still pack content. **Prevention
+  (reinforced):** when a doc/comment/journal needs an EXAMPLE, invent a synthetic one from the start
+  (`FOO/BARBAZ`, `Alpha/Omega`); never quote the actual card you verified against, even in prose. A
+  pre-existing real fragment also survives in `DossierMarkdownTest.kt` (from A4, already on origin). (seen 3x
+  → the rule holds; the gap is *examples in prose/comments*, not just code fixtures.)

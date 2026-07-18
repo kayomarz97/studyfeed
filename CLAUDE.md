@@ -19,8 +19,11 @@ spent at build time only — the shipped app has zero network.
 **Status (2026-07-17): Phase 1 COMPLETE** — the compiler is done (C0–C13) and dormant;
 `compiler/dist/pack_MRCP_PART1.db` is built and **imported to this laptop** (32,957 playable feed
 items; checksum-verified against `manifest.json`). **Phase 2 (the app) is the live front: A0–A6 done;
-`§8 A7` (the design pass) IN PROGRESS — cycle 1 built (dashboard home, loud-PYQ cards, study modes,
-Settings).** Do not drive the compiler; do not invent pack data — a real pack exists, on disk.
+`§8 A7` (the design pass) — cycle 1 (dashboard home, loud-PYQ cards, study modes, Settings) + cycle 2 (the
+full redesign: clinical-night colour, working ratings, one-row feed + Filter sheet, Home tiles, card→topic/
+map/library links, Library + Concept-map filters, Maps-as-list, back-nav) BUILT + emulator-verified +
+released (GitHub Release `a7-cycle2`). Owed: release-APK signing, §A8 notes.** Do not drive the compiler;
+do not invent pack data — a real pack exists, on disk.
 
 **Two machines** (§0 `build_env`, amended by PATCH 02): the **compiler** ran on the headless Hetzner
 box; the **app is built HERE, on the laptop** (Android Studio + a physical phone). The app must still

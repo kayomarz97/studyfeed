@@ -1449,11 +1449,26 @@ verified chunks (each: compile → emulator screenshot → commit), then a singl
   starred), a first-class Library card, Endless-mix beside Map.
 - **Library + Maps** (`aa1420f`): Library filters (5★/4★+/PYQ/Subject) + per-topic **Map** button + capped
   subject lists; the Concept map now opens as a searchable **list** → tap → ego-graph; one back style.
+- **Concept-list filters** (`ba52f82`): the map's concept list gained the SAME 5★/4★+/PYQ/Subject filters
+  as the Library (`ConceptRepository.list`). Importance is direct on the concept; **Subject/PYQ are derived
+  through the concept's topic page** (`topic_pages.concept_id`), so those two narrow to concepts that have
+  a dossier. Verified live: the 5★ chip narrows the list to 5★ concepts only.
+
+**A secret-scan catch (redaction `044dc0a`):** the pre-push scan flagged a real flashcard fragment
+(a specific gene/disease association) that had leaked into a doc comment (`Cloze.kt`), this journal, and a
+plan file — the recurring
+"no real pack content in tracked files, use synthetic FORMS" mistake. Replaced with synthetic wording
+before pushing (logged again in the PLAYBOOK ledger). The `ClozeTest` fixtures were already synthetic. NB:
+the fragment remains in the earlier *intermediate* commits' blobs on the private remote; a full history
+scrub is only worth doing if the repo is ever made public.
 
 **Verified live** on `emulator-5554` (the earlier boot-wedge was a stale snapshot — `-no-snapshot-load`
 cold-boot fixes it; see PLAYBOOK): each part screenshotted. `testDebugUnitTest` + `verifyOfflineGuarantees`
 + `assembleDebug` all green; **zero new runtime deps**. Two known data limits recorded above (flashcard
 topic map empty; generated MCQs unlinked) → those cards use the library fallback, honestly.
 
-**Resume point:** A7 cycle 2 done + released. Owed follow-ups if the user wants: concept-list subject/PYQ
-filters (concepts lack a direct subject); release-APK signing; `§A8` personal notes. A7 is the last stage.
+**Resume point:** A7 cycle 2 **done + released** (GitHub Release `a7-cycle2`, all filters consistent across
+Feed/Library/Concept-map). Owed follow-ups if the user wants: release-APK signing (§11d keystore); `§A8`
+personal notes; a history scrub of the redacted fragment if the repo goes public; a pre-existing real
+fragment still lives in `DossierMarkdownTest.kt` (from A4, already on origin) — clean on request. A7 is the
+last spec stage.
