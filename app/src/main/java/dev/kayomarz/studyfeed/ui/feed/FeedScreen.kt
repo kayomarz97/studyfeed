@@ -31,6 +31,8 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -125,6 +127,7 @@ private fun StudyModeBar(
 @Composable
 private fun FeedPager(ui: FeedViewModel.Ui, vm: FeedViewModel) {
     val pager = rememberPagerState(pageCount = { ui.cards.size })
+    val scope = rememberCoroutineScope()
     LaunchedEffect(pager.currentPage) { vm.onReachedIndex(pager.currentPage) }
 
     VerticalPager(
@@ -154,7 +157,14 @@ private fun FeedPager(ui: FeedViewModel.Ui, vm: FeedViewModel) {
                 card = card,
                 actions = actions,
                 onWhy = { vm.showWhy(card) },
-                onRate = { vm.rate(card, it) },
+                onRate = {
+                    vm.rate(card, it)
+                    // A7 "buttons now work": after rating, advance to the next card (unless the user
+                    // turned that off in Settings — then the rating just highlights and stays).
+                    if (ui.advanceAfterRating) {
+                        scope.launch { pager.animateScrollToPage((page + 1).coerceAtMost(ui.cards.size - 1)) }
+                    }
+                },
                 onAnswered = { chosen, correct ->
                     if (card is FeedCard.Mcq) vm.onMcqAnswered(card, chosen, correct)
                 },

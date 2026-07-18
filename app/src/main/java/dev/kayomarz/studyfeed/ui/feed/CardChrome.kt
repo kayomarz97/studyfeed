@@ -80,12 +80,12 @@ fun PyqBadge(years: List<Int>, modifier: Modifier = Modifier) {
     val label = "PYQ · " + years.sorted().joinToString(" · ") { it.toString() }
     Text(
         text = label,
-        color = MaterialTheme.colorScheme.onPrimaryContainer,
+        color = Color(0xFF180A07), // near-black on coral
         fontSize = 12.sp,
         fontWeight = FontWeight.Bold,
         modifier = modifier
             .clip(RoundedCornerShape(50))
-            .background(MaterialTheme.colorScheme.primaryContainer)
+            .background(dev.kayomarz.studyfeed.ui.theme.AppColor.PyqCoral)
             .padding(horizontal = 10.dp, vertical = 4.dp),
     )
 }

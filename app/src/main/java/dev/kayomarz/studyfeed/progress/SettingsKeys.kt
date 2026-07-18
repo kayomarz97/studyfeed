@@ -19,4 +19,7 @@ object SettingsKeys {
 
     /** Feed intensity — max overdue-backlog items surfaced per app-open (`feed.dueBurst`). */
     const val DUE_BURST = "feed.dueBurst"
+
+    /** After rating a card, advance to the next one (`true`) or just highlight the rating and stay. */
+    const val ADVANCE_AFTER_RATING = "feed.advanceAfterRating"
 }

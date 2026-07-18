@@ -21,6 +21,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
@@ -110,6 +111,21 @@ fun SettingsScreen(
                 FilterChip(selected = ui.intensity == i, onClick = { vm.setIntensity(i); onChanged() },
                     label = { Text(i.label) })
             }
+        }
+
+        Spacer(Modifier.height(20.dp)); HorizontalDivider(); Spacer(Modifier.height(20.dp))
+
+        // ── After rating a card ─────────────────────────────────────────────────────────────────────
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                Text("Advance after rating", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(4.dp))
+                Text("On: rating a card moves to the next one. Off: it just highlights your rating and stays.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(checked = ui.advanceAfterRating,
+                onCheckedChange = { vm.setAdvanceAfterRating(it); onChanged() })
         }
 
         Spacer(Modifier.height(20.dp)); HorizontalDivider(); Spacer(Modifier.height(20.dp))

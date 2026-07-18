@@ -36,6 +36,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         val deadline: LocalDate? = null,
         val redrillN: Int = 3,
         val intensity: Intensity = Intensity.BALANCED,
+        val advanceAfterRating: Boolean = true,
     )
 
     private val registry = PackRegistry(app)
@@ -57,9 +58,10 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             val deadline = dao.setting(SettingsKeys.DEADLINE)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
             val redrill = dao.setting(SettingsKeys.REDRILL_N)?.toIntOrNull()?.coerceIn(1, 10) ?: 3
             val burst = dao.setting(SettingsKeys.DUE_BURST)?.toIntOrNull()
+            val advance = dao.setting(SettingsKeys.ADVANCE_AFTER_RATING)?.toBooleanStrictOrNull() ?: true
             db.close()
             Ui(loading = false, hasPack = true, deadline = deadline, redrillN = redrill,
-                intensity = intensityFor(burst))
+                intensity = intensityFor(burst), advanceAfterRating = advance)
         }
         _ui.value = ui
     }
@@ -82,6 +84,11 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         _ui.value = _ui.value.copy(intensity = intensity)
         put(SettingsKeys.NEW_RATIO_PCT, intensity.newRatioPct.toString())
         put(SettingsKeys.DUE_BURST, intensity.dueBurst.toString())
+    }
+
+    fun setAdvanceAfterRating(on: Boolean) {
+        _ui.value = _ui.value.copy(advanceAfterRating = on)
+        put(SettingsKeys.ADVANCE_AFTER_RATING, on.toString())
     }
 
     private fun put(key: String, value: String) = viewModelScope.launch(Dispatchers.IO) {

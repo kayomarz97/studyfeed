@@ -26,10 +26,11 @@ fun StudyFeedTheme(
 }
 
 private val AmoledDarkColorScheme = darkColorScheme(
-    primary = AccentBlue,
+    primary = Iris,
     onPrimary = AmoledBlack,
-    primaryContainer = AccentBlueDark,
-    onPrimaryContainer = AccentBlue,
+    primaryContainer = IrisContainer,
+    onPrimaryContainer = IrisOnContainer,
+    secondary = AppColor.Passage,
     background = AmoledBlack,
     onBackground = AmoledOnSurface,
     surface = AmoledBlack,
@@ -37,7 +38,10 @@ private val AmoledDarkColorScheme = darkColorScheme(
     surfaceVariant = AmoledSurfaceVariant,
     onSurfaceVariant = AmoledOnSurfaceMuted,
     surfaceContainer = AmoledSurface,
-    surfaceContainerHigh = AmoledSurfaceVariant,
+    surfaceContainerHigh = AmoledSurfaceHigh,
+    outline = AmoledOutline,
+    outlineVariant = AmoledOutlineVariant,
     error = ErrorRed,
     onError = AmoledBlack,
+    tertiary = AppColor.Deck,
 )

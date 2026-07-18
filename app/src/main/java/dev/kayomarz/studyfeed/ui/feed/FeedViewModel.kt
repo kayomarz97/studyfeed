@@ -62,6 +62,8 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
         val marks: Map<Pair<String, Long>, CardMarks> = emptyMap(),
         /** The A7 study mode currently selected (drives the base query). */
         val studyMode: StudyMode = StudyMode.MIXED,
+        /** A7: after rating a card, advance to the next one (else just highlight the rating). */
+        val advanceAfterRating: Boolean = true,
     )
 
     /**
@@ -190,6 +192,8 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
             newRatioPct = d?.setting(SettingsKeys.NEW_RATIO_PCT)?.toIntOrNull()?.coerceIn(5, 90) ?: defaults.newRatioPct,
             dueBurst = d?.setting(SettingsKeys.DUE_BURST)?.toIntOrNull()?.coerceIn(10, 300) ?: defaults.dueBurst,
         )
+        val advance = d?.setting(SettingsKeys.ADVANCE_AFTER_RATING)?.toBooleanStrictOrNull() ?: true
+        _ui.update { it.copy(advanceAfterRating = advance) }
     }
 
     /** Append the next window when the user is within [PREFETCH] of the end. */

@@ -121,6 +121,18 @@ private fun Root() {
     // Refresh the dashboard's counts whenever we return to it.
     val goHome = { homeVm.load(); screen = Screen.Home }
 
+    // Android system back (gesture/button). Without this, back exits the app from any screen because our
+    // simple `when`-router has no back stack. Map each screen to its parent; on Home, stay disabled so the
+    // OS handles back normally (exit). Mirrors each screen's on-screen back affordance.
+    androidx.activity.compose.BackHandler(enabled = screen != Screen.Home) {
+        screen = when (val s = screen) {
+            is Screen.Dossier -> Screen.Library
+            is Screen.ItemDetail -> Screen.Dossier(currentDossierId)
+            Screen.Home -> Screen.Home // unreachable (handler disabled on Home)
+            else -> { homeVm.load(); Screen.Home }
+        }
+    }
+
     when (screen) {
         Screen.Home -> HomeScreen(
             vm = homeVm,

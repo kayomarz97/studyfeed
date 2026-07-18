@@ -373,10 +373,7 @@ fun ReelCard(
                 Spacer(Modifier.height(16.dp))
                 MarkdownText(card.detailMd, style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(24.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = { onRate(Rating.AGAIN) }) { Text("Shaky") }
-                    Button(onClick = { onRate(Rating.GOOD) }) { Text("Got it") }
-                }
+                RatingBar(onRate) // A7: same 4 buttons as every other recall card
             }
         }
     }
@@ -487,23 +484,34 @@ fun InterlinkCard(
 
 // ── shared rating bar ────────────────────────────────────────────────────────────────────────────────
 
-/** The four FSRS grades. Colour follows the recall difficulty, not the theme accent. */
+/**
+ * The four FSRS grades — the SAME control on every recall card (A7: consistency). Colour follows the
+ * recall difficulty, not the theme accent. The tapped grade highlights (fills) as feedback; when the
+ * "advance after rating" setting is on, the feed also moves to the next card (handled by the pager).
+ */
 @Composable
 private fun RatingBar(onRate: (Rating) -> Unit) {
+    var picked by remember { mutableStateOf<Rating?>(null) }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        RateButton("Again", Color(0xFFE57373), Modifier.weight(1f)) { onRate(Rating.AGAIN) }
-        RateButton("Hard", Color(0xFFFFB74D), Modifier.weight(1f)) { onRate(Rating.HARD) }
-        RateButton("Good", Color(0xFF81C784), Modifier.weight(1f)) { onRate(Rating.GOOD) }
-        RateButton("Easy", Color(0xFF64B5F6), Modifier.weight(1f)) { onRate(Rating.EASY) }
+        RateButton("Again", Color(0xFFE57373), picked == Rating.AGAIN, Modifier.weight(1f)) { picked = Rating.AGAIN; onRate(Rating.AGAIN) }
+        RateButton("Hard", Color(0xFFFFB74D), picked == Rating.HARD, Modifier.weight(1f)) { picked = Rating.HARD; onRate(Rating.HARD) }
+        RateButton("Good", Color(0xFF81C784), picked == Rating.GOOD, Modifier.weight(1f)) { picked = Rating.GOOD; onRate(Rating.GOOD) }
+        RateButton("Easy", Color(0xFF64B5F6), picked == Rating.EASY, Modifier.weight(1f)) { picked = Rating.EASY; onRate(Rating.EASY) }
     }
 }
 
 @Composable
-private fun RateButton(label: String, color: Color, modifier: Modifier, onClick: () -> Unit) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = modifier,
-        border = BorderStroke(1.dp, color.copy(alpha = 0.7f)),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = color),
-    ) { Text(label, fontSize = 13.sp) }
+private fun RateButton(label: String, color: Color, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    if (selected) {
+        Button(
+            onClick = onClick, modifier = modifier,
+            colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color(0xFF0A0B10)),
+        ) { Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+    } else {
+        OutlinedButton(
+            onClick = onClick, modifier = modifier,
+            border = BorderStroke(1.dp, color.copy(alpha = 0.7f)),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = color),
+        ) { Text(label, fontSize = 13.sp) }
+    }
 }
