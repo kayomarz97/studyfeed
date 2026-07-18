@@ -12,9 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.VerticalPager
@@ -31,6 +28,9 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
@@ -66,65 +66,43 @@ fun FeedScreen(
     when {
         !ui.hasPack -> LaunchedEffect(Unit) { onNoPack() } // hand off to the import screen
         else -> Column(Modifier.fillMaxSize()) {
-            // A7: a "Home" affordance leads the top bar (the dashboard is now the hub); the study-mode
-            // row lets the user choose HOW to study; the A2 filter/sort bar sits below it. Everything
-            // stays visible while a filter narrows the deck to empty, so the user can always undo it.
+            var showFilter by remember { mutableStateOf(false) }
+            // A7 one-row controls: Home · Study ▾ (mode) · Filter. Everything fine-grained is in the
+            // Filter sheet; active filters show as removable tokens just below.
             Row(
-                Modifier.statusBarsPadding().padding(top = 4.dp).fillMaxWidth(),
+                Modifier.statusBarsPadding().padding(top = 4.dp, start = 4.dp, end = 8.dp).fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = onHome) { Text("‹ Home") }
-                StudyModeBar(ui.studyMode, vm::setStudyMode, Modifier.weight(1f))
+                StudyModeMenu(ui.studyMode, vm::setStudyMode)
+                Spacer(Modifier.weight(1f))
+                FilterButton(ui.query.filter.activeCount(), onClick = { showFilter = true })
             }
-            FeedControls(
-                query = ui.query,
-                subjects = ui.subjects,
-                tags = ui.tags,
-                onFilter = vm::setFilter,
-                onSort = vm::setSort,
-                modifier = Modifier.padding(top = 2.dp),
-            )
+            ActiveFilterTokens(ui.query.filter, ui.subjects, ui.tags, vm::setFilter)
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when {
                     ui.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
                     ui.cards.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+                        val labels = ui.query.filter.activeLabels(ui.subjects, ui.tags)
                         Text(
                             if (ui.query.filter.isAll) "This pack has no playable items."
-                            else "Nothing matches this filter.",
+                            else "No items match: ${labels.joinToString(" · ")}.\nRemove a filter to see more.",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(32.dp),
                         )
                     }
                     else -> FeedPager(ui, vm, onOpenTopic, onOpenMap, onOpenLibrary)
                 }
             }
+            if (showFilter) {
+                FilterSheet(ui.query, ui.subjects, ui.tags, ui.total, vm::setFilter,
+                    onDismiss = { showFilter = false })
+            }
         }
     }
 
     ui.whySheetFor?.let { WhySheet(it, onDismiss = vm::dismissWhy) }
-}
-
-/** The A7 study-mode selector — Mixed / By subject / Recall / Skim (user backlog 2.5). */
-@Composable
-private fun StudyModeBar(
-    current: FeedViewModel.StudyMode,
-    onSelect: (FeedViewModel.StudyMode) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val modes = listOf(
-        FeedViewModel.StudyMode.MIXED to "Mixed",
-        FeedViewModel.StudyMode.BY_SUBJECT to "By subject",
-        FeedViewModel.StudyMode.RECALL to "Recall",
-        FeedViewModel.StudyMode.SKIM to "Skim",
-    )
-    Row(
-        modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        modes.forEach { (mode, label) ->
-            FilterChip(selected = current == mode, onClick = { onSelect(mode) }, label = { Text(label) })
-        }
-    }
 }
 
 @Composable
