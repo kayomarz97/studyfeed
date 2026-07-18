@@ -201,6 +201,19 @@ class FeedRepository private constructor(
         return rows.filter { it.itemId !in exclude }.take(limit)
     }
 
+    /**
+     * How many items are **due now** — FSRS cards due ∪ blobs whose re-read is due — for the dashboard's
+     * "due today" figure (A7 home). Content-safe count; mirrors [duePool]'s membership, not its cap.
+     */
+    fun dueCount(nowIso: String): Int = countOf(
+        """
+        SELECT
+          (SELECT COUNT(*) FROM main.fsrs_cards c WHERE c.due IS NOT NULL AND c.due <= ?)
+        + (SELECT COUNT(*) FROM main.blob_reads b WHERE b.reread_due IS NOT NULL AND b.reread_due <= ?)
+        """.trimIndent(),
+        listOf(nowIso, nowIso),
+    )
+
     /** Count of never-seen MCQs — the numerator of the deadline pace. */
     fun remainingNewMcqs(): Int = countOf(
         """
@@ -244,6 +257,10 @@ class FeedRepository private constructor(
         val clauses = mutableListOf<String>()
         val args = mutableListOf<String>()
         filter.itemType?.let { clauses += "f.item_type = ?"; args += it }
+        filter.itemTypesIn?.takeIf { it.isNotEmpty() }?.let { types ->
+            clauses += "f.item_type IN (${types.joinToString(",") { "?" }})"
+            args += types
+        }
         filter.importanceExact?.let { clauses += "f.importance = ?"; args += it.toString() }
         filter.importanceMin?.let { clauses += "f.importance >= ?"; args += it.toString() }
         if (filter.pyqOnly) clauses += "f.is_pyq = 1"
@@ -271,6 +288,10 @@ class FeedRepository private constructor(
         FeedQuery.Sort.IMPORTANCE_ASC ->
             "" to "ORDER BY f.importance ASC, f.importance_score ASC, f.id"
         FeedQuery.Sort.RANDOM -> "" to "ORDER BY RANDOM()"
+        // "By subject" study mode: a structured, subject-grouped sweep, importance-first within each
+        // subject. subject_id is stable per pack; subject-less items (past-paper/qbank) sort last.
+        FeedQuery.Sort.SUBJECT ->
+            "" to "ORDER BY f.subject_id IS NULL, f.subject_id, f.importance DESC, f.importance_score DESC, f.id"
         // Priority = importance × weakness, composed HERE on the phone (§8 A2: "proving weakness is
         // folded in locally"). Weakness rises with lapses and low stability; an unseen item gets a
         // moderate baseline so it still surfaces. A2's implementation; A3 refines it. Needs the LEFT

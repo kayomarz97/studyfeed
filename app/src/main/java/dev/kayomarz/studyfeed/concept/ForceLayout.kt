@@ -25,18 +25,20 @@ object ForceLayout {
      * @param edges undirected index pairs (i, j), 0 ≤ i,j < n.
      * @param iterations relaxation steps (100 is plenty for ≤15 nodes).
      */
-    fun layout(n: Int, edges: List<Pair<Int, Int>>, iterations: Int = 120): List<Pt> {
+    fun layout(n: Int, edges: List<Pair<Int, Int>>, iterations: Int = 160): List<Pt> {
         if (n <= 0) return emptyList()
         if (n == 1) return listOf(Pt(0f, 0f))
 
-        // Ideal edge length k = sqrt(area / n) for a unit-ish area.
-        val k = sqrt(1.0 / n).toFloat().coerceAtLeast(0.15f)
-        // Seed on a circle (deterministic). Focus (0) at centre.
+        // Ideal edge length k = sqrt(area / n). A7: a larger virtual area spreads the ego-graph out so
+        // neighbours sit well clear of the focus and of each other (the "compact / labels collide near
+        // the centre" polish). The Canvas rescales to fit regardless of magnitude.
+        val k = sqrt(2.4 / n).toFloat().coerceAtLeast(0.34f)
+        // Seed on a circle (deterministic). Focus (0) at centre; a wider seed ring speeds the spread.
         val pos = Array(n) { i ->
             if (i == 0) floatArrayOf(0f, 0f)
             else {
                 val a = 2.0 * Math.PI * (i - 1) / (n - 1)
-                floatArrayOf((0.6 * cos(a)).toFloat(), (0.6 * sin(a)).toFloat())
+                floatArrayOf((0.8 * cos(a)).toFloat(), (0.8 * sin(a)).toFloat())
             }
         }
         var temp = 0.35f

@@ -1360,3 +1360,47 @@ intensity/redrill-N knobs, export/import entry points, release APK; AND execute 
 backlog (home page, subject/PYQ redesign, tags-to-bottom, flashcard/reel differentiation, tap-anywhere,
 concept-map spread, stats-as-home) — see `.claude/plans/2026-07-17-a7-design-backlog-and-resume.md`.
 A3–A6 committed on `dev`, **not yet pushed** (user still holding the push).
+
+**[compacted at 2026-07-18T02:56:20Z]** — context compacted; disk state is the truth (§10a).
+
+### 2026-07-18 — **A7 Cycle 1: the design pass** (dashboard, loud-PYQ cards, study modes, Settings)
+
+Executed the A7 design backlog per the user's choices (AskUserQuestion 2026-07-18): **Dashboard home
+first** · **Loud PYQ badge** · flashcard/reel **distinct styling + study-mode toggle** · **everything in
+one APK**. Plus the already-confirmed safe wins (tags-to-bottom, tap-anywhere) and the A3–A6 polish
+(concept-map spread, daily-goal→pace, re-drill N as a setting). Plan:
+`.claude/plans/2026-07-18-a7-cycle1-implementation.md`. **Zero new runtime deps** (Material3 DatePicker
+is in the pinned BOM; no charting/nav/markdown libs added).
+
+**What shipped:**
+- **Dashboard home** (`ui/home/HomeScreen`+`HomeViewModel`) — the app now opens here: exam name (pack
+  manifest, no hardcoded string), **due today** (new `FeedRepository.dueCount`), **new left** + **today's
+  target** (= the A3 deadline pace, not a constant), **streak**, per-subject progress bars, "Start
+  studying", and the nav hub. `MainActivity` start = `Screen.Home`; every screen returns to it.
+- **Loud PYQ badge** (`CardChrome`) — filled pill "PYQ · years" + importance stars at the TOP; **subject
+  moved to a quiet footer at the BOTTOM** (colour can't encode subject — it already encodes importance).
+- **Tags → bottom, gated on reveal** + **tap-anywhere-to-reveal** (`FeedCards.CardScaffold` takes
+  `revealed`+`onReveal`; a no-indication full-card click fires only pre-reveal so options/rating stay live;
+  MCQ passes `onReveal=null`).
+- **Flashcard vs reel distinct** — "RECALL THIS" (active recall, 4-button) vs "DID YOU KNOW?" (skim,
+  got-it/shaky) — plus a **study-mode toggle** (Mixed=engine / By subject=`Sort.SUBJECT` / Recall=
+  mcq+flashcard / Skim=reel+blob) via new `FeedFilter.itemTypesIn` + `Sort.SUBJECT`.
+- **Settings** (`ui/settings/*`) — deadline date-picker, re-drill N (1/2/3/5), feed-intensity presets
+  (Gentle/Balanced/Intense → newRatioPct+dueBurst), Export/Restore (reuses `PackUiState`, §11e). Keys in
+  new `progress/SettingsKeys`. `FeedViewModel` reads them into `engineConfig`+`redrillN`; `reapplySettings()`
+  re-applies live when the user leaves Settings.
+- **Concept-map polish** — `ForceLayout` wider spread (k, seed ring, iterations); labels drawn **radially
+  outward** from the focus (de-collision).
+
+**Verified:** `compileDebugKotlin` clean · `testDebugUnitTest` (FSRS, PackMarkdown, DossierMarkdown,
+**ForceLayout**, FeedScheduler — the spread change keeps ForceLayoutTest green) + `verifyOfflineGuarantees`
+**both BUILD SUCCESSFUL** · `assembleDebug` builds the APK (guard runs inside it, so the APK is
+offline-guaranteed). **⚠ On-device/emulator smoke did NOT run this session** — `Medium_Phone_API_36.1`
+would not boot (qemu launched but sat idle, no adb ports; 4 attempts across GPU/snapshot configs; cleared
+stale `hardware-qemu.ini.lock`/`multiinstance.lock`; WHPX accel confirmed usable — a transient machine-level
+wedge, not a code issue; it ran fine for A3–A6). **So the A7 UI is compile+unit+guard-verified but NOT yet
+seen running.** Delivered as a debug APK (GitHub Release) for the user to install on their phone and test.
+
+**Resume point:** A7 cycle 1 built + pushed. **Owed:** the on-device smoke (once the emulator revives or
+on the user's phone), then A7 cycle 2 if the user wants more (release APK signing, `§A8` notes). A7 is the
+last spec stage.

@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.VerticalPager
@@ -51,34 +54,31 @@ import dev.kayomarz.studyfeed.feed.ImportanceSignals
 fun FeedScreen(
     vm: FeedViewModel = viewModel(),
     onNoPack: () -> Unit,
-    onOpenLibrary: () -> Unit = {},
-    onOpenMap: () -> Unit = {},
-    onOpenStats: () -> Unit = {},
+    onHome: () -> Unit = {},
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
 
     when {
         !ui.hasPack -> LaunchedEffect(Unit) { onNoPack() } // hand off to the import screen
         else -> Column(Modifier.fillMaxSize()) {
-            // The filter/sort bar rides above the pager and respects the status-bar inset. It stays
-            // visible while a filter narrows the deck to empty, so the user can always undo it. A search
-            // icon leads it → the Library/dossier reader (A4). (Global nav is redesigned at A7.)
+            // A7: a "Home" affordance leads the top bar (the dashboard is now the hub); the study-mode
+            // row lets the user choose HOW to study; the A2 filter/sort bar sits below it. Everything
+            // stays visible while a filter narrows the deck to empty, so the user can always undo it.
             Row(
                 Modifier.statusBarsPadding().padding(top = 4.dp).fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(onClick = onOpenLibrary) { Text("Search") }
-                TextButton(onClick = onOpenMap) { Text("Map") }
-                TextButton(onClick = onOpenStats) { Text("Stats") }
-                FeedControls(
-                    query = ui.query,
-                    subjects = ui.subjects,
-                    tags = ui.tags,
-                    onFilter = vm::setFilter,
-                    onSort = vm::setSort,
-                    modifier = Modifier.weight(1f),
-                )
+                TextButton(onClick = onHome) { Text("‹ Home") }
+                StudyModeBar(ui.studyMode, vm::setStudyMode, Modifier.weight(1f))
             }
+            FeedControls(
+                query = ui.query,
+                subjects = ui.subjects,
+                tags = ui.tags,
+                onFilter = vm::setFilter,
+                onSort = vm::setSort,
+                modifier = Modifier.padding(top = 2.dp),
+            )
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when {
                     ui.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
@@ -96,6 +96,30 @@ fun FeedScreen(
     }
 
     ui.whySheetFor?.let { WhySheet(it, onDismiss = vm::dismissWhy) }
+}
+
+/** The A7 study-mode selector — Mixed / By subject / Recall / Skim (user backlog 2.5). */
+@Composable
+private fun StudyModeBar(
+    current: FeedViewModel.StudyMode,
+    onSelect: (FeedViewModel.StudyMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val modes = listOf(
+        FeedViewModel.StudyMode.MIXED to "Mixed",
+        FeedViewModel.StudyMode.BY_SUBJECT to "By subject",
+        FeedViewModel.StudyMode.RECALL to "Recall",
+        FeedViewModel.StudyMode.SKIM to "Skim",
+    )
+    Row(
+        modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        modes.forEach { (mode, label) ->
+            FilterChip(selected = current == mode, onClick = { onSelect(mode) }, label = { Text(label) })
+        }
+    }
 }
 
 @Composable

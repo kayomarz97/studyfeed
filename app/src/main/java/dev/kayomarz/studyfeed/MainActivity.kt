@@ -50,6 +50,10 @@ import dev.kayomarz.studyfeed.ui.dossier.LibraryScreen
 import dev.kayomarz.studyfeed.feed.FeedFilter
 import dev.kayomarz.studyfeed.ui.feed.FeedScreen
 import dev.kayomarz.studyfeed.ui.feed.FeedViewModel
+import dev.kayomarz.studyfeed.ui.home.HomeScreen
+import dev.kayomarz.studyfeed.ui.home.HomeViewModel
+import dev.kayomarz.studyfeed.ui.settings.SettingsScreen
+import dev.kayomarz.studyfeed.ui.settings.SettingsViewModel
 import dev.kayomarz.studyfeed.ui.stats.StatsScreen
 import dev.kayomarz.studyfeed.ui.stats.StatsViewModel
 import dev.kayomarz.studyfeed.ui.theme.StudyFeedTheme
@@ -80,18 +84,21 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * Top-level routing between the A-stage screens:
- *  - **Feed** (A2/A3) — the app opens here once a pack is imported; it IS the app.
- *  - **Manage** (A1) — import/switch packs and export/import progress.
- *  - **Library → Dossier → Reference** (A4) — search a topic, read its dossier, open a related item.
+ * Top-level routing between the A-stage screens (**A7 redesign 2026-07-18**):
+ *  - **Home** (A7) — the dashboard the app now opens to: what's left + the nav hub.
+ *  - **Feed** (A2/A3) — the scrolling study feed, reached via "Start studying".
+ *  - **Settings** (A7) — deadline/re-drill/intensity knobs + export/restore.
+ *  - **Manage** (A1) — import/switch packs.
+ *  - **Library → Dossier → Reference** (A4) · **ConceptMap** (A5) · **Stats** (A6).
  *
- * ⚠ This is a deliberately simple `when`-over-enum router. **Global navigation (a home page, bottom
- * tabs) is an A7 redesign item (backlog 2.1)** — A4 adds the minimal reachable path, no nav chrome yet.
- * The A4 screens share ONE activity-scoped [DossierViewModel] so its loaded dossier/item state persists
- * across the Library→Dossier→Reference hops (and back).
+ * A deliberately simple `when`-over-sealed router (no nav library — it would pull dependencies the guard
+ * has no reason to allow). Every screen shares its ONE activity-scoped ViewModel, so state persists across
+ * hops. Home is the hub: Feed/Library/Map/Stats/Settings all return to it.
  */
 private sealed interface Screen {
+    data object Home : Screen
     data object Feed : Screen
+    data object Settings : Screen
     data object Manage : Screen
     data object Library : Screen
     data object ConceptMap : Screen
@@ -102,37 +109,55 @@ private sealed interface Screen {
 
 @Composable
 private fun Root() {
-    var screen by remember { mutableStateOf<Screen>(Screen.Feed) }
+    var screen by remember { mutableStateOf<Screen>(Screen.Home) }
     // Remembered so the Reference viewer's Back returns to the dossier it was opened from.
     var currentDossierId by remember { mutableStateOf(0L) }
+    val homeVm: HomeViewModel = viewModel()
     val feedVm: FeedViewModel = viewModel()
     val dossierVm: DossierViewModel = viewModel()
     val conceptVm: ConceptMapViewModel = viewModel()
     val statsVm: StatsViewModel = viewModel()
+    val settingsVm: SettingsViewModel = viewModel()
+    // Refresh the dashboard's counts whenever we return to it.
+    val goHome = { homeVm.load(); screen = Screen.Home }
 
     when (screen) {
-        Screen.Feed -> FeedScreen(
-            vm = feedVm,
+        Screen.Home -> HomeScreen(
+            vm = homeVm,
+            onStartStudying = { screen = Screen.Feed },
             onNoPack = { screen = Screen.Manage },
             onOpenLibrary = { screen = Screen.Library },
             onOpenMap = { screen = Screen.ConceptMap },
             onOpenStats = { statsVm.load(); screen = Screen.Stats },
+            onOpenSettings = { settingsVm.load(); screen = Screen.Settings },
+            onManagePacks = { screen = Screen.Manage },
+        )
+        Screen.Feed -> FeedScreen(
+            vm = feedVm,
+            onNoPack = { screen = Screen.Manage },
+            onHome = goHome,
+        )
+        Screen.Settings -> SettingsScreen(
+            vm = settingsVm,
+            onBack = goHome,
+            onManagePacks = { screen = Screen.Manage },
+            onChanged = { feedVm.reapplySettings() },
         )
         Screen.Stats -> StatsScreen(
             vm = statsVm,
             onReviewMistakes = { feedVm.setFilter(FeedFilter(mistakesOnly = true)); screen = Screen.Feed },
-            onBack = { screen = Screen.Feed },
+            onBack = goHome,
         )
         Screen.ConceptMap -> ConceptMapScreen(
             vm = conceptVm,
             onOpenDossier = { pid -> currentDossierId = pid; dossierVm.openDossier(pid); screen = Screen.Dossier(pid) },
-            onBack = { screen = Screen.Feed },
+            onBack = goHome,
         )
         Screen.Manage -> PackScreen(onOpenFeed = { screen = Screen.Feed })
         Screen.Library -> LibraryScreen(
             vm = dossierVm,
             onOpenDossier = { id -> currentDossierId = id; dossierVm.openDossier(id); screen = Screen.Dossier(id) },
-            onBack = { screen = Screen.Feed },
+            onBack = goHome,
         )
         is Screen.Dossier -> DossierScreen(
             vm = dossierVm,

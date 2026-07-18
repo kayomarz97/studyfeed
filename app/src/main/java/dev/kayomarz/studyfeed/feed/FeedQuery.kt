@@ -11,7 +11,7 @@ data class FeedQuery(
     val filter: FeedFilter = FeedFilter(),
     val sort: Sort = Sort.SMART,
 ) {
-    enum class Sort { SMART, IMPORTANCE_DESC, IMPORTANCE_ASC, PRIORITY, RANDOM }
+    enum class Sort { SMART, IMPORTANCE_DESC, IMPORTANCE_ASC, PRIORITY, RANDOM, SUBJECT }
 }
 
 /**
@@ -24,6 +24,11 @@ data class FeedQuery(
  */
 data class FeedFilter(
     val itemType: String? = null,
+    /**
+     * Restrict to this SET of item types (the A7 study modes: "Recall only" → [mcq,flashcard], "Skim" →
+     * [reel,blob]). Combines with AND alongside [itemType]; an empty/null set is "no constraint".
+     */
+    val itemTypesIn: List<String>? = null,
     /** Exactly this importance (the "5★ only" chip). */
     val importanceExact: Int? = null,
     /** At least this importance (the "4★+" chip). */
@@ -36,6 +41,7 @@ data class FeedFilter(
     val tagKey: String? = null,
 ) {
     val isAll: Boolean
-        get() = itemType == null && importanceExact == null && importanceMin == null && !pyqOnly &&
-            !starredOnly && !mistakesOnly && subjectId == null && tagKey == null
+        get() = itemType == null && itemTypesIn.isNullOrEmpty() && importanceExact == null &&
+            importanceMin == null && !pyqOnly && !starredOnly && !mistakesOnly && subjectId == null &&
+            tagKey == null
 }

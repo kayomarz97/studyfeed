@@ -135,7 +135,7 @@ private fun GraphCanvas(
 
     fun nodeCenter(i: Int, w: Float, h: Float): Offset {
         val p = posRef.value.getOrNull(i) ?: return Offset(w / 2, h / 2)
-        val base = min(w, h) * 0.32f
+        val base = min(w, h) * 0.40f // A7: more spread so labels near the centre stop colliding
         return Offset(w / 2 + p.x * base * scaleRef.value + panRef.value.x,
             h / 2 + p.y * base * scaleRef.value + panRef.value.y)
     }
@@ -177,26 +177,39 @@ private fun GraphCanvas(
                 style = TextStyle(fontSize = 9.sp, color = relColor))
             drawText(rel, topLeft = Offset(mid.x - rel.size.width / 2, mid.y - rel.size.height / 2))
         }
-        // neighbour nodes + labels
+        // neighbour nodes + labels. Labels are pushed radially OUTWARD from the focus (A7 de-collision),
+        // so they fan out around the ring instead of stacking below crowded central nodes.
         ego.neighbours.forEachIndexed { i, nb ->
             val nc = nodeCenter(i + 1, w, h)
-            drawCircle(Importance.color(nb.concept.importance), radius(nb.concept.centrality, false), nc)
-            drawNodeLabel(measurer, nb.concept.name, nc, radius(nb.concept.centrality, false), labelColor)
+            val r = radius(nb.concept.centrality, false)
+            drawCircle(Importance.color(nb.concept.importance), r, nc)
+            drawNodeLabel(measurer, nb.concept.name, labelAnchor(nc, fc, r), labelColor)
         }
-        // focus node (on top)
-        drawCircle(Importance.color(ego.focus.importance), radius(ego.focus.centrality, true), fc)
-        drawCircle(Color.White.copy(alpha = 0.9f), radius(ego.focus.centrality, true), fc, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3f))
-        drawNodeLabel(measurer, ego.focus.name, fc, radius(ego.focus.centrality, true), labelColor, bold = true)
+        // focus node (on top) — its label sits just below it.
+        val fr = radius(ego.focus.centrality, true)
+        drawCircle(Importance.color(ego.focus.importance), fr, fc)
+        drawCircle(Color.White.copy(alpha = 0.9f), fr, fc, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3f))
+        drawNodeLabel(measurer, ego.focus.name, Offset(fc.x, fc.y + fr + 12f), labelColor, bold = true)
     }
 }
 
+/** Where a neighbour's label should be centred: outward from the focus, clear of the node circle. */
+private fun labelAnchor(node: Offset, focus: Offset, r: Float): Offset {
+    val dx = node.x - focus.x; val dy = node.y - focus.y
+    val d = kotlin.math.sqrt(dx * dx + dy * dy)
+    if (d < 1f) return Offset(node.x, node.y + r + 12f) // degenerate: fall back to "below"
+    val ux = dx / d; val uy = dy / d
+    return Offset(node.x + ux * (r + 12f), node.y + uy * (r + 12f))
+}
+
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawNodeLabel(
-    measurer: androidx.compose.ui.text.TextMeasurer, name: String, center: Offset, r: Float, color: Color, bold: Boolean = false,
+    measurer: androidx.compose.ui.text.TextMeasurer, name: String, anchor: Offset, color: Color, bold: Boolean = false,
 ) {
     val label = if (name.length > 22) name.take(20) + "…" else name
     val m = measurer.measure(label, style = TextStyle(fontSize = 11.sp, color = color,
         fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal))
-    drawText(m, topLeft = Offset(center.x - m.size.width / 2, center.y + r + 4f))
+    // Anchor is the label's CENTRE point.
+    drawText(m, topLeft = Offset(anchor.x - m.size.width / 2, anchor.y - m.size.height / 2))
 }
 
 @Composable

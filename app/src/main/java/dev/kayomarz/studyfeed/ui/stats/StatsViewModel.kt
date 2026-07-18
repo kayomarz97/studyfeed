@@ -3,8 +3,10 @@ package dev.kayomarz.studyfeed.ui.stats
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import dev.kayomarz.studyfeed.feed.FeedRepository
 import dev.kayomarz.studyfeed.pack.PackRegistry
 import dev.kayomarz.studyfeed.progress.ProgressDatabase
+import dev.kayomarz.studyfeed.progress.SettingsKeys
 import dev.kayomarz.studyfeed.stats.CurvePoint
 import dev.kayomarz.studyfeed.stats.GapItem
 import dev.kayomarz.studyfeed.stats.StatsRepository
@@ -16,6 +18,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
+import kotlin.math.ceil
 
 /**
  * Assembles the A6 Progress screen (BUILD_PROMPT §8 A6): streak / daily goal / XP, the mistake pile,
@@ -30,7 +34,8 @@ class StatsViewModel(app: Application) : AndroidViewModel(app) {
         val hasData: Boolean = false,      // any reviews yet? (fresh install shows an empty state)
         val streakDays: Int = 0,
         val reviewsToday: Int = 0,
-        val dailyGoal: Int = DAILY_GOAL,
+        /** Today's new-MCQ target = the A3 deadline pace (remaining new ÷ days left). 0 = none remaining. */
+        val dailyGoal: Int = 0,
         val xp: Int = 0,
         val accuracy: Double = 0.0,
         val unresolvedMistakes: Int = 0,
@@ -60,6 +65,7 @@ class StatsViewModel(app: Application) : AndroidViewModel(app) {
             val lapses = dao.totalLapses()
             val resolved = dao.resolvedMistakeCount()
             val unresolved = dao.unresolvedMistakeCount()
+            val deadlineStr = dao.setting(SettingsKeys.DEADLINE)
             pdb.close()
 
             val stats = StatsRepository.open(ProgressDatabase.fileFor(getApplication(), pack.examCode), pack.dbFile)
@@ -68,12 +74,21 @@ class StatsViewModel(app: Application) : AndroidViewModel(app) {
             val curve = stats?.forgettingCurve().orEmpty()
             stats?.close()
 
+            // Daily goal = the A3 deadline pace, not a fixed number (A7): remaining new MCQs ÷ days left.
+            val feedRepo = FeedRepository.open(ProgressDatabase.fileFor(getApplication(), pack.examCode), pack.dbFile)
+            val remainingNew = feedRepo?.remainingNewMcqs() ?: 0
+            feedRepo?.close()
+
             val days = timestamps.mapNotNull { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }.toHashSet()
             val today = LocalDate.now()
+            val deadline = deadlineStr?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            val daysLeft = deadline?.let { ChronoUnit.DAYS.between(today, it).coerceAtLeast(1) } ?: 56L
+            val dailyGoal = if (remainingNew <= 0) 0 else ceil(remainingNew / daysLeft.toDouble()).toInt()
             Ui(
                 loading = false, hasPack = true, hasData = totalReviews > 0,
                 streakDays = streak(days, today),
                 reviewsToday = timestamps.count { it.take(10) == today.toString() },
+                dailyGoal = dailyGoal,
                 xp = totalReviews * 10 + resolved * 25,
                 accuracy = if (totalReviews > 0) 1.0 - lapses.toDouble() / totalReviews else 0.0,
                 unresolvedMistakes = unresolved, resolvedMistakes = resolved,
@@ -90,6 +105,4 @@ class StatsViewModel(app: Application) : AndroidViewModel(app) {
         while (days.contains(d)) { n++; d = d.minusDays(1) }
         return n
     }
-
-    private companion object { const val DAILY_GOAL = 50 }
 }

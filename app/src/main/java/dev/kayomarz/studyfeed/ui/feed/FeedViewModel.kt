@@ -17,6 +17,7 @@ import dev.kayomarz.studyfeed.progress.ItemTag
 import dev.kayomarz.studyfeed.progress.Mistake
 import dev.kayomarz.studyfeed.progress.ProgressDatabase
 import dev.kayomarz.studyfeed.progress.Review
+import dev.kayomarz.studyfeed.progress.SettingsKeys
 import dev.kayomarz.studyfeed.progress.Star
 import io.github.openspacedrepetition.Rating as FsrsRating
 import kotlinx.coroutines.Dispatchers
@@ -59,7 +60,29 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
         val tags: List<PackDatabase.TagDef> = emptyList(),
         /** per-card star/tag state, keyed by (item_type, item_id); loaded lazily as cards appear. */
         val marks: Map<Pair<String, Long>, CardMarks> = emptyMap(),
+        /** The A7 study mode currently selected (drives the base query). */
+        val studyMode: StudyMode = StudyMode.MIXED,
     )
+
+    /**
+     * The A7 study modes (user backlog 2.5) — how the user wants to study, mapped onto the query:
+     * - [MIXED] the smart engine (due-led blend + deadline drip + variety) — the default.
+     * - [BY_SUBJECT] a structured, subject-grouped sweep.
+     * - [RECALL] active-recall only — MCQs + flashcards.
+     * - [SKIM] passive skim — reels + passages.
+     *
+     * Only MIXED runs the A3 engine (SMART + no filter); the others use the A2 SQL page path.
+     */
+    enum class StudyMode { MIXED, BY_SUBJECT, RECALL, SKIM }
+
+    private fun StudyMode.toQuery(): FeedQuery = when (this) {
+        StudyMode.MIXED -> FeedQuery(sort = FeedQuery.Sort.SMART, filter = FeedFilter())
+        StudyMode.BY_SUBJECT -> FeedQuery(sort = FeedQuery.Sort.SUBJECT, filter = FeedFilter())
+        StudyMode.RECALL -> FeedQuery(sort = FeedQuery.Sort.IMPORTANCE_DESC,
+            filter = FeedFilter(itemTypesIn = listOf("mcq", "flashcard")))
+        StudyMode.SKIM -> FeedQuery(sort = FeedQuery.Sort.IMPORTANCE_DESC,
+            filter = FeedFilter(itemTypesIn = listOf("reel", "blob")))
+    }
 
     /** A card's star + applied tags (progress-side state, not pack content). */
     data class CardMarks(val starred: Boolean = false, val tagKeys: Set<String> = emptySet())
@@ -71,7 +94,10 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
     private var loaded = 0
 
     // ---- A3 ordering engine -------------------------------------------------------------------------
-    private val engineConfig = FeedScheduler.Config()
+    /** Built from the user's Settings knobs (intensity → dueBurst/newRatioPct); re-read on reapply. */
+    private var engineConfig = FeedScheduler.Config()
+    /** A6 re-drill: correct this many times to resolve a mistake. Settings-tunable (A7). */
+    private var redrillN = DEFAULT_REDRILL_N
     private val engineStore = MemStore()
     private var scheduler: FeedScheduler? = null
     /** Serialises engine windows — [FeedScheduler] is stateful, so overlapping windows would race. */
@@ -104,6 +130,7 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
             ProgressDatabase.ensureExists(getApplication(), pack.examCode)
             progressDb = ProgressDatabase.open(getApplication(), pack.examCode)
             repo = FeedRepository.open(ProgressDatabase.fileFor(getApplication(), pack.examCode), pack.dbFile)
+            loadSettings()
             initEngine()
             (PackDatabase.open(pack.dbFile) as? PackDatabase.Result.Ok)?.pack
         }
@@ -133,6 +160,37 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setSort(sort: FeedQuery.Sort) = reload(_ui.value.query.copy(sort = sort))
     fun setFilter(filter: FeedFilter) = reload(_ui.value.query.copy(filter = filter))
+
+    /** Switch A7 study mode (Mixed / By subject / Recall / Skim) — resets the query to that mode's base. */
+    fun setStudyMode(mode: StudyMode) {
+        _ui.update { it.copy(studyMode = mode) }
+        reload(mode.toQuery())
+    }
+
+    /**
+     * Re-read the Settings knobs (deadline, re-drill N, feed intensity) and rebuild the engine, then
+     * reload. Called when the user returns from the Settings screen so a change takes effect immediately
+     * (this VM is activity-scoped and would otherwise keep the values it read at first open).
+     */
+    fun reapplySettings() = viewModelScope.launch {
+        if (repo == null) return@launch
+        withContext(Dispatchers.IO) {
+            loadSettings()
+            initEngine() // rebuilds the scheduler with the new config + re-reads the deadline setting
+        }
+        reload(_ui.value.query)
+    }
+
+    /** Read the A7 Settings knobs into [engineConfig] + [redrillN]; falls back to the built-in defaults. */
+    private suspend fun loadSettings() {
+        val d = dao
+        redrillN = d?.setting(SettingsKeys.REDRILL_N)?.toIntOrNull()?.coerceIn(1, 10) ?: DEFAULT_REDRILL_N
+        val defaults = FeedScheduler.Config()
+        engineConfig = defaults.copy(
+            newRatioPct = d?.setting(SettingsKeys.NEW_RATIO_PCT)?.toIntOrNull()?.coerceIn(5, 90) ?: defaults.newRatioPct,
+            dueBurst = d?.setting(SettingsKeys.DUE_BURST)?.toIntOrNull()?.coerceIn(10, 300) ?: defaults.dueBurst,
+        )
+    }
 
     /** Append the next window when the user is within [PREFETCH] of the end. */
     fun onReachedIndex(index: Int) {
@@ -192,9 +250,9 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Read `feed.deadline` from settings; default to today + 8 weeks on first run and persist it. */
     private suspend fun resolveDeadline(): LocalDate {
-        dao?.setting(DEADLINE_KEY)?.let { runCatching { return LocalDate.parse(it) } }
+        dao?.setting(SettingsKeys.DEADLINE)?.let { runCatching { return LocalDate.parse(it) } }
         val d = LocalDate.now().plusDays(engineConfig.defaultDeadlineDays.toLong())
-        dao?.putSetting(dev.kayomarz.studyfeed.progress.Setting(DEADLINE_KEY, d.toString()))
+        dao?.putSetting(dev.kayomarz.studyfeed.progress.Setting(SettingsKeys.DEADLINE, d.toString()))
         return d
     }
 
@@ -241,7 +299,7 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
     fun onMcqAnswered(card: FeedCard.Mcq, chosenIdx: Int, correct: Boolean) = viewModelScope.launch(Dispatchers.IO) {
         val d = dao ?: return@launch
         if (correct) {
-            d.advanceResolution("mcq", card.itemId, REDRILL_N)
+            d.advanceResolution("mcq", card.itemId, redrillN)
         } else {
             val now = Instant.now().toString()
             val reset = d.resetUnresolved("mcq", card.itemId, now, chosenIdx)
@@ -317,8 +375,7 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
         const val PAGE = 40
         const val PREFETCH = 10
         const val ENGINE_KEY = "engine"          // feed_state row holding the serialised engine state
-        const val DEADLINE_KEY = "feed.deadline" // settings row: the editable MCQ finish line (ISO date)
-        const val REDRILL_N = 3                  // A6: correct N times to resolve a mistake (A7-tunable)
+        const val DEFAULT_REDRILL_N = 3          // A6 default (A7-tunable via Settings; keys in SettingsKeys)
     }
 }
 

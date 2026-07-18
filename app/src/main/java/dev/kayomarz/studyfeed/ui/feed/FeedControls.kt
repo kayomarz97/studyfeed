@@ -99,6 +99,7 @@ private fun sortLabel(s: FeedQuery.Sort): String = when (s) {
     FeedQuery.Sort.IMPORTANCE_ASC -> "Importance ↑"
     FeedQuery.Sort.PRIORITY -> "Priority"
     FeedQuery.Sort.RANDOM -> "Random"
+    FeedQuery.Sort.SUBJECT -> "By subject"
 }
 
 @Composable

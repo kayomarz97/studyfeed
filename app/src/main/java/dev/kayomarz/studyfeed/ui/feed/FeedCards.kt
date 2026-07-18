@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,12 +14,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -37,10 +38,17 @@ import androidx.compose.ui.unit.sp
 import dev.kayomarz.studyfeed.feed.FeedCard
 
 /**
- * The five card composables (BUILD_PROMPT §8 A2) — one per item type the pack actually has (PATCH 04).
+ * The five card composables (BUILD_PROMPT §8 A2; **A7 redesign 2026-07-18**) — one per item type the pack
+ * actually has (PATCH 04).
  *
  * Each fills the pager page and scrolls internally if the content is tall (some MCQ stems + explanations
- * exceed a screen). The shared [CardHeader] rides every card. A figure, when attached, renders inline.
+ * exceed a screen). The shared [CardScaffold] rides every card. A figure, when attached, renders inline.
+ *
+ * **A7 layout (user choices):**
+ * - **Loud PYQ badge** + importance stars at the TOP; the **subject** sits quietly at the BOTTOM.
+ * - **Tags moved to the BOTTOM and only shown AFTER the answer is revealed** (thumb-reach, user 2.4).
+ * - **Tap ANYWHERE to reveal** (reel/interlink/flashcard/blob) — MCQ keeps option-tap (user 2.6).
+ * - **Flashcard vs reel are styled distinctly** — reel = "Did you know?" skim, flashcard = "Recall this".
  *
  * **Ratings flow OUT via callbacks, not written here.** These composables are pure UI: they report what
  * the user did ([Rating]) and the feed layer writes FSRS + progress off the main thread (D5: a write must
@@ -50,35 +58,65 @@ import dev.kayomarz.studyfeed.feed.FeedCard
 /** A user's self-assessment on a card. Maps to FSRS grades in the feed layer (A2 step 8). */
 enum class Rating { AGAIN, HARD, GOOD, EASY }
 
+/**
+ * The frame around every card.
+ *
+ * @param revealed whether the card has passed its reveal/answer stage — gates the bottom tag row and
+ *   turns off tap-anywhere so post-reveal controls (options, rating) stay interactive.
+ * @param onReveal if non-null, tapping ANYWHERE on the card while `!revealed` calls this (A7 tap-anywhere).
+ *   MCQ passes null (you tap an option, not "reveal").
+ */
 @Composable
 private fun CardScaffold(
     card: FeedCard,
     actions: CardActionsState,
+    revealed: Boolean,
     onImportanceClick: () -> Unit,
+    onReveal: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
+    // Tap-anywhere-to-reveal: a no-indication, full-card click, active ONLY before reveal. Child
+    // clickables (importance pill, star, the explicit Reveal/Mark-read button, MCQ options) hit first,
+    // so this only fires on the "empty" areas — exactly the affordance the user asked for (2.6).
+    val tapToReveal = if (!revealed && onReveal != null) {
+        Modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onReveal,
+        )
+    } else Modifier
+
     Column(
         Modifier
             .fillMaxSize()
-            // NOTE: no statusBarsPadding here — the FeedControls bar above the pager now owns the top
-            // inset (targetSdk 36 edge-to-edge). Adding it here too would double the top gap. The
-            // true-black background still bleeds full behind the status bar.
+            // NOTE: no statusBarsPadding here — the controls bar above the pager owns the top inset
+            // (targetSdk 36 edge-to-edge). The true-black background still bleeds full behind the bar.
+            .then(tapToReveal)
             .padding(20.dp)
             .verticalScroll(rememberScrollState()),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            CardHeader(card, onImportanceClick, Modifier.weight(1f))
+            CardTopRow(card, onImportanceClick, Modifier.weight(1f))
             StarButton(actions.starred, actions.onToggleStar)
         }
-        Spacer(Modifier.height(12.dp))
-        // One-tap tag chips from the pack's tag_defs (§8 A2). Applied/removed on tap, state from the DB.
-        if (actions.tags.isNotEmpty()) {
-            TagRow(actions)
-            Spacer(Modifier.height(8.dp))
-        }
+        Spacer(Modifier.height(16.dp))
         content()
+
+        // ── bottom band: quiet subject, then the tag row (only after the answer is revealed) ──────────
+        Spacer(Modifier.height(24.dp))
+        SubjectFooter(card)
+        if (revealed && actions.tags.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            TagRow(actions)
+        }
         Spacer(Modifier.height(40.dp)) // breathing room above the pager edge
     }
+}
+
+/** A small uppercase eyebrow label — the type/mode cue at the top of a card body. */
+@Composable
+private fun Eyebrow(text: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+    Text(text, fontSize = 11.sp, letterSpacing = 1.sp, color = color, fontWeight = FontWeight.SemiBold)
 }
 
 /** Star + tag state and callbacks passed down to a card. Progress-side, never pack content. */
@@ -134,7 +172,7 @@ private fun TagRow(actions: CardActionsState) {
 /**
  * Best-of-five. Pick → the answer is **revealed inline** (§8 A2): the chosen option and the correct one
  * are marked, the explanation and per-distractor "why wrong" appear, and the rating buttons unlock.
- * A wrong pick is reported so the feed can write a `mistakes` row.
+ * A wrong pick is reported so the feed can write a `mistakes` row. **No tap-anywhere** — you tap an option.
  */
 @Composable
 fun McqCard(
@@ -147,7 +185,7 @@ fun McqCard(
     var chosen by remember(card.itemId) { mutableStateOf<Int?>(null) }
     val revealed = chosen != null
 
-    CardScaffold(card, actions, onImportanceClick) {
+    CardScaffold(card, actions, revealed, onImportanceClick, onReveal = null) {
         if (card.keyConflict) {
             KeyDisputedBanner(card.keyConflictNote)
             Spacer(Modifier.height(12.dp))
@@ -257,7 +295,11 @@ private fun KeyDisputedBanner(note: String?) {
 
 // ── Flashcard ──────────────────────────────────────────────────────────────────────────────────────
 
-/** Tap to flip front→back; then a 4-button FSRS rating (§8 A2). */
+/**
+ * **Active recall** (A7 distinct styling): a "RECALL THIS" prompt you try to answer in your head, then
+ * tap anywhere to reveal the back and rate with the 4-button FSRS scale. The eyebrow + rating scale mark
+ * it as *recall*, distinct from a reel's passive skim.
+ */
 @Composable
 fun FlashcardCard(
     card: FeedCard.Flashcard,
@@ -266,34 +308,36 @@ fun FlashcardCard(
     onRate: (Rating) -> Unit,
 ) {
     var flipped by remember(card.itemId) { mutableStateOf(false) }
-    CardScaffold(card, actions, onImportanceClick) {
-        Text(if (flipped) "ANSWER" else "TAP TO REVEAL", fontSize = 11.sp, letterSpacing = 1.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    CardScaffold(card, actions, revealed = flipped, onImportanceClick, onReveal = { flipped = true }) {
+        Eyebrow("RECALL THIS", color = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(12.dp))
-        Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                .clickable { flipped = !flipped }.padding(vertical = 8.dp),
-        ) {
-            MarkdownText(card.frontMd, style = MaterialTheme.typography.titleMedium)
-            card.figure?.let { Spacer(Modifier.height(16.dp)); FigureImage(it) }
-            AnimatedVisibility(flipped) {
-                Column {
-                    Spacer(Modifier.height(16.dp))
-                    androidx.compose.material3.HorizontalDivider()
-                    Spacer(Modifier.height(16.dp))
-                    MarkdownText(card.backMd, style = MaterialTheme.typography.bodyLarge)
-                }
-            }
+        MarkdownText(card.frontMd, style = MaterialTheme.typography.titleMedium)
+        card.figure?.let { Spacer(Modifier.height(16.dp)); FigureImage(it) }
+        if (!flipped) {
+            Spacer(Modifier.height(16.dp))
+            Text("Tap anywhere to reveal the answer", fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         AnimatedVisibility(flipped) {
-            Column { Spacer(Modifier.height(24.dp)); RatingBar(onRate) }
+            Column {
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(16.dp))
+                MarkdownText(card.backMd, style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(24.dp))
+                RatingBar(onRate)
+            }
         }
     }
 }
 
 // ── Reel ───────────────────────────────────────────────────────────────────────────────────────────
 
-/** Hook → tap to reveal the detail → got-it/shaky (§8 A2). Two-button rating: reels are lightweight. */
+/**
+ * **Passive skim** (A7 distinct styling): a "DID YOU KNOW?" one-hook fact you tap anywhere to expand,
+ * then a light got-it/shaky. The eyebrow + two-button rating mark it as *exposure*, not active recall —
+ * the difference the user asked us to make obvious (backlog 2.5).
+ */
 @Composable
 fun ReelCard(
     card: FeedCard.Reel,
@@ -302,12 +346,15 @@ fun ReelCard(
     onRate: (Rating) -> Unit,
 ) {
     var revealed by remember(card.itemId) { mutableStateOf(false) }
-    CardScaffold(card, actions, onImportanceClick) {
+    CardScaffold(card, actions, revealed, onImportanceClick, onReveal = { revealed = true }) {
+        Eyebrow("DID YOU KNOW?", color = MaterialTheme.colorScheme.tertiary)
+        Spacer(Modifier.height(12.dp))
         MarkdownText(card.hookMd, style = MaterialTheme.typography.headlineSmall)
         card.figure?.let { Spacer(Modifier.height(16.dp)); FigureImage(it) }
         if (!revealed) {
-            Spacer(Modifier.height(24.dp))
-            OutlinedButton(onClick = { revealed = true }) { Text("Reveal") }
+            Spacer(Modifier.height(16.dp))
+            Text("Tap anywhere to reveal", fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         AnimatedVisibility(revealed) {
             Column {
@@ -329,11 +376,8 @@ fun ReelCard(
  * A passage to read, then its quiz-back (§8 A2 / Acceptance 7).
  *
  * **Scope boundary:** [onRead] records the read + schedules the re-read (blob_reads, done in the feed
- * layer). §8 A2 also says the quiz-back should appear "a few cards later" and the passage should
- * "resurface next session" — that **spaced insertion into the feed stream is A3's ordering job**, not a
- * card's. So A2 presents the quiz-back on the same card right after reading (a real, testable quiz on
- * the pack's `blob_quiz` data); A3 later moves it to the correct spaced position. A blob with no
- * quiz-back in the pack just shows "Mark read".
+ * layer). A3's ordering engine consumes `reread_due` to place the passage back in the feed. Tap anywhere
+ * (A7) marks it read.
  */
 @Composable
 fun BlobCard(
@@ -343,7 +387,10 @@ fun BlobCard(
     onRead: () -> Unit,
 ) {
     var read by remember(card.itemId) { mutableStateOf(false) }
-    CardScaffold(card, actions, onImportanceClick) {
+    CardScaffold(card, actions, revealed = read, onImportanceClick,
+        onReveal = { read = true; onRead() }) {
+        Eyebrow("PASSAGE")
+        Spacer(Modifier.height(8.dp))
         card.title?.takeIf { it.isNotBlank() }?.let {
             Text(it, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
@@ -358,10 +405,9 @@ fun BlobCard(
         if (!read) {
             Button(onClick = { read = true; onRead() }) { Text("Mark read") }
         } else if (card.quiz != null) {
-            androidx.compose.material3.HorizontalDivider()
+            HorizontalDivider()
             Spacer(Modifier.height(16.dp))
-            Text("QUICK CHECK", fontSize = 11.sp, letterSpacing = 1.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Eyebrow("QUICK CHECK")
             Spacer(Modifier.height(8.dp))
             BlobQuizBack(card.quiz!!)
         } else {
@@ -398,7 +444,7 @@ private fun BlobQuizBack(quiz: FeedCard.BlobQuiz) {
 
 // ── Interlink ────────────────────────────────────────────────────────────────────────────────────────
 
-/** A concept-link question — reveal the answer, then rate (§8 A2 / A5's "quiz me on these links"). */
+/** A concept-link question — tap anywhere to reveal the answer, then rate (§8 A2 / A5's "quiz me"). */
 @Composable
 fun InterlinkCard(
     card: FeedCard.Interlink,
@@ -407,14 +453,14 @@ fun InterlinkCard(
     onRate: (Rating) -> Unit,
 ) {
     var revealed by remember(card.itemId) { mutableStateOf(false) }
-    CardScaffold(card, actions, onImportanceClick) {
-        Text("CONNECTION", fontSize = 11.sp, letterSpacing = 1.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    CardScaffold(card, actions, revealed, onImportanceClick, onReveal = { revealed = true }) {
+        Eyebrow("CONNECTION")
         Spacer(Modifier.height(12.dp))
         MarkdownText(card.questionMd, style = MaterialTheme.typography.titleMedium)
         if (!revealed) {
-            Spacer(Modifier.height(24.dp))
-            OutlinedButton(onClick = { revealed = true }) { Text("Reveal") }
+            Spacer(Modifier.height(16.dp))
+            Text("Tap anywhere to reveal", fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         AnimatedVisibility(revealed) {
             Column {
