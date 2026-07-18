@@ -6,7 +6,7 @@ questions until the Fable cohesiveness walkthrough finishes, then ask ONE consol
 
 ## A. Bugs (no design decision — just fix)
 - [x] **Cloze flashcards leaked the answer on the front** — FIXED, committed `eb7d415` (`ui/feed/Cloze.kt`);
-  verified on emulator ("HLA-[ …… ]" → reveal "HLA-DR4").
+  verified on emulator (the cloze answer is blanked "[ …… ]", then filled in on reveal).
 - [x] **Blob quiz-backs: correct option ~always "A"** (index-0 89%) — FIXED, committed `eb7d415`
   (`FeedRepository.shuffleOptions`, deterministic per blob).
 - [x] **Android back gesture/button did nothing** (custom `when`-router had no back stack, so back exited

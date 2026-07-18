@@ -4,10 +4,10 @@ package dev.kayomarz.studyfeed.ui.feed
  * Anki-style **cloze deletion** for flashcards (A7 fix, 2026-07-18).
  *
  * ~54% of the pack's flashcards are cloze (`flashcards.is_cloze = 1`): their `front_md` embeds the answer
- * inside `{{c1::answer}}` (optionally `{{c1::answer::hint}}`) markers — e.g.
- * `"Rheumatoid arthritis is most strongly associated with HLA-{{c1::DR4}}."`. The card renderer treats
- * `{` `}` as literal (PATCH 04), so before this fix it printed the **answer and the raw markers** on the
- * front — the "the answer is coming in the flashcard itself" bug.
+ * inside `{{c1::answer}}` (optionally `{{c1::answer::hint}}`) markers — e.g. a synthetic
+ * `"The widget bonds to the FOO-{{c1::BARBAZ}} rail."`. The card renderer treats `{` `}` as literal
+ * (PATCH 04), so before this fix it printed the **answer and the raw markers** on the front — the "the
+ * answer is coming in the flashcard itself" bug.
  *
  * So for a cloze card we transform the front twice:
  * - [mask] — replace each cloze span with a blank, shown BEFORE reveal (the question the user answers).

@@ -1416,7 +1416,8 @@ Two bugs, both root-caused from the real pack DB (`compiler/dist/pack_MRCP_PART1
   the answer inside Anki `{{c1::answer}}` markers in `front_md`; the card renderer treats `{`/`}` literal
   (PATCH 04), so it printed the answer + raw markers. Fix: `ui/feed/Cloze.kt` — `mask()` blanks the answer
   on the question side (`[ …… ]`), `reveal()` fills it in; `FlashcardCard` uses it (cloze cards don't also
-  show back_md — it'd repeat). **Verified on emulator:** front shows `HLA-[ …… ]`, reveal → `HLA-DR4`.
+  show back_md — it'd repeat). **Verified on emulator:** the cloze answer is blanked (`[ …… ]`) on the
+  question side and filled back in on reveal.
 - **Blob quiz-backs: correct option almost always "A".** `blob_quizzes.correct_idx` is **index-0 89%** of
   the time (2674/2997). MCQs are fine (uniform A–E). Fix: `FeedRepository.shuffleOptions` — deterministic
   per-blob shuffle (seed = blob id → stable per card, varied across), remaps `correct_idx`.
