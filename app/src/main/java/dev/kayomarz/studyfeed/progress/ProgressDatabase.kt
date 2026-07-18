@@ -1,6 +1,7 @@
 package dev.kayomarz.studyfeed.progress
 
 import android.content.Context
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -39,8 +40,9 @@ import java.io.File
     entities = [
         FsrsCard::class, Review::class, Mistake::class, Star::class, ItemTag::class,
         SubjectMastery::class, StudySession::class, BlobRead::class, FeedState::class, Setting::class,
+        McqAttempt::class, LineMark::class, Deck::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false, // migrations are hand-written + tested (MigrationTest); no schema-JSON needed.
 )
 abstract class ProgressDatabase : RoomDatabase() {
@@ -58,6 +60,48 @@ abstract class ProgressDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE mistakes ADD COLUMN resolved_count INTEGER NOT NULL DEFAULT 0")
             }
         }
+
+        /**
+         * v2 → v3 (A7 cycle 3): the progress features of this cycle, all **additive** — no column is
+         * dropped or repurposed, so a re-import still never wipes progress.
+         *
+         * - `mcq_attempts`: one row per MCQ answer (correct 0/1 + denormalised subject), so accuracy has
+         *   a real denominator (before this only *wrong* answers were stored) — powers subject accuracy
+         *   and accuracy-over-time.
+         * - `line_marks`: a user's per-line star/highlight inside a topic dossier, anchored to the topic's
+         *   `stable_key` + a hash of the line (survives a pack rebuild, §5j).
+         * - `decks`: a named saved filter (custom decks / P4).
+         * - `sessions` gains `name` / `config_json` / `cursor` / `updated` / `archived` for resumable,
+         *   renamable named study sessions (P2). The original columns are untouched.
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS mcq_attempts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        item_id INTEGER NOT NULL, subject_id INTEGER,
+                        correct INTEGER NOT NULL, ts TEXT NOT NULL)""".trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_mcq_attempts_ts ON mcq_attempts(ts)")
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS line_marks (
+                        topic_key TEXT NOT NULL, section_ord INTEGER NOT NULL, line_hash TEXT NOT NULL,
+                        kind TEXT NOT NULL, ts TEXT NOT NULL,
+                        PRIMARY KEY (topic_key, section_ord, line_hash))""".trimIndent()
+                )
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS decks (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL, config_json TEXT NOT NULL, ts TEXT NOT NULL)""".trimIndent()
+                )
+                // sessions: additive columns (the table already exists from v1).
+                db.execSQL("ALTER TABLE sessions ADD COLUMN name TEXT")
+                db.execSQL("ALTER TABLE sessions ADD COLUMN config_json TEXT")
+                db.execSQL("ALTER TABLE sessions ADD COLUMN cursor INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE sessions ADD COLUMN updated TEXT")
+                db.execSQL("ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+            }
+        }
         /**
          * Opens (creating on first use) the progress DB for [examCode].
          *
@@ -68,7 +112,7 @@ abstract class ProgressDatabase : RoomDatabase() {
          */
         fun open(context: Context, examCode: String): ProgressDatabase =
             Room.databaseBuilder(context, ProgressDatabase::class.java, fileName(examCode))
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
 
         /**
@@ -161,7 +205,12 @@ data class SubjectMastery(
     val updated: String?,
 )
 
-/** `sessions` in the spec; named StudySession in Kotlin — `Session` is overloaded to the point of noise. */
+/**
+ * `sessions` in the spec; named StudySession in Kotlin — `Session` is overloaded to the point of noise.
+ * A7 cycle 3 (P2) grows it into a **named, resumable study session**: [name] (auto → editable),
+ * [config_json] (the picked filters/mode), [cursor] (resume position), [updated], [archived].
+ * The original v1 columns are untouched.
+ */
 @Entity(tableName = "sessions")
 data class StudySession(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -170,6 +219,52 @@ data class StudySession(
     val ended: String?,
     val seen: Int?,
     val correct: Int?,
+    val name: String? = null,
+    val config_json: String? = null,
+    // defaultValue matches the migration's `DEFAULT 0`, so a fresh-install schema is byte-identical to a
+    // migrated one (Room tolerates a mismatch, but keeping them equal removes a real footgun).
+    @ColumnInfo(defaultValue = "0") val cursor: Int = 0,
+    val updated: String? = null,
+    @ColumnInfo(defaultValue = "0") val archived: Int = 0,
+)
+
+/**
+ * One MCQ answer (A7 cycle 3): [correct] 0/1 and the [subject_id] denormalised at answer time (the
+ * pack attributes a subject to some MCQs; null otherwise). This is the accuracy **denominator** the
+ * old code lacked — before this, only *wrong* answers were stored (as `mistakes`), so "% correct" had
+ * no base. Powers subject accuracy and accuracy-over-time. Append-only.
+ */
+@Entity(tableName = "mcq_attempts")
+data class McqAttempt(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val item_id: Long,
+    val subject_id: Long?,
+    val correct: Int,
+    val ts: String,
+)
+
+/**
+ * A user's per-line mark inside a topic dossier (A7 cycle 3, P3). Anchored to the topic's content
+ * [topic_key] (`topic_pages.stable_key`) + a [line_hash] of the normalised line — NOT a character
+ * offset — so a rebuilt/re-imported pack keeps the mark attached even if the body reflows slightly.
+ * [kind] = `star` | `highlight`.
+ */
+@Entity(tableName = "line_marks", primaryKeys = ["topic_key", "section_ord", "line_hash"])
+data class LineMark(
+    val topic_key: String,
+    val section_ord: Int,
+    val line_hash: String,
+    val kind: String,
+    val ts: String,
+)
+
+/** A named saved filter — a custom deck (A7 cycle 3, P4). [config_json] is a serialised FeedFilter. */
+@Entity(tableName = "decks")
+data class Deck(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val config_json: String,
+    val ts: String,
 )
 
 @Entity(tableName = "blob_reads")
@@ -225,6 +320,10 @@ interface ProgressDao {
     /** A wrong MCQ answer (§8 A2 → A6's ledger). Written the moment the user picks a wrong option. */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMistake(mistake: Mistake)
+
+    /** A7 cycle 3: log an MCQ answer (right or wrong) so accuracy has a real denominator. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMcqAttempt(attempt: McqAttempt)
 
     @Query("DELETE FROM stars WHERE item_type = :type AND item_id = :id")
     suspend fun unstar(type: String, id: Long)
@@ -291,4 +390,57 @@ interface ProgressDao {
     /** Lapses (rated Again = 1) — the accuracy denominator's failures. */
     @Query("SELECT COUNT(*) FROM reviews WHERE rating = 1")
     suspend fun totalLapses(): Int
+
+    // ---- A7 cycle 3: named study sessions (P2) -----------------------------------------------------
+
+    /** Create a session; returns its new row id (used as the resume key). */
+    @Insert
+    suspend fun insertSession(session: StudySession): Long
+
+    /** Live sessions, most-recently-touched first (the Home "Your sessions" list). */
+    @Query("SELECT * FROM sessions WHERE archived = 0 ORDER BY updated DESC, id DESC")
+    suspend fun activeSessions(): List<StudySession>
+
+    @Query("SELECT * FROM sessions WHERE id = :id")
+    suspend fun sessionById(id: Long): StudySession?
+
+    /** Persist a session's resume position (cursor) + seen count as the user studies it. */
+    @Query("UPDATE sessions SET cursor = :cursor, seen = :seen, updated = :updated WHERE id = :id")
+    suspend fun updateSessionProgress(id: Long, cursor: Int, seen: Int, updated: String)
+
+    @Query("UPDATE sessions SET name = :name, updated = :updated WHERE id = :id")
+    suspend fun renameSession(id: Long, name: String, updated: String)
+
+    @Query("UPDATE sessions SET archived = 1, updated = :updated WHERE id = :id")
+    suspend fun archiveSession(id: Long, updated: String)
+
+    // ---- A7 cycle 3: custom decks (P4) --------------------------------------------------------------
+
+    @Insert
+    suspend fun insertDeck(deck: Deck): Long
+
+    @Query("SELECT * FROM decks ORDER BY ts DESC")
+    suspend fun decks(): List<Deck>
+
+    @Query("DELETE FROM decks WHERE id = :id")
+    suspend fun deleteDeck(id: Long)
+
+    // ---- A7 cycle 3: topic + line marks in the Library (P3) ----------------------------------------
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun addLineMark(mark: LineMark)
+
+    @Query("DELETE FROM line_marks WHERE topic_key = :topicKey AND section_ord = :sectionOrd AND line_hash = :lineHash")
+    suspend fun removeLineMark(topicKey: String, sectionOrd: Int, lineHash: String)
+
+    @Query("SELECT * FROM line_marks WHERE topic_key = :topicKey")
+    suspend fun lineMarks(topicKey: String): List<LineMark>
+
+    /** Ids of starred items of a type — e.g. the "★ Starred" topics filter in the Library. */
+    @Query("SELECT item_id FROM stars WHERE item_type = :type")
+    suspend fun starredIds(type: String): List<Long>
+
+    /** Leech detection (P4): items lapsed at least [n] times — the cards you keep failing. */
+    @Query("SELECT COUNT(*) FROM fsrs_cards WHERE lapses >= :n")
+    suspend fun leechCount(n: Int): Int
 }

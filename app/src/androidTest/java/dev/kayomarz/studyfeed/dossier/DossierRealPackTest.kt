@@ -29,7 +29,7 @@ class DossierRealPackTest {
         val r = open(); assumeTrue("real pack not pushed — skipping", r != null)
         r!!.use {
             assertTrue("the pack ships dossiers", it.size() in 1..20000)
-            val top = it.topDossiers(50)
+            val top = it.list("", limit = 50)
             assertEquals(50, top.size)
             assertTrue("importance non-increasing", top.zipWithNext().all { (a, b) -> a.importance >= b.importance })
             assertTrue("every row has a title", top.all { row -> row.title.isNotBlank() })
@@ -40,7 +40,7 @@ class DossierRealPackTest {
         val r = open(); assumeTrue("real pack not pushed — skipping", r != null)
         r!!.use {
             // A very common clinical substring hits many pages via body text (no content asserted).
-            val hits = it.search("acute", limit = 40)
+            val hits = it.list("acute", limit = 40)
             assertTrue("a common term finds pages", hits.isNotEmpty())
             // Any page whose TITLE contains the term must sort ahead of a body-only hit.
             val firstBodyOnly = hits.indexOfFirst { d -> !d.title.contains("acute", ignoreCase = true) }
@@ -49,7 +49,7 @@ class DossierRealPackTest {
                 assertTrue("name/alias hits rank before body-only hits", lastNameHit < firstBodyOnly ||
                     hits.take(firstBodyOnly).all { d -> d.title.contains("acute", ignoreCase = true) })
             // Gibberish matches nothing.
-            assertTrue("nonsense query is empty", it.search("zzqxzzqx", limit = 10).isEmpty())
+            assertTrue("nonsense query is empty", it.list("zzqxzzqx", limit = 10).isEmpty())
         }
     }
 
@@ -58,7 +58,7 @@ class DossierRealPackTest {
         r!!.use {
             // Find a dossier that actually carries figures + related MCQs (most do).
             var dossier: Dossier? = null
-            for (row in it.topDossiers(80)) {
+            for (row in it.list("", limit = 80)) {
                 val d = it.loadDossier(row.topicPageId) ?: continue
                 if (d.figures.isNotEmpty() && d.relatedMcqs.isNotEmpty()) { dossier = d; break }
             }
@@ -80,7 +80,7 @@ class DossierRealPackTest {
         val r = open(); assumeTrue("real pack not pushed — skipping", r != null)
         r!!.use {
             var refId: Long? = null
-            for (row in it.topDossiers(80)) {
+            for (row in it.list("", limit = 80)) {
                 val d = it.loadDossier(row.topicPageId) ?: continue
                 d.relatedMcqs.firstOrNull()?.let { rel -> refId = rel.refId }
                 if (refId != null) break

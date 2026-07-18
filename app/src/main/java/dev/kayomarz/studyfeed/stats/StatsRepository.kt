@@ -4,14 +4,19 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteException
 import java.io.Closeable
 import java.io.File
-import kotlin.math.min
 import kotlin.math.pow
 
 /**
- * Cross-DB analytics for A6 (BUILD_PROMPT §8 A6). Mastery and the forgetting curve need the user's FSRS
- * state (progress) joined to each item's **subject + importance** (pack), so this opens progress
- * READ-ONLY with the pack `ATTACH`ed — the same seam as [dev.kayomarz.studyfeed.feed.FeedRepository]
- * (per-connection ATTACH, never Room's pool; D4). Pure reads; Room still owns every write.
+ * Cross-DB analytics for the Progress screen (A6, rebuilt data-rich in A7 cycle 3). Coverage, accuracy,
+ * activity, the forgetting curve and the due forecast need the user's own progress joined to each item's
+ * subject/importance/PYQ (pack), so this opens progress READ-ONLY with the pack `ATTACH`ed — the same
+ * seam as [dev.kayomarz.studyfeed.feed.FeedRepository] (per-connection ATTACH, never Room's pool; D4).
+ * Pure reads; Room still owns every write.
+ *
+ * **Subject attribution reality (measured on the real pack):** only MCQs carry a subject, and only ~57%
+ * of them. Flashcards/reels/passages/interlinks are subject-less in this pack. So "coverage & accuracy
+ * by subject" is measured on **MCQs**, with a clearly-labelled "Unattributed" bucket for subject-less
+ * questions. Other types are counted by TYPE on Home, never mis-attributed to a subject.
  */
 class StatsRepository private constructor(
     private val db: SQLiteDatabase,
@@ -40,33 +45,84 @@ class StatsRepository private constructor(
         private const val DECAY = -0.5
     }
 
-    /** Per-subject mastery: mean FSRS stability + accuracy, over items the user has actually studied. */
-    fun subjectMastery(): List<SubjectStat> {
-        val stab = HashMap<Long, Pair<Double, Int>>()   // subject -> (meanStability, cardCount)
-        db.rawQuery(
-            """SELECT f.subject_id, AVG(c.stability), COUNT(c.item_id)
-               FROM main.fsrs_cards c
-               JOIN $PACK.feed_items f ON f.item_type = c.item_type AND f.id = c.item_id
-               WHERE c.stability IS NOT NULL AND f.subject_id IS NOT NULL
-               GROUP BY f.subject_id""".trimIndent(), null,
-        ).use { c -> while (c.moveToNext()) stab[c.getLong(0)] = c.getDouble(1) to c.getInt(2) }
+    /** Overall MCQ accuracy: (answered, correct) across all logged attempts. */
+    fun mcqTotals(): AccTotals =
+        db.rawQuery("SELECT COUNT(*), COALESCE(SUM(correct),0) FROM main.mcq_attempts", null).use { c ->
+            if (c.moveToFirst()) AccTotals(c.getInt(0), c.getInt(1)) else AccTotals(0, 0)
+        }
 
-        val acc = HashMap<Long, Pair<Int, Int>>()       // subject -> (attempts, lapses)
+    /**
+     * Per-subject **coverage + accuracy over MCQs**: for every subject, how many of its questions have
+     * been seen (`done`/`total`) and the % answered correctly. Subject-less questions collapse into one
+     * "Unattributed" row (kept, never dropped — the old code silently discarded them).
+     */
+    fun subjectCoverage(): List<SubjectCoverage> {
+        val total = LinkedHashMap<Long?, Int>()
         db.rawQuery(
-            """SELECT f.subject_id, COUNT(*), SUM(CASE WHEN r.rating = 1 THEN 1 ELSE 0 END)
-               FROM main.reviews r
-               JOIN $PACK.feed_items f ON f.item_type = r.item_type AND f.id = r.item_id
-               WHERE f.subject_id IS NOT NULL
-               GROUP BY f.subject_id""".trimIndent(), null,
-        ).use { c -> while (c.moveToNext()) acc[c.getLong(0)] = c.getInt(1) to c.getInt(2) }
+            "SELECT subject_id, COUNT(*) FROM $PACK.feed_items WHERE item_type='mcq' GROUP BY subject_id",
+            null,
+        ).use { c -> while (c.moveToNext()) total[if (c.isNull(0)) null else c.getLong(0)] = c.getInt(1) }
 
-        val subjects = (stab.keys + acc.keys).toSet()
-        return subjects.map { sid ->
-            val (meanStab, cards) = stab[sid] ?: (0.0 to 0)
-            val (attempts, lapses) = acc[sid] ?: (0 to 0)
-            SubjectStat(sid, subjectNames[sid] ?: "—", meanStab, cards, attempts, lapses)
-        }.sortedByDescending { it.mastery }
+        val done = HashMap<Long?, Int>()
+        db.rawQuery(
+            """SELECT f.subject_id, COUNT(*)
+               FROM main.fsrs_cards cr
+               JOIN $PACK.feed_items f ON f.item_type = cr.item_type AND f.id = cr.item_id
+               WHERE f.item_type = 'mcq' GROUP BY f.subject_id""".trimIndent(), null,
+        ).use { c -> while (c.moveToNext()) done[if (c.isNull(0)) null else c.getLong(0)] = c.getInt(1) }
+
+        val att = HashMap<Long?, Pair<Int, Int>>() // subject -> (answered, correct)
+        db.rawQuery(
+            "SELECT subject_id, COUNT(*), COALESCE(SUM(correct),0) FROM main.mcq_attempts GROUP BY subject_id",
+            null,
+        ).use { c -> while (c.moveToNext()) att[if (c.isNull(0)) null else c.getLong(0)] = c.getInt(1) to c.getInt(2) }
+
+        return total.map { (sid, tot) ->
+            val (answered, correct) = att[sid] ?: (0 to 0)
+            SubjectCoverage(sid, sid?.let { subjectNames[it] } ?: "Unattributed",
+                tot, done[sid] ?: 0, answered, correct)
+        }.sortedWith(compareBy<SubjectCoverage> { it.subjectId == null }.thenByDescending { it.done }
+            .thenByDescending { it.total })
     }
+
+    /** Reviews per calendar day since [sinceIso] (date → count) — the activity heatmap source. */
+    fun activityCounts(sinceIso: String): Map<String, Int> {
+        val m = HashMap<String, Int>()
+        db.rawQuery("SELECT substr(ts,1,10) AS d, COUNT(*) FROM main.reviews WHERE ts >= ? GROUP BY d",
+            arrayOf(sinceIso)).use { c -> while (c.moveToNext()) m[c.getString(0)] = c.getInt(1) }
+        return m
+    }
+
+    /** Daily MCQ attempts + corrects since [sinceIso] — the VM buckets these into weekly accuracy. */
+    fun accuracyDaily(sinceIso: String): List<DayAcc> {
+        val out = ArrayList<DayAcc>()
+        db.rawQuery(
+            """SELECT substr(ts,1,10) AS d, COUNT(*), COALESCE(SUM(correct),0)
+               FROM main.mcq_attempts WHERE ts >= ? GROUP BY d ORDER BY d""".trimIndent(),
+            arrayOf(sinceIso),
+        ).use { c -> while (c.moveToNext()) out += DayAcc(c.getString(0), c.getInt(1), c.getInt(2)) }
+        return out
+    }
+
+    /** Every FSRS due-date bucket (date → count). The VM slices this into overdue + the next N days. */
+    fun dueBuckets(): Map<String, Int> {
+        val m = HashMap<String, Int>()
+        db.rawQuery("SELECT substr(due,1,10) AS d, COUNT(*) FROM main.fsrs_cards WHERE due IS NOT NULL GROUP BY d",
+            null).use { c -> while (c.moveToNext()) m[c.getString(0)] = c.getInt(1) }
+        return m
+    }
+
+    /** High-yield core coverage: 5★ items done/total and PYQ items done/total (the two rings). */
+    fun coreCoverage(): CoreCoverage = CoreCoverage(
+        star5Done = countOf(
+            """SELECT COUNT(*) FROM main.fsrs_cards cr
+               JOIN $PACK.feed_items f ON f.item_type=cr.item_type AND f.id=cr.item_id WHERE f.importance=5"""),
+        star5Total = countOf("SELECT COUNT(*) FROM $PACK.feed_items WHERE importance=5"),
+        pyqDone = countOf(
+            """SELECT COUNT(*) FROM main.fsrs_cards cr
+               JOIN $PACK.feed_items f ON f.item_type=cr.item_type AND f.id=cr.item_id WHERE f.is_pyq=1"""),
+        pyqTotal = countOf("SELECT COUNT(*) FROM $PACK.feed_items WHERE is_pyq=1"),
+    )
 
     /** 5★ items with an unresolved mistake — "high-importance gaps you keep failing". */
     fun highImportanceGaps(limit: Int = 30): List<GapItem> {
@@ -100,18 +156,32 @@ class StatsRepository private constructor(
         }
     }
 
+    private fun countOf(sql: String): Int =
+        try { db.rawQuery(sql, null).use { if (it.moveToFirst()) it.getInt(0) else 0 } }
+        catch (e: SQLiteException) { 0 }
+
     override fun close() { runCatching { db.close() } }
 }
 
-/** Per-subject mastery — stability + accuracy blended into a 0..1 bar. */
-data class SubjectStat(
-    val subjectId: Long, val name: String, val meanStability: Double,
-    val cards: Int, val attempts: Int, val lapses: Int,
-) {
-    val accuracy: Double get() = if (attempts > 0) 1.0 - lapses.toDouble() / attempts else 0.0
-    /** 0..1: half accuracy, half FSRS maturity (stability normalised to ~30 days = "mature"). */
-    val mastery: Double get() = 0.5 * accuracy + 0.5 * min(1.0, meanStability / 30.0)
+/** Overall MCQ tallies. */
+data class AccTotals(val answered: Int, val correct: Int) {
+    val accuracy: Double? get() = if (answered > 0) correct.toDouble() / answered else null
 }
+
+/** Per-subject coverage + accuracy over MCQs. `subjectId == null` ⇒ the "Unattributed" bucket. */
+data class SubjectCoverage(
+    val subjectId: Long?, val name: String,
+    val total: Int, val done: Int, val answered: Int, val correct: Int,
+) {
+    val coverage: Double get() = if (total > 0) done.toDouble() / total else 0.0
+    val accuracy: Double? get() = if (answered > 0) correct.toDouble() / answered else null
+}
+
+/** One day's MCQ attempts (for weekly-accuracy bucketing). */
+data class DayAcc(val date: String, val attempts: Int, val correct: Int)
+
+/** High-yield core coverage: 5★ and PYQ, each done/total. */
+data class CoreCoverage(val star5Done: Int, val star5Total: Int, val pyqDone: Int, val pyqTotal: Int)
 
 /** A 5★ item the user keeps failing. */
 data class GapItem(val itemType: String, val itemId: Long, val importance: Int, val subjectName: String?)

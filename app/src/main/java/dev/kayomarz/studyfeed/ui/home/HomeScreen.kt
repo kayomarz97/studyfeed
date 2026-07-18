@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -17,13 +18,22 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,7 +44,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.kayomarz.studyfeed.feed.FeedRepository
-import dev.kayomarz.studyfeed.stats.SubjectStat
+import dev.kayomarz.studyfeed.pack.PackDatabase
+import dev.kayomarz.studyfeed.progress.StudySession
+import dev.kayomarz.studyfeed.stats.SubjectCoverage
 import dev.kayomarz.studyfeed.ui.theme.AppColor
 
 /**
@@ -57,6 +69,13 @@ fun HomeScreen(
     onOpenStats: () -> Unit,
     onOpenSettings: () -> Unit,
     onManagePacks: () -> Unit,
+    onResumeSession: (StudySession) -> Unit,
+    onNewSession: () -> Unit,
+    onMockExam: () -> Unit,
+    onDrillWeakest: (SubjectCoverage) -> Unit,
+    onLeeches: () -> Unit,
+    onStarredDeck: () -> Unit,
+    onTagDeck: (String) -> Unit,
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
 
@@ -76,6 +95,9 @@ fun HomeScreen(
                 StatInline("${ui.streakDays}d", "streak")
                 if (ui.dailyTarget > 0) StatInline("${ui.reviewsToday}/${ui.dailyTarget}", "goal")
             }
+
+            SessionsSection(ui.sessions, onResumeSession, onNewSession,
+                onRename = vm::renameSession, onArchive = vm::archiveSession)
 
             Spacer(Modifier.height(18.dp))
             // Library — promoted to a first-class entry.
@@ -104,7 +126,7 @@ fun HomeScreen(
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ContentTile("Passages", ui.passages, AppColor.Passage, Modifier.weight(1f), onStartPassages)
-                ReviewTile(ui.dueToday, ui.mistakes, ui.starred, Modifier.weight(1f), onReview)
+                ReviewTile(ui.dueToday, ui.mistakes, ui.starred, ui.reviewProgress, Modifier.weight(1f), onReview)
             }
 
             if (ui.subjects.isNotEmpty()) {
@@ -114,6 +136,9 @@ fun HomeScreen(
                 Spacer(Modifier.height(10.dp))
                 ui.subjects.forEach { s -> SubjectBar(s); Spacer(Modifier.height(10.dp)) }
             }
+
+            ToolsSection(ui, onMockExam, onDrillWeakest, onLeeches)
+            DecksSection(ui.tags, onStarredDeck, onTagDeck)
 
             Spacer(Modifier.height(22.dp))
             Text("EXPLORE", fontSize = 10.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold,
@@ -162,7 +187,7 @@ private fun ContentTile(label: String, p: FeedRepository.TypeProgress, color: Co
 }
 
 @Composable
-private fun ReviewTile(due: Int, mistakes: Int, starred: Int, modifier: Modifier, onClick: () -> Unit) {
+private fun ReviewTile(due: Int, mistakes: Int, starred: Int, progress: Float, modifier: Modifier, onClick: () -> Unit) {
     Column(
         modifier.clip(RoundedCornerShape(16.dp)).background(AppColor.Review.copy(alpha = 0.10f))
             .clickable(onClick = onClick).padding(14.dp),
@@ -175,20 +200,26 @@ private fun ReviewTile(due: Int, mistakes: Int, starred: Int, modifier: Modifier
         Text("$due due", fontSize = 15.sp, fontWeight = FontWeight.Bold)
         Text("$mistakes mistakes · $starred starred", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
-        ProgressBar(0f, AppColor.Review)
+        // Bar = fraction of the mistake pile cleared (real now — was hardcoded 0).
+        ProgressBar(progress, AppColor.Review)
     }
 }
 
 @Composable
-private fun SubjectBar(s: SubjectStat) {
+private fun SubjectBar(s: SubjectCoverage) {
+    val accColor = s.accuracy?.let {
+        when { it >= 0.7 -> AppColor.CorrectGreen; it >= 0.5 -> AppColor.Review; else -> Color(0xFFE06A6A) }
+    } ?: MaterialTheme.colorScheme.primary
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(s.name, style = MaterialTheme.typography.bodyMedium)
-            Text("${(s.mastery * 100).toInt()}%", style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(s.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, modifier = Modifier.weight(1f))
+            Text(buildString {
+                append("${fmt(s.done)}/${fmt(s.total)}")
+                s.accuracy?.let { append(" · ${(it * 100).toInt()}%") }
+            }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(4.dp))
-        ProgressBar(s.mastery.toFloat(), MaterialTheme.colorScheme.primary)
+        ProgressBar(s.coverage.toFloat(), accColor)
     }
 }
 
@@ -215,4 +246,123 @@ private fun fmt(n: Int): String {
     var i = firstGroup
     while (i < s.length) { sb.append(s, i, i + 3); if (i + 3 < s.length) sb.append(','); i += 3 }
     return sb.toString()
+}
+
+// ── A7 cycle 3: named study sessions (P2) ────────────────────────────────────────────────────────
+
+@Composable
+private fun SessionsSection(
+    sessions: List<StudySession>,
+    onResume: (StudySession) -> Unit,
+    onNew: () -> Unit,
+    onRename: (Long, String) -> Unit,
+    onArchive: (Long) -> Unit,
+) {
+    var renaming by remember { mutableStateOf<StudySession?>(null) }
+    Spacer(Modifier.height(18.dp))
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text("YOUR SESSIONS", fontSize = 10.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        TextButton(onClick = onNew) { Text("+ New") }
+    }
+    if (sessions.isEmpty()) {
+        Text("Start a focused run — pick subjects, 5★, PYQ — and it remembers your place.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    } else {
+        sessions.forEach { s ->
+            SessionCard(s, onResume, onRename = { renaming = s }, onArchive = onArchive)
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+    renaming?.let { s ->
+        RenameDialog(s.name ?: "Session", onDismiss = { renaming = null },
+            onConfirm = { newName -> onRename(s.id, newName); renaming = null })
+    }
+}
+
+@Composable
+private fun SessionCard(
+    s: StudySession, onResume: (StudySession) -> Unit, onRename: () -> Unit, onArchive: (Long) -> Unit,
+) {
+    var menu by remember { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
+            .clickable { onResume(s) }.padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(s.name ?: "Session", style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text("${fmt(s.seen ?: 0)} seen · resume", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text("Resume ›", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Box {
+            Text("  ⋮", modifier = Modifier.clickable { menu = true },
+                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 18.sp)
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; onRename() })
+                DropdownMenuItem(text = { Text("Archive") }, onClick = { menu = false; onArchive(s.id) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun RenameDialog(current: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var text by remember { mutableStateOf(current) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename session") },
+        text = { OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true) },
+        confirmButton = { TextButton(onClick = { if (text.isNotBlank()) onConfirm(text.trim()) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+// ── A7 cycle 3: tools (mock exam · weak-spot drill · leeches) + decks (P4) ───────────────────────
+
+@Composable
+private fun ToolsSection(
+    ui: HomeViewModel.Ui, onMockExam: () -> Unit, onDrillWeakest: (SubjectCoverage) -> Unit, onLeeches: () -> Unit,
+) {
+    Spacer(Modifier.height(22.dp))
+    Text("TOOLS", fontSize = 10.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Spacer(Modifier.height(8.dp))
+    Button(onClick = onMockExam, modifier = Modifier.fillMaxWidth()) { Text("Mock exam") }
+    if (ui.weakest != null || ui.leeches > 0) {
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            ui.weakest?.let { w ->
+                OutlinedButton(onClick = { onDrillWeakest(w) }, modifier = Modifier.weight(1f)) {
+                    Text("Drill: ${w.name}", maxLines = 1)
+                }
+            }
+            if (ui.leeches > 0) {
+                OutlinedButton(onClick = onLeeches, modifier = Modifier.weight(1f)) { Text("Leeches (${ui.leeches})") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DecksSection(tags: List<PackDatabase.TagDef>, onStarred: () -> Unit, onTag: (String) -> Unit) {
+    Spacer(Modifier.height(22.dp))
+    Text("DECKS", fontSize = 10.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Spacer(Modifier.height(8.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        DeckChip("⭐ Starred", onStarred)
+        tags.forEach { t -> DeckChip(t.label, { onTag(t.key) }); Spacer(Modifier.height(0.dp)) }
+    }
+}
+
+@Composable
+private fun DeckChip(label: String, onClick: () -> Unit) {
+    Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.clip(RoundedCornerShape(999.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 7.dp))
 }

@@ -17,6 +17,8 @@ sealed interface FeedCard {
     val importanceScore: Double
     val importanceSignals: ImportanceSignals?
     val subjectName: String?
+    /** The pack subject id when the pack attributes one (mostly MCQs); null otherwise (A7 cycle 3). */
+    val subjectId: Long?
     /** Non-empty only for a PYQ MCQ; drives the "Asked 2019 · 2023" badge. */
     val pyqYears: List<Int>
     /** FSRS due date (ISO-8601) if this item has been seen; null = never studied. */
@@ -42,6 +44,7 @@ sealed interface FeedCard {
         override val importanceScore: Double,
         override val importanceSignals: ImportanceSignals?,
         override val subjectName: String?,
+        override val subjectId: Long? = null,
         override val pyqYears: List<Int>,
         override val due: String?,
         override val stability: Double?,
@@ -64,6 +67,7 @@ sealed interface FeedCard {
         override val importanceScore: Double,
         override val importanceSignals: ImportanceSignals?,
         override val subjectName: String?,
+        override val subjectId: Long? = null,
         override val pyqYears: List<Int> = emptyList(),
         override val due: String?,
         override val stability: Double?,
@@ -82,6 +86,7 @@ sealed interface FeedCard {
         override val importanceScore: Double,
         override val importanceSignals: ImportanceSignals?,
         override val subjectName: String?,
+        override val subjectId: Long? = null,
         override val pyqYears: List<Int> = emptyList(),
         override val due: String?,
         override val stability: Double?,
@@ -99,6 +104,7 @@ sealed interface FeedCard {
         override val importanceScore: Double,
         override val importanceSignals: ImportanceSignals?,
         override val subjectName: String?,
+        override val subjectId: Long? = null,
         override val pyqYears: List<Int> = emptyList(),
         override val due: String?,
         override val stability: Double?,
@@ -132,6 +138,7 @@ sealed interface FeedCard {
         override val importanceScore: Double,
         override val importanceSignals: ImportanceSignals?,
         override val subjectName: String?,
+        override val subjectId: Long? = null,
         override val pyqYears: List<Int> = emptyList(),
         override val due: String?,
         override val stability: Double?,

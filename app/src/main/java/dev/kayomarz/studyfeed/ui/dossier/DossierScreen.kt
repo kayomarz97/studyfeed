@@ -42,6 +42,7 @@ import dev.kayomarz.studyfeed.feed.FeedCard
 import dev.kayomarz.studyfeed.ui.feed.FigureImage
 import dev.kayomarz.studyfeed.ui.feed.ImportanceIndicator
 import dev.kayomarz.studyfeed.ui.feed.Importance
+import dev.kayomarz.studyfeed.ui.theme.AppColor
 import kotlinx.coroutines.launch
 
 /**
@@ -76,24 +77,37 @@ fun DossierScreen(
                     Text("This topic page could not be loaded.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                else -> DossierBody(d, onOpenItem)
+                else -> DossierBody(d, ui, onOpenItem, vm::toggleTopicStar, vm::toggleLineMark)
             }
         }
     }
 }
 
 @Composable
-private fun DossierBody(d: Dossier, onOpenItem: (String, Long) -> Unit) {
+private fun DossierBody(
+    d: Dossier,
+    ui: DossierViewModel.DossierState,
+    onOpenItem: (String, Long) -> Unit,
+    onToggleTopicStar: () -> Unit,
+    onToggleLine: (Int, String) -> Unit,
+) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val hasSections = d.sections.isNotEmpty()
     val sectionBase = 1 + (if (hasSections) 1 else 0) + 1  // header + (jump-nav?) + body
+    val markKind = { hash: String -> ui.markKind(hash) }
 
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        // (0) header
+        // (0) header — with the topic ★ and the line-mark legend.
         item {
             Column(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-                Text(d.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(d.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f))
+                    Text(if (ui.topicStarred) "★" else "☆",
+                        color = if (ui.topicStarred) AppColor.Review else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 24.sp, modifier = Modifier.clickable { onToggleTopicStar() }.padding(start = 8.dp))
+                }
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -103,6 +117,9 @@ private fun DossierBody(d: Dossier, onOpenItem: (String, Long) -> Unit) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
+                Spacer(Modifier.height(6.dp))
+                Text("Hold a line to star it · coral = past-paper · gold = 5★",
+                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         // (1) jump-nav
@@ -119,22 +136,20 @@ private fun DossierBody(d: Dossier, onOpenItem: (String, Long) -> Unit) {
                 }
             }
         }
-        // (2) preamble (page subtitle etc.) + page-level figures. The per-subject content lives in the
-        // collapsible sections below (topic_sections) — body_md's sections are the SAME text, so we do
-        // NOT render body_md's section bodies here (that would double every fact).
+        // (2) preamble + page-level figures (the per-subject content lives in the collapsible sections
+        // below — body_md's sections are the SAME text, so we do NOT render them here). Preamble = ord -1.
         item {
             Column(Modifier.fillMaxWidth()) {
-                if (d.bodyMd.isNotBlank()) DossierText(d.bodyMd, style = MaterialTheme.typography.bodyMedium)
-                d.figures.forEach { fig ->
-                    Spacer(Modifier.height(12.dp)); FigureImage(fig)
-                }
+                if (d.bodyMd.isNotBlank())
+                    DossierText(d.bodyMd, style = MaterialTheme.typography.bodyMedium,
+                        sectionOrd = -1, markKind = markKind, onLongPressLine = onToggleLine)
+                d.figures.forEach { fig -> Spacer(Modifier.height(12.dp)); FigureImage(fig) }
                 if (hasSections) { Spacer(Modifier.height(8.dp)); HorizontalDivider() }
             }
         }
-        // (3+) one collapsible item per section
-        items(d.sections.size) { i -> SectionItem(d.sections[i]) }
+        // (3+) one collapsible item per section (its index is its stable mark ord)
+        items(d.sections.size) { i -> SectionItem(d.sections[i], i, markKind, onToggleLine) }
 
-        // related links
         if (d.relatedMcqs.isNotEmpty()) {
             item { RelatedHeader("Related questions", d.relatedMcqs.size) }
             items(d.relatedMcqs.size) { i -> RelatedRow(d.relatedMcqs[i], onOpenItem) }
@@ -148,7 +163,9 @@ private fun DossierBody(d: Dossier, onOpenItem: (String, Long) -> Unit) {
 }
 
 @Composable
-private fun SectionItem(s: DossierSection) {
+private fun SectionItem(
+    s: DossierSection, sectionOrd: Int, markKind: (String) -> String?, onLongPressLine: (Int, String) -> Unit,
+) {
     var expanded by remember(s) { mutableStateOf(true) }
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(
@@ -170,7 +187,8 @@ private fun SectionItem(s: DossierSection) {
             )
         }
         if (expanded) {
-            DossierText(s.bodyMd, style = MaterialTheme.typography.bodyMedium)
+            DossierText(s.bodyMd, style = MaterialTheme.typography.bodyMedium,
+                sectionOrd = sectionOrd, markKind = markKind, onLongPressLine = onLongPressLine)
             s.figures.forEach { fig -> Spacer(Modifier.height(10.dp)); FigureImage(fig) }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))

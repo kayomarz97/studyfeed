@@ -6,10 +6,12 @@ import androidx.lifecycle.viewModelScope
 import dev.kayomarz.studyfeed.feed.FeedRepository
 import dev.kayomarz.studyfeed.pack.PackDatabase
 import dev.kayomarz.studyfeed.pack.PackRegistry
+import dev.kayomarz.studyfeed.progress.ProgressDao
 import dev.kayomarz.studyfeed.progress.ProgressDatabase
 import dev.kayomarz.studyfeed.progress.SettingsKeys
+import dev.kayomarz.studyfeed.progress.StudySession
 import dev.kayomarz.studyfeed.stats.StatsRepository
-import dev.kayomarz.studyfeed.stats.SubjectStat
+import dev.kayomarz.studyfeed.stats.SubjectCoverage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,13 +42,22 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val dailyTarget: Int = 0,
         val streakDays: Int = 0,
         val reviewsToday: Int = 0,
-        val subjects: List<SubjectStat> = emptyList(),
+        /** Top subjects by MCQ coverage (full list lives on the Progress screen). */
+        val subjects: List<SubjectCoverage> = emptyList(),
         // A7 content-type tiles: "X / total done" per type.
         val mcq: FeedRepository.TypeProgress = FeedRepository.TypeProgress(0, 0),
         val cards: FeedRepository.TypeProgress = FeedRepository.TypeProgress(0, 0), // flashcards + reels
         val passages: FeedRepository.TypeProgress = FeedRepository.TypeProgress(0, 0),
         val mistakes: Int = 0,
         val starred: Int = 0,
+        /** Fraction of the mistake pile cleared (resolved ÷ ever-made) — the Review tile's bar. */
+        val reviewProgress: Float = 0f,
+        /** A7 cycle 3: the user's saved, resumable study sessions (most-recent first). */
+        val sessions: List<StudySession> = emptyList(),
+        /** P4: the weakest subject (for the one-tap drill), leech count, and pack tags (for decks). */
+        val weakest: SubjectCoverage? = null,
+        val leeches: Int = 0,
+        val tags: List<PackDatabase.TagDef> = emptyList(),
     )
 
     private val registry = PackRegistry(app)
@@ -67,10 +78,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val timestamps = dao.reviewTimestamps()
             val deadlineStr = dao.setting(SettingsKeys.DEADLINE)
             val mistakes = dao.unresolvedMistakeCount()
+            val resolvedMistakes = dao.resolvedMistakeCount()
             val starred = dao.starCount()
+            val sessions = dao.activeSessions()
+            val leeches = dao.leechCount(4)
             pdb.close()
 
-            val examName = (PackDatabase.open(pack.dbFile) as? PackDatabase.Result.Ok)?.pack?.manifest?.examName
+            val openedPack = (PackDatabase.open(pack.dbFile) as? PackDatabase.Result.Ok)?.pack
+            val examName = openedPack?.manifest?.examName
+            val tags = openedPack?.tags.orEmpty()
 
             val feedRepo = FeedRepository.open(ProgressDatabase.fileFor(getApplication(), pack.examCode), pack.dbFile)
             val nowIso = Instant.now().toString()
@@ -87,8 +103,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val passages = prog["blob"] ?: zero
 
             val stats = StatsRepository.open(ProgressDatabase.fileFor(getApplication(), pack.examCode), pack.dbFile)
-            val subjects = stats?.subjectMastery().orEmpty()
+            val coverage = stats?.subjectCoverage().orEmpty()
             stats?.close()
+            val subjects = coverage.filter { it.subjectId != null }.take(6)
+            // Weakest = lowest accuracy among subjects you've actually attempted (≥5), else lowest coverage.
+            val weakest = coverage.filter { it.subjectId != null && it.total > 0 }.let { list ->
+                list.filter { it.answered >= 5 }.minByOrNull { it.accuracy ?: 1.0 } ?: list.minByOrNull { it.coverage }
+            }
 
             val today = LocalDate.now()
             val days = timestamps.mapNotNull { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }.toHashSet()
@@ -103,9 +124,28 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 subjects = subjects,
                 mcq = mcq, cards = cards, passages = passages,
                 mistakes = mistakes, starred = starred,
+                reviewProgress = if (mistakes + resolvedMistakes > 0)
+                    resolvedMistakes.toFloat() / (mistakes + resolvedMistakes) else 0f,
+                sessions = sessions,
+                weakest = weakest, leeches = leeches, tags = tags,
             )
         }
         _ui.value = ui
+    }
+
+    fun renameSession(id: Long, name: String) =
+        mutateSession { it.renameSession(id, name, Instant.now().toString()) }
+
+    fun archiveSession(id: Long) =
+        mutateSession { it.archiveSession(id, Instant.now().toString()) }
+
+    private fun mutateSession(block: suspend (ProgressDao) -> Unit) = viewModelScope.launch {
+        val pack = withContext(Dispatchers.IO) { registry.activePack() } ?: return@launch
+        withContext(Dispatchers.IO) {
+            val pdb = ProgressDatabase.open(getApplication(), pack.examCode)
+            block(pdb.dao()); pdb.close()
+        }
+        load()
     }
 
     /** Consecutive calendar days with ≥1 review, ending today (or yesterday if today's not studied yet). */

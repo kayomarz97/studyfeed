@@ -82,6 +82,8 @@ fun LibraryScreen(
             FilterChip(selected = f.pyqOnly,
                 onClick = { vm.setLibraryFilter(f.copy(pyqOnly = !f.pyqOnly)) },
                 label = { Text("PYQ") })
+            FilterChip(selected = ui.starredOnly, onClick = { vm.toggleStarredOnly() },
+                label = { Text("★ Starred") })
             SubjectFilter(f, ui.subjects, vm::setLibraryFilter)
         }
 

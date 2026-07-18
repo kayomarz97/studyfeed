@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -31,10 +32,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.kayomarz.studyfeed.ui.AUTHOR_CREDIT
+import dev.kayomarz.studyfeed.ui.AUTHOR_URL
 import dev.kayomarz.studyfeed.ui.PackUiState
+import dev.kayomarz.studyfeed.ui.openUrl
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -159,6 +165,18 @@ fun SettingsScreen(
             p.error?.let { Spacer(Modifier.height(12.dp)); Text(it, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error) }
         }
+
+        // ── Credit (user request 2026-07-18) — tappable → kayomarz.com via the system browser. Opening a
+        // URL hands off to a separate app; StudyFeed keeps zero network capability (the guard stays green).
+        Spacer(Modifier.height(28.dp))
+        val context = LocalContext.current
+        Text(
+            AUTHOR_CREDIT,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().clickable { openUrl(context, AUTHOR_URL) }.padding(vertical = 8.dp),
+        )
         Spacer(Modifier.height(40.dp))
     }
 

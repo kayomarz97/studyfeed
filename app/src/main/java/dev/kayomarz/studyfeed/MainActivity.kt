@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
@@ -29,27 +30,38 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.kayomarz.studyfeed.pack.PackImporter
+import dev.kayomarz.studyfeed.progress.StudySession
+import dev.kayomarz.studyfeed.ui.AUTHOR_CREDIT
+import dev.kayomarz.studyfeed.ui.AUTHOR_URL
 import dev.kayomarz.studyfeed.ui.PackUiState
+import dev.kayomarz.studyfeed.ui.openUrl
 import dev.kayomarz.studyfeed.ui.concept.ConceptMapScreen
 import dev.kayomarz.studyfeed.ui.concept.ConceptMapViewModel
 import dev.kayomarz.studyfeed.ui.dossier.DossierScreen
 import dev.kayomarz.studyfeed.ui.dossier.DossierViewModel
 import dev.kayomarz.studyfeed.ui.dossier.ItemDetailScreen
 import dev.kayomarz.studyfeed.ui.dossier.LibraryScreen
+import dev.kayomarz.studyfeed.ui.exam.MockExamScreen
+import dev.kayomarz.studyfeed.ui.exam.MockExamViewModel
 import dev.kayomarz.studyfeed.feed.FeedFilter
+import dev.kayomarz.studyfeed.feed.FeedQuery
 import dev.kayomarz.studyfeed.ui.feed.FeedScreen
 import dev.kayomarz.studyfeed.ui.feed.FeedViewModel
+import dev.kayomarz.studyfeed.ui.feed.NewSessionScreen
 import dev.kayomarz.studyfeed.ui.home.HomeScreen
 import dev.kayomarz.studyfeed.ui.home.HomeViewModel
 import dev.kayomarz.studyfeed.ui.settings.SettingsScreen
@@ -57,6 +69,7 @@ import dev.kayomarz.studyfeed.ui.settings.SettingsViewModel
 import dev.kayomarz.studyfeed.ui.stats.StatsScreen
 import dev.kayomarz.studyfeed.ui.stats.StatsViewModel
 import dev.kayomarz.studyfeed.ui.theme.StudyFeedTheme
+import kotlinx.coroutines.delay
 
 /**
  * The app's ONLY component (BUILD_PROMPT §8 A0/A1).
@@ -96,9 +109,12 @@ class MainActivity : ComponentActivity() {
  * hops. Home is the hub: Feed/Library/Map/Stats/Settings all return to it.
  */
 private sealed interface Screen {
+    data object Splash : Screen
     data object Home : Screen
     data object Feed : Screen
     data object Settings : Screen
+    data object NewSession : Screen
+    data object MockExam : Screen
     data object Manage : Screen
     data object Library : Screen
     data object ConceptMap : Screen
@@ -109,7 +125,7 @@ private sealed interface Screen {
 
 @Composable
 private fun Root() {
-    var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+    var screen by remember { mutableStateOf<Screen>(Screen.Splash) }
     // Remembered so the Reference viewer's Back returns to the dossier it was opened from.
     var currentDossierId by remember { mutableStateOf(0L) }
     val homeVm: HomeViewModel = viewModel()
@@ -118,13 +134,14 @@ private fun Root() {
     val conceptVm: ConceptMapViewModel = viewModel()
     val statsVm: StatsViewModel = viewModel()
     val settingsVm: SettingsViewModel = viewModel()
+    val mockVm: MockExamViewModel = viewModel()
     // Refresh the dashboard's counts whenever we return to it.
     val goHome = { homeVm.load(); screen = Screen.Home }
 
     // Android system back (gesture/button). Without this, back exits the app from any screen because our
     // simple `when`-router has no back stack. Map each screen to its parent; on Home, stay disabled so the
     // OS handles back normally (exit). Mirrors each screen's on-screen back affordance.
-    androidx.activity.compose.BackHandler(enabled = screen != Screen.Home) {
+    androidx.activity.compose.BackHandler(enabled = screen != Screen.Home && screen != Screen.Splash) {
         screen = when (val s = screen) {
             is Screen.Dossier -> Screen.Library
             is Screen.ItemDetail -> Screen.Dossier(currentDossierId)
@@ -133,20 +150,50 @@ private fun Root() {
         }
     }
 
-    when (screen) {
+    // A7 cycle 3 (P5): a gentle cross-fade between screens. Rendering keys off the animated state `s`,
+    // not the live `screen`, so the outgoing screen stays put until the fade completes.
+    androidx.compose.animation.Crossfade(targetState = screen, label = "screen") { s ->
+      when (s) {
+        Screen.Splash -> SplashScreen(onDone = { screen = Screen.Home })
         Screen.Home -> HomeScreen(
             vm = homeVm,
-            onStartMixed = { feedVm.setStudyMode(FeedViewModel.StudyMode.MIXED); screen = Screen.Feed },
-            onStartMcqs = { feedVm.setFilter(FeedFilter(itemTypesIn = listOf("mcq"))); screen = Screen.Feed },
-            onStartCards = { feedVm.setFilter(FeedFilter(itemTypesIn = listOf("flashcard", "reel"))); screen = Screen.Feed },
-            onStartPassages = { feedVm.setFilter(FeedFilter(itemTypesIn = listOf("blob"))); screen = Screen.Feed },
-            onReview = { feedVm.setFilter(FeedFilter(mistakesOnly = true)); screen = Screen.Feed },
+            onStartMixed = { feedVm.openMixed(); screen = Screen.Feed },
+            onStartMcqs = { feedVm.openQuick("mcq", FeedQuery(sort = FeedQuery.Sort.IMPORTANCE_DESC,
+                filter = FeedFilter(itemTypesIn = listOf("mcq"))), "MCQs"); screen = Screen.Feed },
+            onStartCards = { feedVm.openQuick("cards", FeedQuery(sort = FeedQuery.Sort.IMPORTANCE_DESC,
+                filter = FeedFilter(itemTypesIn = listOf("flashcard", "reel"))), "Flashcards & reels"); screen = Screen.Feed },
+            onStartPassages = { feedVm.openQuick("passages", FeedQuery(sort = FeedQuery.Sort.IMPORTANCE_DESC,
+                filter = FeedFilter(itemTypesIn = listOf("blob"))), "Passages"); screen = Screen.Feed },
+            onReview = { feedVm.openQuick("review", FeedQuery(filter = FeedFilter(mistakesOnly = true)), "Review"); screen = Screen.Feed },
             onNoPack = { screen = Screen.Manage },
             onOpenLibrary = { screen = Screen.Library },
             onOpenMap = { conceptVm.browse(); screen = Screen.ConceptMap },
             onOpenStats = { statsVm.load(); screen = Screen.Stats },
             onOpenSettings = { settingsVm.load(); screen = Screen.Settings },
             onManagePacks = { screen = Screen.Manage },
+            onResumeSession = { s -> feedVm.openSession(s); screen = Screen.Feed },
+            onNewSession = { screen = Screen.NewSession },
+            onMockExam = { mockVm.reset(); screen = Screen.MockExam },
+            onDrillWeakest = { w ->
+                feedVm.openQuick("drill:${w.subjectId}",
+                    FeedQuery(sort = FeedQuery.Sort.PRIORITY, filter = FeedFilter(subjectId = w.subjectId)),
+                    "Drill: ${w.name}"); screen = Screen.Feed
+            },
+            onLeeches = {
+                feedVm.openQuick("leeches",
+                    FeedQuery(sort = FeedQuery.Sort.PRIORITY, filter = FeedFilter(leechesOnly = true)),
+                    "Leeches"); screen = Screen.Feed
+            },
+            onStarredDeck = {
+                feedVm.openQuick("deck:starred",
+                    FeedQuery(sort = FeedQuery.Sort.IMPORTANCE_DESC, filter = FeedFilter(starredOnly = true)),
+                    "Starred"); screen = Screen.Feed
+            },
+            onTagDeck = { key ->
+                feedVm.openQuick("deck:$key",
+                    FeedQuery(sort = FeedQuery.Sort.IMPORTANCE_DESC, filter = FeedFilter(tagKey = key)),
+                    "Deck"); screen = Screen.Feed
+            },
         )
         Screen.Feed -> FeedScreen(
             vm = feedVm,
@@ -172,6 +219,12 @@ private fun Root() {
             onOpenDossier = { pid -> currentDossierId = pid; dossierVm.openDossier(pid); screen = Screen.Dossier(pid) },
             onBack = goHome,
         )
+        Screen.NewSession -> NewSessionScreen(
+            vm = feedVm,
+            onStart = { homeVm.load(); screen = Screen.Feed },
+            onBack = goHome,
+        )
+        Screen.MockExam -> MockExamScreen(vm = mockVm, onExit = goHome)
         Screen.Manage -> PackScreen(onOpenFeed = { screen = Screen.Feed })
         Screen.Library -> LibraryScreen(
             vm = dossierVm,
@@ -188,6 +241,33 @@ private fun Root() {
             vm = dossierVm,
             onBack = { screen = Screen.Dossier(currentDossierId) },
         )
+      }
+    }
+}
+
+/**
+ * The branded opening screen (user request 2026-07-18): the app name + Kayo's credit, then it hands off
+ * to Home after a short beat. The delay is a foreground [LaunchedEffect] coroutine — **not** a splash
+ * Service, alarm, or any background component (the offline guard forbids those). The credit is tappable →
+ * kayomarz.com in the system browser (a separate app; StudyFeed keeps zero network capability).
+ */
+@Composable
+private fun SplashScreen(onDone: () -> Unit) {
+    LaunchedEffect(Unit) { delay(1500); onDone() }
+    val context = LocalContext.current
+    Column(
+        Modifier.fillMaxSize().statusBarsPadding().padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.weight(1f))
+        Text("StudyFeed", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        Text("offline · spaced-repetition revision", style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+        Spacer(Modifier.weight(1f))
+        Text(AUTHOR_CREDIT, style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().clickable { openUrl(context, AUTHOR_URL) }.padding(vertical = 8.dp))
     }
 }
 

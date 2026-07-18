@@ -136,7 +136,7 @@ class DossierRepository private constructor(
             """
             SELECT title, body_md, importance, importance_score, importance_signals_json,
                    subjects_covered_json, figure_ids_json, related_mcq_ids_json, related_flashcard_ids_json,
-                   concept_id
+                   concept_id, stable_key
             FROM topic_pages WHERE id = ?
             """.trimIndent(), arrayOf(topicPageId.toString()),
         ).use { c ->
@@ -144,6 +144,7 @@ class DossierRepository private constructor(
             Dossier(
                 topicPageId = topicPageId,
                 conceptId = if (c.isNull(9)) null else c.getLong(9),
+                stableKey = c.getString(10).orEmpty(),
                 title = c.getString(0).orEmpty(),
                 // body_md IS the full page = preamble + the same `## ` sections that topic_sections holds
                 // verbatim (proven: section body ⊂ page body). Render the sections from topic_sections
@@ -160,6 +161,33 @@ class DossierRepository private constructor(
                 relatedFlashcards = relatedFor("flashcard", c.getString(8)),
             )
         }
+    }
+
+    /**
+     * Salient-token sets from the topic's related **PYQ** and **5★** MCQ stems — the raw material for the
+     * approximate on-device line highlighting (P3). We never display these stems; they only decide which
+     * *dossier* lines (already shown) get a coloured edge, so there's no content leak. Tokenised in-memory.
+     */
+    data class HighYield(val pyq: List<Set<String>>, val fiveStar: List<Set<String>>)
+
+    fun highYield(topicPageId: Long): HighYield {
+        val ids = db.rawQuery("SELECT related_mcq_ids_json FROM topic_pages WHERE id = ?", arrayOf(topicPageId.toString()))
+            .use { c -> if (c.moveToFirst()) parseLongArray(c.getString(0)) else emptyList() }
+        if (ids.isEmpty()) return HighYield(emptyList(), emptyList())
+        val pyq = ArrayList<Set<String>>(); val five = ArrayList<Set<String>>()
+        val placeholders = ids.joinToString(",") { "?" }
+        try {
+            db.rawQuery("SELECT stem_md, is_pyq, importance FROM mcqs WHERE id IN ($placeholders)",
+                ids.map { it.toString() }.toTypedArray()).use { c ->
+                while (c.moveToNext()) {
+                    val toks = LineText.tokens(c.getString(0).orEmpty())
+                    if (toks.size < 3) continue
+                    if (c.getInt(1) == 1) pyq += toks
+                    if (c.getInt(2) >= 5) five += toks
+                }
+            }
+        } catch (e: SQLiteException) { /* no mcqs table → no highlights */ }
+        return HighYield(pyq, five)
     }
 
     private fun sectionsFor(topicPageId: Long): List<DossierSection> {
@@ -360,6 +388,8 @@ data class DossierListItem(
 data class Dossier(
     val topicPageId: Long,
     val conceptId: Long? = null,
+    /** The topic's content stable_key — the anchor for the user's per-line marks (survives a rebuild). */
+    val stableKey: String = "",
     val title: String,
     val bodyMd: String,
     val importance: Int,

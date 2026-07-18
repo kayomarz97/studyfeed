@@ -319,6 +319,9 @@ class FeedRepository private constructor(
             clauses += "EXISTS(SELECT 1 FROM main.stars s WHERE s.item_type=f.item_type AND s.item_id=f.id)"
         if (filter.mistakesOnly)
             clauses += "EXISTS(SELECT 1 FROM main.mistakes m WHERE m.item_type=f.item_type AND m.item_id=f.id AND m.resolved=0)"
+        // A7 cycle 3 (P4): leeches = cards lapsed ≥ 4 times — the ones you keep failing.
+        if (filter.leechesOnly)
+            clauses += "EXISTS(SELECT 1 FROM main.fsrs_cards lc WHERE lc.item_type=f.item_type AND lc.item_id=f.id AND lc.lapses >= 4)"
         filter.tagKey?.let {
             clauses += "EXISTS(SELECT 1 FROM main.item_tags t WHERE t.item_type=f.item_type AND t.item_id=f.id AND t.tag_key=?)"
             args += it
@@ -386,6 +389,7 @@ class FeedRepository private constructor(
             FeedCard.Mcq(
                 itemId = r.itemId, importance = r.importance, importanceScore = r.score,
                 importanceSignals = parseSignals(c.getString(11)), subjectName = subjectNames[r.subjectId],
+                subjectId = r.subjectId,
                 pyqYears = parseYears(c.getString(10)), due = fsrs.due, stability = fsrs.stability,
                 topicPageId = topic?.topicPageId, conceptId = topic?.conceptId,
                 stemMd = c.getString(0).orEmpty(), options = opts, correctIdx = c.getInt(6),

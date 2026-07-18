@@ -1472,3 +1472,94 @@ Feed/Library/Concept-map). Owed follow-ups if the user wants: release-APK signin
 personal notes; a history scrub of the redacted fragment if the repo goes public; a pre-existing real
 fragment still lives in `DossierMarkdownTest.kt` (from A4, already on origin) — clean on request. A7 is the
 last spec stage.
+
+**[compacted at 2026-07-18T16:58:10Z]** — context compacted; disk state is the truth (§10a).
+
+## 2026-07-18  A7 cycle 3 — plan + P1 (Progress overhaul) + credit/splash/website [IN PROGRESS]
+
+User feedback: the progress numbers/subject stats are broken; the feed always restarts at the same MCQ;
+wants **named resumable sessions** (pick-and-choose config, auto-name + rename), **topic + line stars**
+with approximate PYQ/5★ auto-highlight, a **data-rich Progress** screen, **mock exam / weak-spot drills /
+custom decks**, reader polish, and a **Settings + opening-screen credit line** → tap → `kayomarz.com`.
+
+**Approved via** an HTML layout mockup (artifact) + AskUserQuestion: sessions **alongside** the tiles;
+**all four** Progress views; **approximate** on-device highlighting (no pack rebuild); **all four** extra
+features. Plan on disk: `.claude/plans/2026-07-18-progress-sessions-stars.md` (5 phases P1–P5, one APK).
+
+**Diagnosis (root causes found in code):** ReviewTile bar hardcoded `0f`; `subjectMastery()` returned only
+*studied* subjects + dropped NULL-subject items + showed mastery not coverage; `onMcqAnswered` wrote
+`mistakes.subject_id = null`; accuracy blended all card types; feed `reload()` always rebuilds from offset 0.
+**Confirmed safe:** FSRS/stars/tags/mistakes all key consistently on `feed_items.id` (no id mismatch).
+
+**Pack subject-attribution reality (measured on the real pack, sqlite3):** `feed_items.subject_id` is NULL
+for **24,738 / 32,957** — every flashcard/reel/blob/interlink and 6,236/14,455 MCQs. Asset tables carry no
+subject either; deriving via atoms recovers only ~56–65% of cards. **Decision:** "coverage & accuracy by
+subject" is measured over **MCQs** (with an "Unattributed" bucket); other types stay counted **by type**.
+No recompile. A future pack-side subject-tagging job is optional (would need the compiler + re-import).
+
+**P1 SHIPPED (verified):**
+- Progress DB **v2→v3** additive migration (`MIGRATION_2_3`): new `mcq_attempts` (accuracy denominator —
+  before this only *wrong* answers were stored), `line_marks`, `decks` tables + `sessions` gains
+  `name/config_json/cursor/updated/archived`. `@ColumnInfo(defaultValue="0")` on cursor/archived so
+  fresh-install and migrated schemas are identical. **Verified on `emulator-5554`: 4/4** migration tests
+  (additive + non-destructive; fresh v3 Room open validates).
+- `FeedCard` gains `subjectId`; `onMcqAnswered` logs an `McqAttempt` + real mistake subject.
+- `StatsRepository` rebuilt: `subjectCoverage` (MCQ done/total + accuracy + Unattributed), `mcqTotals`,
+  `activityCounts`, `accuracyDaily`, `dueBuckets`, `coreCoverage` (5★/PYQ rings); kept forgetting curve.
+- `StatsScreen` rebuilt data-rich (subject coverage · activity heatmap · weekly-accuracy line · forgetting
+  curve · 7-day due forecast · 5★/PYQ core rings) — all hand-drawn Compose `Canvas`, **no chart lib**.
+- Home: real ReviewTile bar (mistakes cleared), subject bars → MCQ coverage.
+- **Credit line** at foot of Settings + a branded **opening screen** (`SplashScreen`, foreground
+  `LaunchedEffect` delay — NOT a background component) → tap → `kayomarz.com` via `ui/Web.kt` `openUrl`
+  (implicit `ACTION_VIEW`; **adds no INTERNET permission/dep — guard stays green**, verified).
+- Fixed a **pre-existing** stale cycle-2 test: `DossierRealPackTest` called removed `topDossiers`/`search`
+  (now `list(...)`); it had never been compiled since the rename. Now green.
+- **Verified:** `compileDebug{,UnitTest,AndroidTest}Kotlin` + `testDebugUnitTest` + `verifyOfflineGuarantees`
+  + `assembleDebug` all green; migration 4/4 on emulator; APK installs + launches clean (splash→Manage, no
+  FATAL in logcat). Debug APK 13.07 MB. **Zero new runtime deps.**
+
+**Resume point (P1):** P1 + credit/splash/website DONE + verified + interim APK delivered. Then P2–P5 below.
+
+## 2026-07-19  A7 cycle 3 — P2–P5 COMPLETE (sessions · library stars · mock exam · polish) + final APK
+
+User: "do everything and final apk." Built P2–P5 straight through; each compiled + the risky bits tested
+on `emulator-5554`. **No further schema change** — the whole cycle rides the one P1 `MIGRATION_2_3`.
+
+- **P2 sessions + resume** — `feed/SessionConfig.kt` ((de)serialise a `FeedQuery` + auto-name);
+  `FeedViewModel` rewired for a `sessionKey` resume namespace (`engine:<key>` engine state + `pos:<key>`
+  scroll offset; named sessions mirror `cursor` to the `sessions` row). Home "Your sessions" strip
+  (resume/rename/archive/+New); `ui/feed/NewSessionScreen.kt` (pick-and-choose config → create + open).
+  Quick tiles + Endless mix now carry stable keys so they **resume** where left off. DAO:
+  insert/active/rename/archive/updateProgress.
+- **P3 library stars + approximate highlight** — topic ★ (reuses `stars` item_type='topic') + per-line
+  star (long-press) + auto PYQ/5★ line stripes. `dossier/LineText.kt` (normalise/hash/tokens — the
+  rebuild-safe anchor); `DossierRepository.highYield` (salient tokens from related PYQ/5★ stems, ≥4-token
+  match, conservative); `DossierMarkdown` blocks carry `raw` + a coloured `leftStripe`; `DossierViewModel`
+  opens the progress DB for stars/marks; Library gained a **★ Starred** filter. Never displays the stems
+  (no leak). Approximate by design (user-accepted).
+- **P4 mock exam / drills / decks** — `exam/MockExamRepository.kt` (blueprint-weighted MCQ sample,
+  options shuffled per item); `ui/exam/MockExam{ViewModel,Screen}.kt` (CONFIG 20/50/100 → RUNNING pager,
+  no reveal, running clock → DONE report: %, pass/fail vs 60%, per-subject). On submit each answer is
+  **real progress** (mcq_attempt + FSRS Good/Again + mistake). Weak-spot: Home "Drill: <weakest subject>"
+  (lowest accuracy≥5 else lowest coverage) + **leeches** (`FeedFilter.leechesOnly` = fsrs lapses≥4) +
+  Home "Leeches (n)". Decks: Home "⭐ Starred" + one chip per pack tag → open the feed filtered.
+- **P5 polish** — screen **Crossfade** in MainActivity (renders off the animated `s`, not live `screen`);
+  credit line + branded splash + kayomarz.com shipped in P1. (Reader font-size / jump-to-section deferred —
+  noted below.)
+
+**Verified:** `compileDebug{,UnitTest,AndroidTest}Kotlin` green · `testDebugUnitTest` green (added
+`SessionConfigTest` [pure autoName/blank — org.json is JVM-unmockable] + `LineTextTest`) · **emulator 6/6**
+(`MistakeResolutionTest` migration ×4 + `SessionConfigRoundTripTest` ×2 — org.json round-trip is on-device
+like FeedStateJson) · `verifyOfflineGuarantees` green (mock exam / sessions / decks add **no** network dep;
+kayomarz.com is an implicit VIEW intent) · final APK installs + launches clean (no FATAL). **Zero new
+runtime deps.** Debug APK 13.24 MB, delivered to the user.
+
+**Known limits / deferred (honest):** approximate highlight can miss/false-flag (chose miss-first);
+subject coverage is MCQ-only (pack attributes subjects to MCQs only — measured); line-mark section_ord uses
+the render index (a pack section-reorder could misplace a mark — the hash still anchors the text); **reader
+font-size + jump-from-question-to-section NOT built** (P5 tail); release-APK signing still owed (§11d).
+Custom decks are the smart Starred/tag chips (the `decks` table exists for future user-defined decks).
+
+**Resume point:** A7 cycle 3 COMPLETE (P1–P5) + final APK delivered. NOT pushed to git (no explicit ask) —
+working tree dirty by design; plan doc + this journal are the resume truth. If asked to push: secret-scan →
+stage by name → `dev`.
