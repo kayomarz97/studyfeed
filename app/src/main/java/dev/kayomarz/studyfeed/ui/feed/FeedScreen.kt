@@ -57,6 +57,9 @@ fun FeedScreen(
     vm: FeedViewModel = viewModel(),
     onNoPack: () -> Unit,
     onHome: () -> Unit = {},
+    onOpenTopic: (Long) -> Unit = {},
+    onOpenMap: (Long) -> Unit = {},
+    onOpenLibrary: () -> Unit = {},
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
 
@@ -91,7 +94,7 @@ fun FeedScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    else -> FeedPager(ui, vm)
+                    else -> FeedPager(ui, vm, onOpenTopic, onOpenMap, onOpenLibrary)
                 }
             }
         }
@@ -125,7 +128,13 @@ private fun StudyModeBar(
 }
 
 @Composable
-private fun FeedPager(ui: FeedViewModel.Ui, vm: FeedViewModel) {
+private fun FeedPager(
+    ui: FeedViewModel.Ui,
+    vm: FeedViewModel,
+    onOpenTopic: (Long) -> Unit,
+    onOpenMap: (Long) -> Unit,
+    onOpenLibrary: () -> Unit,
+) {
     val pager = rememberPagerState(pageCount = { ui.cards.size })
     val scope = rememberCoroutineScope()
     LaunchedEffect(pager.currentPage) { vm.onReachedIndex(pager.currentPage) }
@@ -151,6 +160,9 @@ private fun FeedPager(ui: FeedViewModel.Ui, vm: FeedViewModel) {
             tags = ui.tags,
             onToggleStar = { vm.toggleStar(card) },
             onToggleTag = { vm.toggleTag(card, it) },
+            onOpenTopic = card.topicPageId?.let { tp -> { onOpenTopic(tp) } },
+            onOpenMap = card.conceptId?.let { cid -> { onOpenMap(cid) } },
+            onOpenLibrary = onOpenLibrary,
         )
         Box(Modifier.fillMaxSize()) {
             CardBody(

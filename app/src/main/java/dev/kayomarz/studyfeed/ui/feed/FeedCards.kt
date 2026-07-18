@@ -73,6 +73,8 @@ private fun CardScaffold(
     revealed: Boolean,
     onImportanceClick: () -> Unit,
     onReveal: (() -> Unit)? = null,
+    /** A7: mistake-reason tags belong only under a WRONG MCQ answer — hidden elsewhere. */
+    showTags: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     // Tap-anywhere-to-reveal: a no-indication, full-card click, active ONLY before reveal. Child
@@ -102,11 +104,16 @@ private fun CardScaffold(
         Spacer(Modifier.height(16.dp))
         content()
 
+        // ── A7: "Read full topic" / "Concept map" links — fill the lower half + reach the library ─────
+        TopicLinks(actions)
+
         // ── bottom band: quiet subject, then the tag row (only after the answer is revealed) ──────────
         Spacer(Modifier.height(24.dp))
         SubjectFooter(card)
-        if (revealed && actions.tags.isNotEmpty()) {
+        if (showTags && actions.tags.isNotEmpty()) {
             Spacer(Modifier.height(10.dp))
+            Text("How did you miss it?", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(6.dp))
             TagRow(actions)
         }
         Spacer(Modifier.height(40.dp)) // breathing room above the pager edge
@@ -126,6 +133,16 @@ data class CardActionsState(
     val tags: List<dev.kayomarz.studyfeed.pack.PackDatabase.TagDef>,
     val onToggleStar: () -> Unit,
     val onToggleTag: (String) -> Unit,
+    /** A7: "Read full topic →" — non-null only when this card resolves to a topic dossier. */
+    val onOpenTopic: (() -> Unit)? = null,
+    /** A7: "Concept map →" — non-null only when this card's topic has a concept map. */
+    val onOpenMap: (() -> Unit)? = null,
+    /**
+     * A7: "Find in the library →" — the fallback library entry point for cards with no specific topic
+     * (generated MCQs, flashcards, reels, passages — the pack doesn't map those to a dossier). Ensures
+     * EVERY card can reach the library (user request), even when a precise topic isn't resolvable.
+     */
+    val onOpenLibrary: (() -> Unit)? = null,
 )
 
 @Composable
@@ -138,6 +155,41 @@ private fun StarButton(starred: Boolean, onClick: () -> Unit) {
         modifier = Modifier.clip(RoundedCornerShape(50)).clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 2.dp),
     )
+}
+
+/** A7: the "Read full topic →" and "Concept map →" links, shown when the card resolves to a topic. */
+@Composable
+private fun TopicLinks(actions: CardActionsState) {
+    if (actions.onOpenTopic != null) {
+        // A precise topic dossier for this card (curated MCQs).
+        Spacer(Modifier.height(16.dp))
+        LinkRow("Read full topic", MaterialTheme.colorScheme.primary, actions.onOpenTopic)
+        actions.onOpenMap?.let {
+            Spacer(Modifier.height(8.dp))
+            LinkRow("Concept map", dev.kayomarz.studyfeed.ui.theme.AppColor.MapTeal, it)
+        }
+    } else if (actions.onOpenLibrary != null) {
+        // No specific topic in the pack → still let the user reach the library to find one.
+        Spacer(Modifier.height(16.dp))
+        LinkRow("Find in the library", MaterialTheme.colorScheme.primary, actions.onOpenLibrary)
+    }
+}
+
+@Composable
+private fun LinkRow(label: String, accent: Color, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(BorderStroke(1.dp, accent.copy(alpha = 0.35f)), RoundedCornerShape(12.dp))
+            .background(accent.copy(alpha = 0.09f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = accent)
+        Text("→", color = accent, fontWeight = FontWeight.Bold)
+    }
 }
 
 @Composable
@@ -185,7 +237,8 @@ fun McqCard(
     var chosen by remember(card.itemId) { mutableStateOf<Int?>(null) }
     val revealed = chosen != null
 
-    CardScaffold(card, actions, revealed, onImportanceClick, onReveal = null) {
+    CardScaffold(card, actions, revealed, onImportanceClick, onReveal = null,
+        showTags = chosen != null && chosen != card.correctIdx) {
         if (card.keyConflict) {
             KeyDisputedBanner(card.keyConflictNote)
             Spacer(Modifier.height(12.dp))

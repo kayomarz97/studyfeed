@@ -23,6 +23,15 @@ sealed interface FeedCard {
     val due: String?
     val stability: Double?
 
+    /**
+     * A7: the topic dossier this card belongs to, for the "Read full topic →" link. Resolved by
+     * [FeedRepository] via `topic_pages.related_mcq_ids_json` / `related_flashcard_ids_json`; null when the
+     * item isn't linked to a topic (then the link is hidden).
+     */
+    val topicPageId: Long?
+    /** A7: the concept behind [topicPageId], for the "Concept map →" link. Null when there's no map. */
+    val conceptId: Long?
+
     /** A figure attached to this card (via the item's atom, or the MCQ directly). Null on most cards. */
     data class Figure(val path: String, val captionMd: String?)
 
@@ -36,6 +45,8 @@ sealed interface FeedCard {
         override val pyqYears: List<Int>,
         override val due: String?,
         override val stability: Double?,
+        override val topicPageId: Long? = null,
+        override val conceptId: Long? = null,
         val stemMd: String,
         val options: List<String>,      // 2–5 options; EMQ-style keys already quarantined at pack time
         val correctIdx: Int,
@@ -56,6 +67,8 @@ sealed interface FeedCard {
         override val pyqYears: List<Int> = emptyList(),
         override val due: String?,
         override val stability: Double?,
+        override val topicPageId: Long? = null,
+        override val conceptId: Long? = null,
         val frontMd: String,
         val backMd: String,
         val isCloze: Boolean,
@@ -72,6 +85,8 @@ sealed interface FeedCard {
         override val pyqYears: List<Int> = emptyList(),
         override val due: String?,
         override val stability: Double?,
+        override val topicPageId: Long? = null,
+        override val conceptId: Long? = null,
         val hookMd: String,
         val detailMd: String,
         val figure: Figure?,
@@ -87,6 +102,8 @@ sealed interface FeedCard {
         override val pyqYears: List<Int> = emptyList(),
         override val due: String?,
         override val stability: Double?,
+        override val topicPageId: Long? = null,
+        override val conceptId: Long? = null,
         val title: String?,
         val bodyMd: String,
         val estReadSeconds: Int?,
@@ -118,6 +135,8 @@ sealed interface FeedCard {
         override val pyqYears: List<Int> = emptyList(),
         override val due: String?,
         override val stability: Double?,
+        override val topicPageId: Long? = null,
+        override val conceptId: Long? = null,
         val questionMd: String,
         val answerMd: String,
     ) : FeedCard

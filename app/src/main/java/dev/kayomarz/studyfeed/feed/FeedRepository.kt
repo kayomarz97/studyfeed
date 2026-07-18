@@ -60,6 +60,37 @@ class FeedRepository private constructor(
         }
     }
 
+    /** A card's topic dossier + its concept (A7 "Read full topic" / "Concept map" links). */
+    private data class TopicRef(val topicPageId: Long, val conceptId: Long?)
+
+    /**
+     * Reverse index MCQ/flashcard id → its topic dossier, built once on first card load (A7). The pack
+     * maps topic→items (`topic_pages.related_mcq_ids_json` / `related_flashcard_ids_json`); we invert it so
+     * a card can link to its topic. First topic wins if an item is listed under several.
+     */
+    private val topicIndex: Pair<Map<Long, TopicRef>, Map<Long, TopicRef>> by lazy {
+        val mcq = HashMap<Long, TopicRef>()
+        val fc = HashMap<Long, TopicRef>()
+        try {
+            db.rawQuery(
+                "SELECT id, concept_id, related_mcq_ids_json, related_flashcard_ids_json FROM $PACK.topic_pages",
+                null,
+            ).use { c ->
+                while (c.moveToNext()) {
+                    val ref = TopicRef(c.getLong(0), if (c.isNull(1)) null else c.getLong(1))
+                    parseIdArray(c.getString(2)).forEach { mcq.putIfAbsent(it, ref) }
+                    parseIdArray(c.getString(3)).forEach { fc.putIfAbsent(it, ref) }
+                }
+            }
+        } catch (e: SQLiteException) { /* pack without dossiers → empty index, links hidden */ }
+        mcq to fc
+    }
+
+    private fun parseIdArray(json: String?): List<Long> = try {
+        if (json.isNullOrBlank()) emptyList()
+        else JSONArray(json).let { a -> (0 until a.length()).map { a.getLong(it) } }
+    } catch (e: Exception) { emptyList() }
+
     /** Total playable items — A2's pager bound (unfiltered). */
     fun size(): Int = countOf("SELECT COUNT(*) FROM $PACK.feed_items")
 
@@ -334,10 +365,12 @@ class FeedRepository private constructor(
             if (!c.moveToFirst()) return null
             val opts = listOf(c.getString(1), c.getString(2), c.getString(3), c.getString(4), c.getString(5))
                 .filterNotNull().filter { it.isNotBlank() }
+            val topic = topicIndex.first[id]
             FeedCard.Mcq(
                 itemId = r.itemId, importance = r.importance, importanceScore = r.score,
                 importanceSignals = parseSignals(c.getString(11)), subjectName = subjectNames[r.subjectId],
                 pyqYears = parseYears(c.getString(10)), due = fsrs.due, stability = fsrs.stability,
+                topicPageId = topic?.topicPageId, conceptId = topic?.conceptId,
                 stemMd = c.getString(0).orEmpty(), options = opts, correctIdx = c.getInt(6),
                 explanationMd = c.getString(7).orEmpty(),
                 perOptionWhyWrong = whyWrong(id, opts.size),
@@ -354,10 +387,12 @@ class FeedRepository private constructor(
             arrayOf(id.toString()),
         ).use { c ->
             if (!c.moveToFirst()) return null
+            val topic = topicIndex.second[id]
             FeedCard.Flashcard(
                 itemId = r.itemId, importance = r.importance, importanceScore = r.score,
                 importanceSignals = parseSignals(c.getString(3)), subjectName = subjectNames[r.subjectId],
                 due = fsrs.due, stability = fsrs.stability,
+                topicPageId = topic?.topicPageId, conceptId = topic?.conceptId,
                 frontMd = c.getString(0).orEmpty(), backMd = c.getString(1).orEmpty(),
                 isCloze = c.getInt(2) == 1, figure = figureById(if (c.isNull(4)) null else c.getLong(4)),
             )

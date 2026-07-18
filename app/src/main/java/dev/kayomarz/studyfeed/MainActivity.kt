@@ -148,6 +148,9 @@ private fun Root() {
             vm = feedVm,
             onNoPack = { screen = Screen.Manage },
             onHome = goHome,
+            onOpenTopic = { tp -> currentDossierId = tp; dossierVm.openDossier(tp); screen = Screen.Dossier(tp) },
+            onOpenMap = { cid -> conceptVm.focusOn(cid); screen = Screen.ConceptMap },
+            onOpenLibrary = { screen = Screen.Library },
         )
         Screen.Settings -> SettingsScreen(
             vm = settingsVm,
