@@ -41,6 +41,12 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val streakDays: Int = 0,
         val reviewsToday: Int = 0,
         val subjects: List<SubjectStat> = emptyList(),
+        // A7 content-type tiles: "X / total done" per type.
+        val mcq: FeedRepository.TypeProgress = FeedRepository.TypeProgress(0, 0),
+        val cards: FeedRepository.TypeProgress = FeedRepository.TypeProgress(0, 0), // flashcards + reels
+        val passages: FeedRepository.TypeProgress = FeedRepository.TypeProgress(0, 0),
+        val mistakes: Int = 0,
+        val starred: Int = 0,
     )
 
     private val registry = PackRegistry(app)
@@ -60,6 +66,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val dao = pdb.dao()
             val timestamps = dao.reviewTimestamps()
             val deadlineStr = dao.setting(SettingsKeys.DEADLINE)
+            val mistakes = dao.unresolvedMistakeCount()
+            val starred = dao.starCount()
             pdb.close()
 
             val examName = (PackDatabase.open(pack.dbFile) as? PackDatabase.Result.Ok)?.pack?.manifest?.examName
@@ -68,7 +76,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val nowIso = Instant.now().toString()
             val due = feedRepo?.dueCount(nowIso) ?: 0
             val remainingNew = feedRepo?.remainingNewMcqs() ?: 0
+            val prog = feedRepo?.progressByType().orEmpty()
             feedRepo?.close()
+
+            val zero = FeedRepository.TypeProgress(0, 0)
+            val flash = prog["flashcard"] ?: zero
+            val reel = prog["reel"] ?: zero
+            val mcq = prog["mcq"] ?: zero
+            val cards = FeedRepository.TypeProgress(flash.total + reel.total, flash.done + reel.done)
+            val passages = prog["blob"] ?: zero
 
             val stats = StatsRepository.open(ProgressDatabase.fileFor(getApplication(), pack.examCode), pack.dbFile)
             val subjects = stats?.subjectMastery().orEmpty()
@@ -85,6 +101,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 streakDays = streak(days, today),
                 reviewsToday = timestamps.count { it.take(10) == today.toString() },
                 subjects = subjects,
+                mcq = mcq, cards = cards, passages = passages,
+                mistakes = mistakes, starred = starred,
             )
         }
         _ui.value = ui

@@ -245,6 +245,23 @@ class FeedRepository private constructor(
         listOf(nowIso, nowIso),
     )
 
+    /** Per-item-type (total in pack, seen = has an FSRS row) — the A7 Home progress tiles. */
+    data class TypeProgress(val total: Int, val done: Int)
+
+    fun progressByType(): Map<String, TypeProgress> {
+        val total = HashMap<String, Int>()
+        val done = HashMap<String, Int>()
+        db.rawQuery("SELECT item_type, COUNT(*) FROM $PACK.feed_items GROUP BY item_type", null).use { c ->
+            while (c.moveToNext()) total[c.getString(0).orEmpty()] = c.getInt(1)
+        }
+        db.rawQuery(
+            """SELECT f.item_type, COUNT(*) FROM main.fsrs_cards crd
+               JOIN $PACK.feed_items f ON f.item_type = crd.item_type AND f.id = crd.item_id
+               GROUP BY f.item_type""".trimIndent(), null,
+        ).use { c -> while (c.moveToNext()) done[c.getString(0).orEmpty()] = c.getInt(1) }
+        return total.mapValues { (type, t) -> TypeProgress(t, done[type] ?: 0) }
+    }
+
     /** Count of never-seen MCQs — the numerator of the deadline pace. */
     fun remainingNewMcqs(): Int = countOf(
         """

@@ -136,7 +136,11 @@ private fun Root() {
     when (screen) {
         Screen.Home -> HomeScreen(
             vm = homeVm,
-            onStartStudying = { screen = Screen.Feed },
+            onStartMixed = { feedVm.setStudyMode(FeedViewModel.StudyMode.MIXED); screen = Screen.Feed },
+            onStartMcqs = { feedVm.setFilter(FeedFilter(itemTypesIn = listOf("mcq"))); screen = Screen.Feed },
+            onStartCards = { feedVm.setFilter(FeedFilter(itemTypesIn = listOf("flashcard", "reel"))); screen = Screen.Feed },
+            onStartPassages = { feedVm.setFilter(FeedFilter(itemTypesIn = listOf("blob"))); screen = Screen.Feed },
+            onReview = { feedVm.setFilter(FeedFilter(mistakesOnly = true)); screen = Screen.Feed },
             onNoPack = { screen = Screen.Manage },
             onOpenLibrary = { screen = Screen.Library },
             onOpenMap = { screen = Screen.ConceptMap },
