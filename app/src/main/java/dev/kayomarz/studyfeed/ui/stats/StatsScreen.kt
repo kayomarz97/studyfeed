@@ -47,7 +47,7 @@ fun StatsScreen(vm: StatsViewModel, onReviewMistakes: () -> Unit, onBack: () -> 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 4.dp),
             verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("← Back") }
+            TextButton(onClick = onBack) { Text("‹ Home") }
             Text("Progress", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
         }
         when {

@@ -33,6 +33,8 @@ class ConceptMapViewModel(app: Application) : AndroidViewModel(app) {
         val positions: List<ForceLayout.Pt> = emptyList(),
         val query: String = "",
         val searchResults: List<ConceptRef> = emptyList(),
+        /** A7: the map opens as a searchable LIST; picking a concept switches to its ego-graph. */
+        val browseMode: Boolean = true,
     )
 
     data class QuizState(val loading: Boolean = false, val open: Boolean = false,
@@ -59,14 +61,17 @@ class ConceptMapViewModel(app: Application) : AndroidViewModel(app) {
         }
         repo = r
         if (r == null || top.isEmpty()) { _state.update { it.copy(loading = false, hasPack = r != null) }; return@launch }
-        _state.update { it.copy(searchResults = top) }
-        focusOn(top.first().id)   // land on the most central hub
+        // A7: open as a searchable list, not straight onto the top hub.
+        _state.update { it.copy(loading = false, searchResults = top, browseMode = true) }
     }
 
-    /** Load [conceptId]'s ego-graph and lay it out. This is the "walk" — tapping a neighbour calls it. */
+    /** Return to the searchable concept list (the Map's landing view). */
+    fun browse() = _state.update { it.copy(browseMode = true) }
+
+    /** Load [conceptId]'s ego-graph and lay it out. Picking from the list, or "walking" a neighbour. */
     fun focusOn(conceptId: Long) = viewModelScope.launch {
         val r = repo ?: return@launch
-        _state.update { it.copy(loading = true) }
+        _state.update { it.copy(loading = true, browseMode = false) }
         val (ego, positions) = withContext(Dispatchers.IO) {
             val e = r.ego(conceptId, k = 12)
             val pos = if (e == null) emptyList() else {

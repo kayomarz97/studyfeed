@@ -143,7 +143,7 @@ private fun Root() {
             onReview = { feedVm.setFilter(FeedFilter(mistakesOnly = true)); screen = Screen.Feed },
             onNoPack = { screen = Screen.Manage },
             onOpenLibrary = { screen = Screen.Library },
-            onOpenMap = { screen = Screen.ConceptMap },
+            onOpenMap = { conceptVm.browse(); screen = Screen.ConceptMap },
             onOpenStats = { statsVm.load(); screen = Screen.Stats },
             onOpenSettings = { settingsVm.load(); screen = Screen.Settings },
             onManagePacks = { screen = Screen.Manage },
@@ -177,6 +177,7 @@ private fun Root() {
             vm = dossierVm,
             onOpenDossier = { id -> currentDossierId = id; dossierVm.openDossier(id); screen = Screen.Dossier(id) },
             onBack = goHome,
+            onOpenMap = { cid -> conceptVm.focusOn(cid); screen = Screen.ConceptMap },
         )
         is Screen.Dossier -> DossierScreen(
             vm = dossierVm,

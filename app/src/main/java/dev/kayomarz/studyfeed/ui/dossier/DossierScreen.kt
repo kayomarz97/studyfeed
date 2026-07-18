@@ -64,7 +64,7 @@ fun DossierScreen(
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 4.dp),
             verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("← Library") }
+            TextButton(onClick = onBack) { Text("‹ Library") }
             Text("Dossier", style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

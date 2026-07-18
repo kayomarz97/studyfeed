@@ -48,40 +48,77 @@ class DossierRepository private constructor(
     /** How many dossiers the pack ships — a hint for the Library's empty/loaded states. */
     fun size(): Int = countOf("SELECT COUNT(*) FROM topic_pages")
 
+    /** The distinct subject names the dossiers cover — for the Library's subject filter (A7). */
+    fun subjects(): List<String> = subjectNames.values.filter { it.isNotBlank() }.sorted()
+
+    /** A7 Library filter: importance (5★ / 4★+), a subject, and PYQ-linked topics. */
+    data class DossierFilter(
+        val importanceExact: Int? = null,
+        val importanceMin: Int? = null,
+        val subject: String? = null,
+        val pyqOnly: Boolean = false,
+    ) {
+        val isAll get() = importanceExact == null && importanceMin == null && subject == null && !pyqOnly
+    }
+
     /**
-     * Search dossiers by name/alias + full body text (A4 decision). Title/alias hits rank above
-     * body-only hits, then importance ↓. LIKE over 8,194 rows is well under 100 ms — no FTS index needed.
+     * Search + filter dossiers by name/alias + full body text and the A7 filters (importance / subject /
+     * PYQ). Title/alias hits rank above body-only hits, then importance ↓. LIKE over 8,194 rows is well
+     * under 100 ms. PYQ is filtered in Kotlin against a precomputed set (topic → any PYQ related MCQ).
      */
-    fun search(query: String, limit: Int = 60): List<DossierListItem> {
+    fun list(query: String, filter: DossierFilter = DossierFilter(), limit: Int = 60): List<DossierListItem> {
         val q = query.trim()
-        if (q.isBlank()) return topDossiers(limit)
-        val like = "%${q.replace("%", "\\%").replace("_", "\\_")}%"
+        val like = if (q.isNotBlank()) "%${q.replace("%", "\\%").replace("_", "\\_")}%" else null
+        val clauses = ArrayList<String>()
+        val whereArgs = ArrayList<String>()
+        if (like != null) {
+            clauses += "(title LIKE ? ESCAPE '\\' OR aliases_json LIKE ? ESCAPE '\\' OR body_md LIKE ? ESCAPE '\\')"
+            whereArgs += like; whereArgs += like; whereArgs += like
+        }
+        filter.importanceExact?.let { clauses += "importance = ?"; whereArgs += it.toString() }
+        filter.importanceMin?.let { clauses += "importance >= ?"; whereArgs += it.toString() }
+        filter.subject?.let { clauses += "subjects_covered_json LIKE ?"; whereArgs += "%\"$it\"%" }
+        val where = if (clauses.isEmpty()) "" else "WHERE " + clauses.joinToString(" AND ")
+        val nameHit = if (like != null) "CASE WHEN title LIKE ? ESCAPE '\\' OR aliases_json LIKE ? ESCAPE '\\' THEN 1 ELSE 0 END" else "0"
+        // Placeholders bind in text order: SELECT's name_hit args first, then WHERE args, then LIMIT.
+        val selArgs = if (like != null) listOf(like, like) else emptyList()
+        val sqlLimit = if (filter.pyqOnly) 2000 else limit   // PYQ filtered in Kotlin → fetch a wider set
         val rows = ArrayList<DossierListItem>(limit)
         db.rawQuery(
             """
-            SELECT id, title, subjects_covered_json, importance, importance_score,
-                   CASE WHEN title LIKE ? ESCAPE '\' OR aliases_json LIKE ? ESCAPE '\' THEN 1 ELSE 0 END AS name_hit
-            FROM topic_pages
-            WHERE title LIKE ? ESCAPE '\' OR aliases_json LIKE ? ESCAPE '\' OR body_md LIKE ? ESCAPE '\'
+            SELECT id, title, subjects_covered_json, importance, importance_score, concept_id, $nameHit AS name_hit
+            FROM topic_pages $where
             ORDER BY name_hit DESC, importance DESC, importance_score DESC, id
             LIMIT ?
             """.trimIndent(),
-            arrayOf(like, like, like, like, like, limit.toString()),
-        ).use { c -> while (c.moveToNext()) rows += listItem(c) }
+            (selArgs + whereArgs + listOf(sqlLimit.toString())).toTypedArray(),
+        ).use { c ->
+            while (c.moveToNext()) {
+                if (filter.pyqOnly && c.getLong(0) !in pyqTopicIds) continue
+                rows += listItem(c)
+                if (rows.size >= limit) break
+            }
+        }
         return rows
     }
 
-    /** The default Library list when the search box is empty: highest-yield dossiers first. */
-    fun topDossiers(limit: Int = 60): List<DossierListItem> {
-        val rows = ArrayList<DossierListItem>(limit)
-        db.rawQuery(
-            """
-            SELECT id, title, subjects_covered_json, importance, importance_score
-            FROM topic_pages ORDER BY importance DESC, importance_score DESC, id LIMIT ?
-            """.trimIndent(),
-            arrayOf(limit.toString()),
-        ).use { c -> while (c.moveToNext()) rows += listItem(c) }
-        return rows
+    /** Topic ids that have at least one PYQ related MCQ (A7 "PYQ topics" filter). Built once. */
+    private val pyqTopicIds: Set<Long> by lazy {
+        val pyqMcqs = HashSet<Long>()
+        try {
+            db.rawQuery("SELECT id FROM mcqs WHERE is_pyq = 1", null).use { c ->
+                while (c.moveToNext()) pyqMcqs += c.getLong(0)
+            }
+        } catch (e: SQLiteException) { /* no mcqs → empty */ }
+        val out = HashSet<Long>()
+        try {
+            db.rawQuery("SELECT id, related_mcq_ids_json FROM topic_pages", null).use { c ->
+                while (c.moveToNext()) {
+                    if (parseLongArray(c.getString(1)).any { it in pyqMcqs }) out += c.getLong(0)
+                }
+            }
+        } catch (e: SQLiteException) { /* no dossiers */ }
+        out
     }
 
     private fun listItem(c: android.database.Cursor) = DossierListItem(
@@ -90,6 +127,7 @@ class DossierRepository private constructor(
         subjects = parseStringArray(c.getString(2)),
         importance = c.getInt(3),
         importanceScore = c.getDouble(4),
+        conceptId = if (c.isNull(5)) null else c.getLong(5),
     )
 
     /** Load one full dossier: body, ordered collapsible sections, figures, and related-item links. */
@@ -97,13 +135,15 @@ class DossierRepository private constructor(
         return db.rawQuery(
             """
             SELECT title, body_md, importance, importance_score, importance_signals_json,
-                   subjects_covered_json, figure_ids_json, related_mcq_ids_json, related_flashcard_ids_json
+                   subjects_covered_json, figure_ids_json, related_mcq_ids_json, related_flashcard_ids_json,
+                   concept_id
             FROM topic_pages WHERE id = ?
             """.trimIndent(), arrayOf(topicPageId.toString()),
         ).use { c ->
             if (!c.moveToFirst()) return null
             Dossier(
                 topicPageId = topicPageId,
+                conceptId = if (c.isNull(9)) null else c.getLong(9),
                 title = c.getString(0).orEmpty(),
                 // body_md IS the full page = preamble + the same `## ` sections that topic_sections holds
                 // verbatim (proven: section body ⊂ page body). Render the sections from topic_sections
@@ -312,11 +352,14 @@ data class DossierListItem(
     val subjects: List<String>,
     val importance: Int,
     val importanceScore: Double,
+    /** The concept behind this topic, for the A7 per-row "Map" button. Null if none. */
+    val conceptId: Long? = null,
 )
 
 /** A fully-loaded dossier (§8 A4). */
 data class Dossier(
     val topicPageId: Long,
+    val conceptId: Long? = null,
     val title: String,
     val bodyMd: String,
     val importance: Int,

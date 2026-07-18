@@ -65,39 +65,65 @@ fun ConceptMapScreen(
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
     val quiz by vm.quiz.collectAsStateWithLifecycle()
-    var showSearch by remember { mutableStateOf(false) }
     var showInfo by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 4.dp),
             verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("← Back") }
-            Text("Concept map", style = MaterialTheme.typography.titleMedium,
+            // A7: list-first. Back leaves to Home from the list, or returns to the list from a map.
+            TextButton(onClick = { if (ui.browseMode) onBack() else vm.browse() }) {
+                Text(if (ui.browseMode) "‹ Home" else "‹ List")
+            }
+            Text(if (ui.browseMode) "Concept map" else (ui.ego?.focus?.name ?: "Concept map"),
+                style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-            TextButton(onClick = { showSearch = !showSearch }) { Text(if (showSearch) "Close" else "Find") }
         }
-        if (showSearch) SearchPanel(ui.query, ui.searchResults, vm::search, onPick = { id ->
-            showSearch = false; vm.focusOn(id)
-        })
 
-        Box(Modifier.fillMaxSize()) {
+        if (ui.browseMode) {
+            // A7: the map opens as a searchable list of concepts; tap one to open its map.
+            OutlinedTextField(
+                value = ui.query, onValueChange = vm::search, singleLine = true,
+                placeholder = { Text("Search a concept…") },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+            )
             when {
-                ui.loading && ui.ego == null -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
                 !ui.hasPack -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                     Text("Import a pack to explore its concept map.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                ui.ego == null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    Text("No concept graph in this pack.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                ui.searchResults.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+                    Text(if (ui.query.isBlank()) "No concept graph in this pack." else "No concept matches “${ui.query}”.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                else -> GraphCanvas(
-                    ego = ui.ego!!, positions = ui.positions,
-                    onTapNeighbour = { vm.focusOn(it) },
-                    onTapFocus = { showInfo = true },
-                )
+                else -> LazyColumn(Modifier.fillMaxSize()) {
+                    items(ui.searchResults, key = { it.id }) { c ->
+                        Row(Modifier.fillMaxWidth().clickable { vm.focusOn(c.id) }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text(c.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                            Text("🕸", fontSize = 14.sp, modifier = Modifier.padding(end = 8.dp))
+                            Text("${c.importance}★", color = Importance.color(c.importance), fontSize = 12.sp)
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                    }
+                }
             }
-            Text("Tap a node to walk · tap the centre for details",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp))
+        } else {
+            Box(Modifier.fillMaxSize()) {
+                when {
+                    ui.loading && ui.ego == null -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+                    ui.ego == null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+                        Text("No concept graph for this topic.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    else -> GraphCanvas(
+                        ego = ui.ego!!, positions = ui.positions,
+                        onTapNeighbour = { vm.focusOn(it) },
+                        onTapFocus = { showInfo = true },
+                    )
+                }
+                Text("Tap a node to walk · tap the centre for details",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp))
+            }
         }
     }
 

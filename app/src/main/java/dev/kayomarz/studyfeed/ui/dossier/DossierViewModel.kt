@@ -30,6 +30,8 @@ class DossierViewModel(app: Application) : AndroidViewModel(app) {
         val hasPack: Boolean = true,
         val query: String = "",
         val results: List<DossierListItem> = emptyList(),
+        val filter: DossierRepository.DossierFilter = DossierRepository.DossierFilter(),
+        val subjects: List<String> = emptyList(),
     )
 
     data class DossierState(val loading: Boolean = true, val dossier: Dossier? = null)
@@ -54,22 +56,33 @@ class DossierViewModel(app: Application) : AndroidViewModel(app) {
     private fun start() = viewModelScope.launch {
         val pack = withContext(Dispatchers.IO) { registry.activePack() }
         if (pack == null) { _library.update { it.copy(loading = false, hasPack = false) }; return@launch }
-        val (r, top) = withContext(Dispatchers.IO) {
+        val (r, subjects, top) = withContext(Dispatchers.IO) {
             val opened = DossierRepository.open(pack.dbFile)
-            opened to (opened?.topDossiers() ?: emptyList())
+            Triple(opened, opened?.subjects().orEmpty(), opened?.list("") ?: emptyList())
         }
         repo = r
-        _library.update { it.copy(loading = false, hasPack = r != null, results = top) }
+        _library.update { it.copy(loading = false, hasPack = r != null, results = top, subjects = subjects) }
     }
 
     /** Search on each keystroke, lightly debounced; empty query falls back to the top dossiers. */
     fun search(query: String) {
         _library.update { it.copy(query = query, loading = true) }
+        reloadList()
+    }
+
+    /** Apply the A7 Library filters (importance / subject / PYQ). */
+    fun setLibraryFilter(filter: DossierRepository.DossierFilter) {
+        _library.update { it.copy(filter = filter, loading = true) }
+        reloadList()
+    }
+
+    private fun reloadList() {
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             delay(180) // debounce: coalesce fast typing before hitting SQLite
             val r = repo ?: return@launch
-            val results = withContext(Dispatchers.IO) { r.search(query) }
+            val s = _library.value
+            val results = withContext(Dispatchers.IO) { r.list(s.query, s.filter) }
             _library.update { it.copy(loading = false, results = results) }
         }
     }
