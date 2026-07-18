@@ -11,9 +11,11 @@
 > figures are attachments rendered **inline**. Plus the A2 build rules: **no markdown library** (it would
 > corrupt lab values), **no Coil/Glide** (local files; OkHttp would fail the guard), **no Paging 3** yet.)
 > **STATUS: Phase 1 (compiler) COMPLETE — C0–C13, pack shipped + imported to the laptop
-> (32,957 playable feed items). Phase 2 (app) is live: A0–A6 done; A7 (design pass) IN PROGRESS —
-> dashboard home, loud-PYQ cards, tags-to-bottom + tap-anywhere, flashcard/reel styling + study modes,
-> Settings (deadline/re-drill/intensity + export/restore), concept-map spread.**
+> (32,957 playable feed items). Phase 2 (app) live: A0–A6 done; A7 (design pass) — cycle 1 (dashboard,
+> loud-PYQ cards, study modes, Settings) + cycle 2 (clinical-night colour, working ratings + advance
+> toggle, one-row feed + Filter sheet, Home content-tiles, topic/map/library links on cards, Library
+> filters + Map buttons, Maps-as-list, back-nav) BUILT + emulator-verified + released. Owed: concept-list
+> subject/PYQ filters, release-APK signing, §A8 notes.**
 > Resume truth: **`JOURNAL.md`** — one merged log (⛔ standing orders at the top, then Phase 1 /
 > Phase 2 sections). `JOURNAL_APP.md` was merged into it and deleted on 2026-07-17.
 > Machine resume truth for the dormant compiler stays `compiler/.compiler_state.json`.

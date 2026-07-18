@@ -1426,3 +1426,33 @@ confirmed on `emulator-5554` (+ tags-to-bottom-post-reveal and tap-anywhere conf
 shuffle unit-verified. **Cohesiveness pass next** — a Fable agent is doing a full-app design walkthrough to
 produce the "where do you want what" questions for the user; UI-cohesion changes will follow from the
 user's answers.
+
+### 2026-07-18 — **A7 cycle 2: the redesign** (approved via an artifact mockup, built + verified live)
+
+After the Fable full-app design review, put a visual mockup (HTML artifact, iterated to v3) to the user and
+got explicit approval + a "show-me-then-approve, assume-nothing" workflow. Built the whole redesign in
+verified chunks (each: compile → emulator screenshot → commit), then a single release APK.
+
+- **Colour** (`0b4426e`): flat **"clinical night"** palette — iris `#6e72e8` primary (flat, no gradient),
+  cool-charcoal surfaces, **coral PYQ** `#f2705b` (distinct from the amber importance ramp, kept). User
+  wanted "colour but not AI-slop" → dropped the blue→teal gradient.
+- **Working ratings** (`0b4426e`): rating a card now **advances to the next** (the "buttons don't work"
+  bug — they saved silently); Settings toggle `feed.advanceAfterRating`; same 4 buttons on every recall
+  card (reels were Shaky/Got-it); **Android back gesture** works (BackHandler).
+- **Card links** (`44dc559`): "Read full topic →" + "Concept map →" on curated MCQs; "Find in the library
+  →" on every other card so all cards reach the library. Data reality handled: `related_flashcard_ids_json`
+  ships EMPTY and generated MCQs aren't linked → library fallback. Mistake-tags only after a WRONG MCQ.
+- **One-row feed** (`75a4793`): three control rows → "‹ Home · Study ▾ · ⚙ Filter" + a Filter **sheet**
+  (type/importance/PYQ/subject) + removable tokens + a specific empty state.
+- **Home tiles** (`52f1404`): content-type tiles with "X / total done", a Review tile (due·mistakes·
+  starred), a first-class Library card, Endless-mix beside Map.
+- **Library + Maps** (`aa1420f`): Library filters (5★/4★+/PYQ/Subject) + per-topic **Map** button + capped
+  subject lists; the Concept map now opens as a searchable **list** → tap → ego-graph; one back style.
+
+**Verified live** on `emulator-5554` (the earlier boot-wedge was a stale snapshot — `-no-snapshot-load`
+cold-boot fixes it; see PLAYBOOK): each part screenshotted. `testDebugUnitTest` + `verifyOfflineGuarantees`
++ `assembleDebug` all green; **zero new runtime deps**. Two known data limits recorded above (flashcard
+topic map empty; generated MCQs unlinked) → those cards use the library fallback, honestly.
+
+**Resume point:** A7 cycle 2 done + released. Owed follow-ups if the user wants: concept-list subject/PYQ
+filters (concepts lack a direct subject); release-APK signing; `§A8` personal notes. A7 is the last stage.
