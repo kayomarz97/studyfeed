@@ -8,9 +8,24 @@ authoritative specification and it must live on disk, because per §10a anything
 conversation is eroded by compaction.
 
 > **If `BUILD_PROMPT.md` already exists at the repo root, you are re-reading it after a restart or
-> compaction.** Skip straight to step 4: read `compiler/.compiler_state.json`, re-poll any batch IDs
-> under `batches`, read the tail of `JOURNAL.md`, and resume at `next_action`. **Do not start over,
-> and do not re-save this file.**
+> compaction.** **Do not start over, and do not re-save this file.**
+>
+> **⚠ AS OF 2026-07-17 (PATCH 02), STEPS 1–4 BELOW ARE HISTORY — PHASE 1 IS COMPLETE.**
+> The compiler is **DONE (C0–C13)** and `dist/pack_MRCP_PART1.db` is built (**32,957 playable feed
+> items** after C11b added blobs + interlink; reproducibility gate cleared) and **imported to the
+> laptop**, checksum-verified. §13's kickoff, the archive drops, and the C0 environment checks all
+> **already happened** — do not re-run them, and do not re-do §13.
+>
+> **Where a fresh session actually resumes now:**
+> - **App work (the live front — this is almost certainly you):** you are on the **laptop**. Read
+>   `JOURNAL.md` — the ⛔ standing orders at its top, then its **Phase 2 — app** section — and go to
+>   **§8 A1**. A0 is done.
+> - **Compiler work (the box, now dormant):** read `compiler/.compiler_state.json`, re-poll any batch
+>   IDs under `batches`, read `JOURNAL.md`'s **Phase 1 — compiler** section, resume at `next_action`.
+>
+> **State on disk is the truth, never the transcript.** As of 2026-07-17 there is **ONE journal**:
+> `JOURNAL_APP.md` was merged into `JOURNAL.md` and deleted (the two-file split existed only to stop
+> the two machines colliding, and Phase 1 is done). Both histories are preserved in it, sectioned.
 
 **2. Wire it into my working agreement.** I use a `CLAUDE.md` (auto-loaded every session, deliberately
 short), `.claude/INDEX.md` (codebase map, scanned first), and `.claude/PLAYBOOK.md` (on-demand
@@ -33,6 +48,11 @@ golden loop, non-negotiables, and an **agent routing table**; I already have `mi
 **4. Then begin at §13 (Kickoff).** Git and `.gitignore` come first — my three archives are already
 sitting at the repo root and must be ignored before the first commit. **Ask before assuming (§1).**
 
+> **⚠ Step 4 is COMPLETE (2026-07-17).** Kickoff happened, the archives were ingested, and the
+> compiler ran to C13. **A fresh session must NOT begin at §13** — see the resume box above and go to
+> **§8 A1**. Steps 1–3 remain true (the spec lives on disk; the working agreement and global-rule
+> reconciliation still apply). **Ask before assuming (§1)** still binds.
+
 ---
 
 > **What this is:** one long-lived Claude Code session that spawns subagents and stops at ⛔ approval
@@ -46,7 +66,16 @@ sitting at the repo root and must be ignored before the first commit. **Ask befo
 first_exam:          MRCP(UK) Part 1          # first profile; the app must NOT be hardcoded to it
 include_figures:     true                      # extract images/diagrams, tie to atoms + MCQs + dossiers
 highlight_sources:   both                      # digital PDF annotations AND marker-on-scans (colour mask)
-build_env:           hetzner_headless_claude_code  # Linux, no GUI; Gradle CLI; sideload APK
+build_env:           split_compiler_box_app_laptop  # ⚠ AMENDED 2026-07-17 (PATCH 02) — was
+                                                #   `hetzner_headless_claude_code`. TWO machines now:
+                                                #   COMPILER → Hetzner box (headless Linux, no GUI).
+                                                #   APP      → 16GB laptop: Android Studio + real phone.
+                                                #   The box cannot build the app (OOM: ~2.7GB free, swap
+                                                #   96% spent) and is headless — §8 A2's AMOLED feed
+                                                #   cannot be judged without a real panel.
+                                                #   ⚠ INTENT UNCHANGED: the app MUST still build from the
+                                                #   CLI (`./gradlew assembleDebug`) with NO IDE-only
+                                                #   config. Only "over SSH" is moot. Sideload: `adb`.
 volume:              unbounded                  # 15+ PDFs AND GROWING — never hardcode a count;
                                                 #   glob sources/**, batch, checkpoint, resume
 
@@ -617,6 +646,28 @@ step 1 removed it.
 **Report at C2**, per book: proposed `body_start_page`, pages excluded as front/back matter, and every
 boilerplate cluster found with its member count. ⛔ I confirm before you atomize anything.
 
+### 5j. Stable keys — anything I own must NOT be anchored to a row id  (PATCH 01)
+
+`pack.db` is rebuilt on every recompile, so row IDs are not stable. Every row a human can attach
+something to therefore carries a `stable_key`, derived from content and provenance:
+
+```
+stable_key = sha256(normalized_text + '|' + work_id + '|' + page_ref)[:16]
+```
+
+- Derive from **content + provenance only** — never from row order, insert sequence, or a counter.
+- **Normalize before hashing** (casefold, collapse whitespace, strip punctuation) so trivial
+  re-extraction differences don't mint a new key.
+- Use **`work_id`, not `source_id`** — the same book re-supplied as a different file must produce the
+  *same* key (§5b).
+- Everything user-owned in `progress.db` — notes, stars, tags, mistakes, FSRS state — anchors to
+  `stable_key`, **never to `id`**.
+- On import, resolve `stable_key` → current `id` once and cache the mapping. A key that no longer
+  resolves means that content left the pack: **keep the row, mark it orphaned, surface it. Never
+  delete my data because the pack changed.**
+- Report at C13: how many stable keys changed vs the previous pack. Large churn means the
+  normalization is too brittle — tell me.
+
 ---
 
 ## 6. Data contracts
@@ -666,6 +717,7 @@ CREATE TABLE works (                             -- canonical bibliographic work
 -- ── grounded knowledge ──
 CREATE TABLE atoms (
   id INTEGER PRIMARY KEY, subject_id INTEGER, topic_id INTEGER,
+  stable_key TEXT UNIQUE,                         -- content-derived (§5j); survives rebuild. NEVER anchor user data to id.
   statement TEXT, detail_md TEXT,
   source_id INTEGER, page_ref TEXT,              -- grounding (required)
   is_highlighted INTEGER DEFAULT 0, salience REAL DEFAULT 0,
@@ -692,6 +744,7 @@ CREATE TABLE atom_citations (                    -- unioned on merge; source cou
 );
 CREATE TABLE concepts (
   id INTEGER PRIMARY KEY, name TEXT,             -- DISPLAY name: UK spelling, as I'll sit the exam
+  stable_key TEXT UNIQUE,                         -- content-derived (§5j); survives rebuild.
   canonical_key TEXT,                            -- orthographic match key (§5e) — never displayed
   subject_id INTEGER, summary_md TEXT, aliases_json TEXT,
   guideline_sensitive INTEGER DEFAULT 0,         -- 1 = answer may go stale (targets/thresholds/mgmt)
@@ -717,6 +770,7 @@ CREATE TABLE cluster_members ( cluster_id INTEGER, mcq_id INTEGER, source_id INT
 -- ── pre-compiled cross-subject topic dossiers ("read up on X") ──
 CREATE TABLE topic_pages (
   id INTEGER PRIMARY KEY, concept_id INTEGER, title TEXT, aliases_json TEXT,
+  stable_key TEXT UNIQUE,                         -- content-derived (§5j); survives rebuild.
   body_md TEXT,                                  -- full long page, already assembled
   subjects_covered_json TEXT, figure_ids_json TEXT,
   related_mcq_ids_json TEXT, related_flashcard_ids_json TEXT,
@@ -733,6 +787,7 @@ CREATE TABLE flashcards ( id INTEGER PRIMARY KEY, subject_id INTEGER, atom_id IN
   importance INTEGER DEFAULT 1, importance_score REAL DEFAULT 0, importance_signals_json TEXT );
 
 CREATE TABLE mcqs ( id INTEGER PRIMARY KEY, subject_id INTEGER, source_id INTEGER,
+  stable_key TEXT UNIQUE,                         -- content-derived (§5j); survives rebuild.
   origin TEXT,                                   -- curated | generated
   key_trust TEXT,                                -- ⇦ from the ITEM, not the source tier (§5a)
                                                  --   a printed key in a textbook = qbank-level trust
@@ -778,22 +833,41 @@ CREATE INDEX idx_feed_pyq        ON feed_items(is_pyq, importance DESC);
 ### 6b. Progress DB — per exam, e.g. `progress_MRCP_PART1.db` (READ-WRITE, survives re-import)
 
 ```sql
-CREATE TABLE fsrs_cards ( item_type TEXT, item_id INTEGER,
+-- PATCH 01 §5j: user-owned rows anchor on stable_key, NEVER a pack row id (ids are not stable).
+CREATE TABLE fsrs_cards ( item_type TEXT, stable_key TEXT,
   stability REAL, difficulty REAL, due TEXT, last_review TEXT, state INTEGER, reps INTEGER,
-  lapses INTEGER, PRIMARY KEY (item_type, item_id) );
-CREATE TABLE reviews ( id INTEGER PRIMARY KEY AUTOINCREMENT, item_type TEXT, item_id INTEGER,
+  lapses INTEGER, PRIMARY KEY (item_type, stable_key) );
+CREATE TABLE reviews ( id INTEGER PRIMARY KEY AUTOINCREMENT, item_type TEXT, stable_key TEXT,
   rating INTEGER, ts TEXT, elapsed_ms INTEGER );
-CREATE TABLE mistakes ( id INTEGER PRIMARY KEY AUTOINCREMENT, item_type TEXT, item_id INTEGER,
+CREATE TABLE mistakes ( id INTEGER PRIMARY KEY AUTOINCREMENT, item_type TEXT, stable_key TEXT,
   subject_id INTEGER, chosen_idx INTEGER, ts TEXT, resolved INTEGER DEFAULT 0 );
-CREATE TABLE stars ( item_type TEXT, item_id INTEGER, ts TEXT, PRIMARY KEY (item_type, item_id) );
-CREATE TABLE item_tags ( item_type TEXT, item_id INTEGER, tag_key TEXT, ts TEXT,
-  PRIMARY KEY (item_type, item_id, tag_key) );
+CREATE TABLE stars ( item_type TEXT, stable_key TEXT, ts TEXT, PRIMARY KEY (item_type, stable_key) );
+CREATE TABLE item_tags ( item_type TEXT, stable_key TEXT, tag_key TEXT, ts TEXT,
+  PRIMARY KEY (item_type, stable_key, tag_key) );
 CREATE TABLE subject_mastery ( subject_id INTEGER PRIMARY KEY, mastery REAL, updated TEXT );
 CREATE TABLE sessions ( id INTEGER PRIMARY KEY AUTOINCREMENT, mode TEXT, started TEXT, ended TEXT,
   seen INTEGER, correct INTEGER );
 CREATE TABLE blob_reads ( blob_id INTEGER PRIMARY KEY, read_at TEXT, quizzed_at TEXT, reread_due TEXT );
 CREATE TABLE feed_state ( key TEXT PRIMARY KEY, value TEXT );
 CREATE TABLE settings ( key TEXT PRIMARY KEY, value TEXT );
+
+-- PATCH 01 §A8/B1: my own notes (text + images), local, anchored by stable_key never id (§5j)
+CREATE TABLE user_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  anchor_kind TEXT,                 -- atom | concept | mcq | topic_page | standalone
+  anchor_stable_key TEXT,           -- NOT a row id. null when standalone
+  subject_id INTEGER,               -- resolved at write time so orphans stay filterable
+  title TEXT, body_md TEXT,
+  created TEXT, updated TEXT,
+  is_orphaned INTEGER DEFAULT 0,    -- anchor vanished on recompile: KEEP IT, flag it, never delete
+  pinned INTEGER DEFAULT 0
+);
+CREATE TABLE user_note_images (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, note_id INTEGER,
+  rel_path TEXT,                    -- app-private storage; not a blob, not a content:// URI
+  caption TEXT, ord INTEGER
+);
+CREATE INDEX idx_note_anchor ON user_notes(anchor_kind, anchor_stable_key);
 ```
 
 The app keeps a registry of imported packs (file + `exam_code` + progress-DB name) so it can list and
@@ -802,6 +876,33 @@ switch exams. Progress is namespaced per `exam_code` and never wiped.
 ---
 
 ## 7. Phase 1 build order (compiler) — ⛔ = wait for my go
+
+> ## ✅ PHASE 1 IS COMPLETE — C0 THROUGH C13 ARE DONE (2026-07-16/17).
+>
+> **Everything in §7 below is the historical record of work that has already happened. Do not re-run
+> it, do not re-plan it, and do not treat any ⛔ gate here as pending.** It is kept verbatim because it
+> documents *how* the shipped pack was built (§10a: the spec lives on disk).
+>
+> **What exists now:** `compiler/dist/pack_MRCP_PART1.db` (gitignored — derived from copyrighted
+> sources; **imported to the laptop 2026-07-17**, sha256 verified against `manifest.json`) — counts
+> read from the shipped DB, not from a doc: 86,698 atoms · 37,795 concepts + 67,795 edges · 14,455
+> MCQs (12,455 curated + 2,000 generated) · 9,507 flashcards · 3,000 reels · 8,194 topic dossiers ·
+> 2,997 text blobs · 2,998 interlink quizzes · 1,121 figures · **32,957 playable feed_items** ·
+> 147,142 stable_keys. The **PATCH-01 reproducibility gate is CLEARED** (two builds → byte-identical
+> stable_key set + content checksum), so a rebuild never orphans progress or notes (§5j).
+> *(Superseded earlier figures — 26,965 items / 86,702 atoms / 147,146 keys — predate C11b's blobs +
+> interlink and the two source-fact atom removals.)*
+>
+> **Asset coverage (corrected 2026-07-17 — PATCH 03; the old "shipped empty" text was stale):** the
+> C11 trim was **undone** by C11b + the figures tail. `text_blobs` **2,997** · `blob_quizzes` **2,997** ·
+> `interlink_quizzes` **2,998** · `figures` **1,121** are all **POPULATED**, and `feature_flags` declares
+> `has_blobs`/`has_interlink`/`has_figures` = true. **§8 A2's blob and image card types DO have data** —
+> build them for real. Only `dup_clusters` (plus `topics`, `cluster_members`) is empty.
+> **This changes what today's pack contains, NOT the rule:** availability is still resolved at runtime
+> per pack (§8 A1), because the next exam's pack may legitimately ship without any of these.
+>
+> **The live front is Phase 2 (§8), on the laptop.** Details: `JOURNAL.md` tail (compiler history) and
+> `compiler/.compiler_state.json`.
 
 - **C0 · Spec + scaffold.** **FIRST, before anything else: `git init` + commit `.gitignore` (§11b), then
   check the repo root for my three dropped archives** (`textbooks*.zip`, `*mcq*.rar`, `papers*.zip`).
@@ -935,21 +1036,80 @@ byte-identical scores and no duplicate rows**.
 Stack: Kotlin, Compose (**Material3**), Room (content DB attached read-only), **FSRS-Kotlin (FSRS-6)**,
 Compose Canvas for the concept map, DataStore for settings. No network libs, no AI SDKs.
 
-- **A0 · Skeleton + offline/no-background guarantees.** ⛔
-  - Buildable headless via `./gradlew assembleDebug` over SSH; document SDK/cmdline setup in README.
+> **Where Phase 2 is built (PATCH 02, 2026-07-17):** on the **laptop** (Android Studio + a physical
+> phone), not the Hetzner box — see §0 `build_env`. The **CLI-buildable intent binds unchanged**:
+> `./gradlew assembleDebug` must work from a terminal with no IDE-only configuration. Only "over SSH"
+> is moot. The app's human log is **`JOURNAL.md`, its "Phase 2 — app" section** (merged 2026-07-17;
+> `JOURNAL_APP.md` is deleted — append app entries to the END of `JOURNAL.md`).
+>
+> **Status: A0 ✅ DONE (2026-07-16/17). A1 is next.** Do not re-do A0; do not resequence §8.
+
+- **A0 · Skeleton + offline/no-background guarantees.** ✅ **DONE 2026-07-16/17** — gate closed
+  (keystore generated + backed up off-machine). Details in `JOURNAL.md` ("Phase 2 — app") +
+  `app/README.md`.
+  - Buildable via `./gradlew assembleDebug` from the laptop CLI; SDK/cmdline setup documented in
+    `app/README.md`. ✅ Enforced by an included build (`build-logic/`): every `assemble<Variant>`
+    depends on a merged-manifest parse + a runtime-classpath denylist, so a violating APK **cannot be
+    produced** — proven by deliberate sabotage (INTERNET, `<service>`, okhttp, retrofit all caught).
   - Manifest: **no INTERNET permission**; **no services, no WorkManager/JobScheduler, no boot receiver,
     no alarms, no wake locks.** CI/lint check fails the build if a networking dep/permission or a
     background component appears.
-  - FSRS-6 dep: resolve `io.github.open-spaced-repetition:fsrs` (Maven Central) or vendor
-    `FSRS-Kotlin`; pin the version; one unit test scheduling Again/Hard/Good/Easy.
-- **A1 · Pack loading = generic.** Import via SAF; read `pack_manifest` and **build the UI config from
-  it** (exam name in app bar, subject filters, tag chips from `tag_defs`). Per-exam progress DB, never
-  overwritten. "Switch exam" screen lists imported packs.
+  - FSRS-6 dep: use `io.github.open-spaced-repetition:fsrs:1.0.0` (Maven Central — the MIT-licensed
+    Java port, fully usable from Kotlin; verified 2026-07-15). ⚠ Do NOT vendor the `FSRS-Kotlin`
+    repo — it is broken, uncompilable app code (imports classes from an unrelated app). See
+    `.claude/PLAYBOOK.md` API notes. Pin the version; one unit test scheduling Again/Hard/Good/Easy.
+    Java `record` interop: call `result.card()` / `result.reviewLog()` as methods, not properties.
+- **A1 · Pack loading = generic.** ⇦ **NEXT STAGE.** Import via SAF; read `pack_manifest` and **build
+  the UI config from it** (exam name in app bar, subject filters, tag chips from `tag_defs`). Per-exam
+  progress DB, never overwritten. "Switch exam" screen lists imported packs.
+  - **⚠ Nothing exam-specific may enter the app — ever.** The word "MRCP" must not appear in any
+    resource, constant, or layout; every exam-facing label resolves from `pack_manifest` at runtime.
+    This is the §0 `multi_pack` / `first_exam` contract and it is the whole reason the app can play a
+    future pack (MRCP Part 2, USMLE, another subject) **with no code change**. Verified clean at A0 —
+    keep it that way. A single hardcoded string here silently converts a generic player into a
+    single-exam app.
+  - **Schema-version gate (PATCH 02 — required).** On import, read `pack_manifest.schema_version` and
+    the DB's `PRAGMA user_version` (currently **1**) and **verify them before opening anything else**.
+    A pack from a newer/unknown schema must be **refused with a clear message naming both versions** —
+    never a crash, never a partial load, never a silent mis-read of a renamed column. Pin the supported
+    version(s) in one constant. *Why this is not optional:* a future pack built against a bumped schema
+    is the exact case a naive loader corrupts, and it is the failure mode that turns "works with other
+    packs" from a promise into a hope.
+  - **Capability detection is per-pack, at runtime — this is what makes the DB swappable (PATCH 03).**
+    **Never hardcode which asset types exist.** Every pack declares its own coverage, and the app must
+    ask *this* pack rather than assume the last one's shape. Resolve availability in this order:
+    **actual rows are authoritative**, `counts_json` and `feature_flags_json` are the pack's own
+    declaration (a fast hint, and a cross-check — if a flag says `has_blobs` but the table is empty, the
+    pack is malformed: trust the rows, surface the disagreement). Absent ≠ broken: a pack without an
+    asset type must simply not offer it, with no dead UI and no crash.
+    - ⚠ **Corrected 2026-07-17 (PATCH 03) — the old text here was stale and said the opposite.** It
+      claimed `text_blobs`/`blob_quizzes`/`interlink_quizzes`/`figures`/`dup_clusters` "ship empty
+      (trimmed at C11)". **C11b and the figures tail undid that trim.** The shipped pack has
+      text_blobs **2,997** · blob_quizzes **2,997** · interlink_quizzes **2,998** · figures **1,121**,
+      with `has_blobs`/`has_interlink`/`has_figures` all true. Only `dup_clusters` (+ `topics`,
+      `cluster_members`) is empty. **Use the data — it exists.**
+    - **Why the rule survives the correction, and matters MORE not less:** today's pack being full is a
+      fact about *this* pack, not a licence to assume. `first_exam` is one of many (§0 `multi_pack`) —
+      an MRCP Part 2 or USMLE pack may ship no blobs or no figures at all. The app that hardcodes
+      "blobs exist" because MRCP Part 1 had them is exactly the app that cannot swap its database.
+      **Test both directions:** today's full pack lights every card type up; a synthetic trimmed pack
+      offers fewer — same binary, no code change.
+  - **§11e progress export/import belongs HERE, not at A7** — §11e's own words: *"Treat it as part of
+    A1, not a nice-to-have for later."* Export/import is per-pack, exactly like the progress DB. This
+    is not a resequencing of §8; it is A1 doing what §11e already assigned it. **Now urgent:** a real
+    32,957-item pack exists **and is on the laptop**, so the moment it is studied, progress becomes
+    real and losable (§11d).
 - **A2 · Study Feed (build first, make excellent).** Infinite vertical pager; per-type composables:
   - **Reel** — hook; tap to reveal; swipe; got-it/shaky → FSRS.
   - **Text blob** — passage + read-progress + `est_read_seconds`; on scroll-past, schedule its
     `blob_quiz` a few cards later and set a re-read to resurface **in-app next session** (no notification).
-  - **Image** — figure + caption; pinch-zoom; tap → linked atom.
+  - ~~**Image** — figure + caption; pinch-zoom; tap → linked atom.~~ **← NOT A CARD TYPE. Corrected
+    2026-07-17 (PATCH 04): the pack has ZERO `image` feed rows.** Figures are **attachments**, not feed
+    items — `atoms.figure_id` (3,630) · `mcqs.figure_id` (**1**) · `topic_pages.figure_ids_json` (1,461).
+    **Render the figure INLINE** (+ caption, pinch-zoom, tap → linked atom) **on the card that owns it** —
+    any flashcard/reel whose atom carries a `figure_id`, plus the one MCQ. Reaches ~564 of 32,957 cards
+    (~250 distinct figures); the other ~870 live in dossiers → **A4**. Do **not** synthesise image cards:
+    that is the app inventing feed items the pack never authored (§runtime forbids generation).
   - **Flashcard** — tap-flip; 4-button rating → FSRS.
   - **MCQ** — best-of-five; pick → **answer revealed inline** + explanation + per-distractor "why wrong";
     → FSRS; wrong → local mistake ledger. No negative marking. Show "key disputed" if `key_conflict`.
@@ -980,12 +1140,16 @@ Compose Canvas for the concept map, DataStore for settings. No network libs, no 
 - **A7 · Settings + polish.** **AMOLED true-black default** (pure `#000000` surfaces, high-contrast
   text, restrained bright fills; Material3 dark scheme, dynamic-color off); light/dim toggle. Retention
   target, feed intensity/burst, importance-first toggle, re-import/switch pack, optional local
-  FSRS-weight optimization from my own review history. **Export / Import progress (§11e) — required,
-  not optional.** Icon, empty states, **release APK via Gradle CLI**.
+  FSRS-weight optimization from my own review history. **Export / Import progress (§11e) — built at
+  A1** (PATCH 02, per §11e's own "part of A1"); A7 only surfaces its Settings entry points + the
+  post-session export nudge — it must not defer, re-implement, or wait on it. Icon, empty states,
+  **release APK via Gradle CLI**.
 
 **Acceptance (end-to-end):**
 1. Import `pack_MRCP_PART1.db`; app bar shows exam name; filters + tag chips come from the pack.
-2. Mixed feed shows all six item types; every card shows its 1–5 importance; PYQs show a year badge.
+2. Mixed feed shows all ~~six~~ **FIVE** item types the pack actually has — `mcq` · `flashcard` · `reel` ·
+   `interlink` · `blob` (**PATCH 04**: there is no `image` type; figures render inline on their own card,
+   see §8 A2). Every card shows its 1–5 importance; PYQs show a year badge.
 3. Tap an importance indicator → the "why" breakdown renders from `importance_signals_json`.
 4. "5★ only" and "PYQ only" filters work; Importance ↓ sort works; Priority sort differs from
    Importance ↓ (proving weakness is folded in locally).
@@ -1379,13 +1543,19 @@ that's a stop-and-fix, not a note for later.
 
 ### 11c. Deliver the APK
 
-The APK is the point of all this. Build it on the Hetzner box via Gradle CLI (no Android Studio):
+The APK is the point of all this. **⚠ AMENDED 2026-07-17 (PATCH 02):** it is built on the **laptop**
+via Gradle CLI (§0 `build_env`) — *not* on the Hetzner box. The box is headless and OOM-bound and
+never builds the app. Android Studio may be open, but **the build must not depend on it**.
 
 - `./gradlew assembleDebug` during development — debug-signed, sideloads fine, quickest loop.
 - `./gradlew assembleRelease` for what I actually study from — minified and faster.
-- Output the artifact to a **predictable path** and tell me the exact `scp` command to pull it to my
-  phone. I also have Cockpit Navigator on that box, so a path under my home dir works — **ask me which
-  I'd prefer** rather than picking.
+- **Install over USB from the laptop: `adb install -r <apk>`** — direct to the phone, no copy step.
+  ~~scp / Cockpit Navigator~~ are **moot**: those existed only because the APK used to be built on a
+  remote box. There is nothing to ask here anymore — do not re-raise the scp-vs-Cockpit question.
+- **The pack is NOT delivered with the APK.** It moves separately: `scp` the `.db` from the box's
+  `compiler/dist/` to the laptop, then `adb push` it to the phone (or import via SAF). This split is
+  the point — the app is generic and the pack is data (§0 `multi_pack`), so a new pack never needs a
+  new APK.
 - **Never commit the APK.** If I want versioned builds, use GitHub Releases (`gh release create
   app-v0.1.0 ./path/app-release.apk`) so binaries live outside git history — but **ask first**, since
   that uploads a pack-bearing binary to a remote.
@@ -1418,6 +1588,14 @@ Because of §11d, and because phones get lost, the app must let me get my progre
 
 This is cheap to build and it is the difference between "my phone died" being an annoyance and being a
 catastrophe. Treat it as part of A1, not a nice-to-have for later.
+
+> **⚠ A1 OWNS THIS — confirmed 2026-07-17 (PATCH 02).** §8 A1 now names it explicitly and §8 A7 has
+> been reduced to surfacing the Settings entry points, so the spec names exactly one owner.
+> **It is now urgent, not theoretical:** Phase 1 shipped a real 32,957-item pack and it is **imported
+> to the laptop**, so the moment it is studied, progress becomes real and losable. The earlier "safe to
+> defer" reasoning rested on no pack existing — **that premise is doubly dead.**
+> Export is **per-pack** (progress is per-pack), and per the PATCH 01 §11e revision it is a **ZIP**
+> (`progress.db` + `note_images/`), not a bare file copy.
 
 ---
 
@@ -1467,6 +1645,17 @@ catastrophe. Treat it as part of A1, not a nice-to-have for later.
 
 ## 13. Kickoff — do this now
 
+> ## ✅ KICKOFF IS DONE (2026-07-15/16). §13 IS HISTORY — DO NOT EXECUTE IT.
+>
+> Every numbered step below **already happened**: the repo exists, `.gitignore` landed before the
+> archives, the three drops were ingested and classified, the durability layer + hooks were built and
+> proven, and the compiler ran **C0 → C13**. Re-running any of it would re-ingest archives that are
+> long since processed. Kept verbatim as the historical record (§10a).
+>
+> **A fresh session goes to §8 A1 instead** (see the resume box at the top of this file), reads
+> `JOURNAL.md` (⛔ standing orders at the top, then "Phase 2 — app"), and builds on the laptop. The
+> only line below that still binds is the last one: **when in doubt at any point: ask.**
+
 **Read this file from disk, not from my paste.** I saved it as `BUILD_PROMPT.md` in the repo root, and
 `CLAUDE.md` points at it. That is deliberate: by §10a, instructions that live only in the conversation
 are eroded by compaction. **If you ever find yourself unsure what you're building, re-read
@@ -1501,3 +1690,238 @@ are eroded by compaction. **If you ever find yourself unsure what you're buildin
 Build the full product across all three parts. Phases exist only so I can approve as we go — the target
 is the complete, offline, exam-agnostic app plus a first MRCP Part 1 pack, delivered as an installable
 APK, not a stripped-down version. **When in doubt at any point: ask me.**
+
+---
+
+## PATCH 01 — Part B (Phase 2, app) — applied 2026-07-16
+
+> These two amendments belong in **§8 (app build order, as A8 after A7)** and **§11e**. Recorded here
+> verbatim so they are on disk (§10a). Part A (stable keys) is already applied IN PLACE: §5j, §6a
+> `stable_key`×4 (+ indexes in `spec/schema.sql`), §6b retrofit (fsrs_cards/reviews/mistakes/stars/tags
+> → stable_key) + `user_notes`/`user_note_images`. Part B changes nothing in the compiler; it is a hard
+> consumer of `stable_key`.
+
+### §A8 · My own notes — text + images, local (app build order, after A7)
+
+- **Add a note from anywhere:** a note action on every feed card, on a dossier section, and on a
+  concept-map node — plus standalone notes attached to nothing. Store the **`stable_key`** of what it's
+  attached to, **never the row id** (§5j).
+- **Text:** markdown body, rendered like pack content. **Images:** pick via SAF, **copy into
+  app-private storage**, store a relative path — **not** a blob in the DB and **not** a `content://` URI
+  (it dies when the source app clears its cache). **No CAMERA permission** unless in-app capture is
+  later requested; the picker needs none. Still **no INTERNET, no background work, no generation**.
+- **Where they surface:** inline on the card (small affordance, never covering content); as their own
+  section in a dossier; a Notes screen filterable by subject / anchor kind / orphaned; searchable.
+- **⚠ Notes are NOT grounded and MUST NOT touch scoring** — no `importance`, no corroboration, no
+  `S_emphasis`. Render them **visually distinct** from pack content.
+- **Optionally reviewable:** promote a note to a flashcard; it gets FSRS state but stays flagged
+  user-authored.
+- **Survives recompile:** on import, resolve `anchor_stable_key` → current id. Unresolved ⇒
+  `is_orphaned = 1`, surfaced in a "notes needing a home" list with a re-anchor action. **Never delete
+  a note because the pack changed.**
+
+### §11e revision · Progress export/import must be a ZIP (note images live on the filesystem)
+
+- **Export progress** → writes a **zip**: `progress.db` + `note_images/`, to Downloads via SAF (the
+  plain single-file copy would silently lose every note image).
+- **Import progress** → restores both.
+- **Acceptance test 12** now round-trips an **image-bearing note**: export → wipe app data → reinstall →
+  import → the note *and its image* are back.
+
+---
+
+## PATCH 02 — Phase 1 closed · app builds on the laptop — applied IN PLACE 2026-07-17
+
+> **Authorised by the user on 2026-07-17**, who directed: *"edit the buildmd and other files to be
+> relevant of the future changes — I will be making the app on the laptop"* and *"I want the app to
+> work with other databases also in future."* This **reverses the 2026-07-16 ruling** that §0
+> `build_env` stays verbatim. Applied **in place** (not appended-only) because the stale text was
+> actively misdirecting fresh sessions; recorded here as the audit trail (§10a).
+>
+> **This patch changes NOTHING about the pack format, the schema, or the decoupling contract**
+> (§2, §6, `spec/schema.sql`). It reconciles the spec with two facts that landed after it was written.
+
+### The two facts
+
+1. **Phase 1 is COMPLETE (C0–C13).** `compiler/dist/pack_MRCP_PART1.db` exists — 26,965 playable
+   items, 147,146 stable_keys, PATCH-01 reproducibility gate cleared. The compiler is dormant.
+   *(Count superseded 2026-07-17: the true figure is **32,957** — C11b's blobs + interlink had
+   already landed when this was written. See `JOURNAL.md` "Phase 2 — app".)*
+2. **The app is built on the laptop** (Android Studio + physical phone), not the Hetzner box, which is
+   headless and OOM-bound. A0 shipped from there on 2026-07-16/17.
+
+### What changed, and why
+
+| § | Was | Now |
+|---|---|---|
+| §0 `build_env` | `hetzner_headless_claude_code` (locked) | **Split**: compiler→box, app→laptop. **CLI-buildable intent unchanged**; only "over SSH" is moot. |
+| START HERE | resume → `.compiler_state.json`, begin at §13 | Phase 1 closed → app sessions read `JOURNAL_APP.md` and resume at **§8 A1**. ⁽¹⁾ |
+| §7 | C0–C13 as pending work with live ⛔ gates | Marked **COMPLETE / historical**. Empty-table gaps flagged for A2. |
+| §8 A0 | "buildable headless… **over SSH**" | ✅ **DONE**; "over SSH" dropped, CLI intent kept + build-enforced by `build-logic/`. |
+| §8 A1 | pack loading, generic | + **schema-version gate**, + **degrade on empty tables**, + **§11e**, + explicit no-hardcoded-exam rule. ⇦ next stage. |
+| §8 A7 | "Export/Import — required, not optional" | Built at **A1**; A7 surfaces entry points only (one owner, no duplicate). |
+| §11c | build on the box; `scp`; **ask** scp-vs-Cockpit | **`adb install -r`** over USB from the laptop. The scp/Cockpit question is **moot — do not re-raise it.** Pack ships separately from the APK. |
+| §11e | "part of A1" (contradicted by §8) | **A1 owns it, urgent** — a real pack now exists, so the "safe to defer" premise is dead. |
+| §13 | Kickoff — "do this now" | **History. Do not execute.** |
+
+> ⁽¹⁾ **Superseded later the same day (2026-07-17).** This table records what PATCH 02 changed and is
+> left standing as the audit trail (§10a) — but its "read `JOURNAL_APP.md`" is no longer current.
+> `JOURNAL_APP.md` was afterwards **merged into `JOURNAL.md` and deleted**: the two-file split existed
+> only to stop the box and the laptop writing one file concurrently, and Phase 1 finishing made it
+> unnecessary. Both histories are preserved in `JOURNAL.md`, sectioned Phase 1 / Phase 2, with the ⛔
+> standing orders hoisted to the top. **A fresh app session reads `JOURNAL.md`.**
+
+### On "work with other databases in future" — what it does and does not mean
+
+Clarified with the user 2026-07-17: it means **more exam packs in this same pack format** (MRCP Part 2,
+USMLE, another subject) — **not** foreign/third-party DBs (Anki, CSV). **Do not build an importer or
+adapter layer**; that scope is explicitly out.
+
+This needs **no new architecture** — it *is* §0 `multi_pack: true` + `first_exam` ("the app must NOT be
+hardcoded to it") + §8 A1's "Pack loading = **generic**". Verified 2026-07-17: the app holds **zero**
+exam-specific strings (the only "MRCP" under `app/` is a comment in `strings.xml` forbidding it).
+The contract is **kept, not extended**. Two additions make it safe rather than merely intended:
+
+- **The schema-version gate (§8 A1)** — check `pack_manifest.schema_version` + `PRAGMA user_version`
+  on import; refuse an unsupported pack with a clear message. A future pack on a bumped schema is
+  exactly what a naive loader corrupts.
+- **Per-pack capability detection** (§7/§8 A1) — **corrected 2026-07-17 (PATCH 03):** this used to read
+  "the shipped pack has none of `text_blobs`/`figures`/etc", which is no longer true — C11b + the figures
+  tail populated them (blobs 2,997 · interlink 2,998 · figures 1,121). **Use them.** The rule is
+  unchanged and is precisely what makes the DB swappable: never hardcode which asset types exist; ask
+  *the loaded pack* (actual rows authoritative; `counts_json`/`feature_flags_json` its declaration). A
+  pack lacking an asset type must simply not offer it. Today's pack being full is a fact about this
+  pack — the next one is not obliged to match it.
+
+**The standing rule that protects all of this:** nothing exam-specific may ever enter the app. One
+hardcoded string turns a generic player into a single-exam app, silently.
+
+---
+
+## PATCH 03 — the C11 trim was undone: use the assets; keep the pack swappable — applied IN PLACE 2026-07-17
+
+> **Authorised by the user on 2026-07-17**, who directed: *"update it in such a way that I can always
+> swap the database for the next exam, but now since c11b is completed and I have the data use it and
+> always make notes of it in journal file and wherever else so a new session is never confused."*
+> Applied **in place** (like PATCH 02) because the stale text was actively misdirecting: it told A1/A2 to
+> plan around assets that **exist**. This section is the audit trail (§10a).
+>
+> **Changes NOTHING about the pack format, the schema, or the decoupling contract** (§2, §6,
+> `spec/schema.sql`). It corrects a fact the spec got wrong and sharpens a rule it already had.
+
+### The fact the spec got wrong
+
+§7 and §8 A1 both stated that `text_blobs` / `blob_quizzes` / `interlink_quizzes` / `figures` /
+`dup_clusters` **"ship empty — trimmed at C11"**. True when written; **false since C11b**. Read from the
+shipped DB on 2026-07-17 (not from any doc):
+
+| Table | Spec claimed | Actually ships | Filled by |
+|---|---|---|---|
+| `text_blobs` | empty | **2,997** | C11b (`de77ac0`) |
+| `blob_quizzes` | empty | **2,997** | C11b (`de77ac0`) |
+| `interlink_quizzes` | empty | **2,998** | C11b (`de77ac0`) |
+| `figures` | empty | **1,121** | figures tail (`b64bc36`) |
+| `dup_clusters` | empty | 0 ✅ | — (also empty: `topics`, `cluster_members`) |
+
+`pack_manifest.feature_flags_json` declares `has_blobs` / `has_interlink` / `has_figures` = **true**.
+Consequence: **§8 A2's blob and image card types have real data — build them for real.** PATCH 02's
+warning that this "bites A2" is **retired**; it described a shortage that no longer exists.
+
+### The rule, sharpened (this is what keeps the DB swappable)
+
+The correction does **not** relax the rule — it is the reason the rule exists. "Use the data" applies to
+*this* pack; **"never assume the data" applies to every pack**:
+
+- **Never hardcode which asset types exist.** Resolve per pack, at runtime: **actual rows are
+  authoritative**; `counts_json` + `feature_flags_json` are the pack's own declaration — a fast hint and
+  a cross-check. Flag says `has_blobs`, table is empty ⇒ the pack is malformed: trust rows, surface it.
+- **An app that hardcodes "blobs exist" because MRCP Part 1 had them is an app that cannot swap its
+  database.** That is the §0 `multi_pack` contract failing silently — which is the only way it ever fails.
+- **Test both directions** (§8 A1 acceptance): today's full pack lights every card type; a synthetic
+  trimmed pack offers fewer. **Same binary, no code change.** A1 must not use today's pack as its only
+  fixture — a full pack cannot prove graceful degradation.
+
+### What changed
+
+| § | Was | Now |
+|---|---|---|
+| §7 "Known gaps" | assets "ship empty", A2 "has no data yet" | **Corrected counts**; A2 warning **retired** — the data exists, build the cards for real. |
+| §8 A1 "Degrade gracefully on empty tables" | listed 5 tables as empty | Retitled **"Capability detection is per-pack, at runtime"**: rows authoritative, flags/counts declarative, correction noted, both-directions test required. |
+| "work with other databases" §  | "the shipped pack has none of `text_blobs`/`figures`/etc" | Corrected; rule restated as the swappability mechanism. |
+| Stat block (§7) | 26,965 items · 86,702 atoms · 147,146 keys | **32,957 · 86,698 · 147,142** — read from the DB, superseded figures noted. |
+
+**Unchanged and still binding:** no exam-specific string may ever enter the app (§0 `multi_pack`,
+§8 A1); the schema-version gate (§8 A1); §11e export/import owned by A1; standing order #2 (no
+resequencing) — A1 is still next, and its scope did not grow.
+
+---
+
+## PATCH 04 — A2: no Image card (figures are attachments) + the A2 build decisions — applied IN PLACE 2026-07-17
+
+> **Authorised by the user on 2026-07-17**, choosing "No Image card; figures render inline" when the
+> conflict was surfaced (standing order #1: surface, never silently reconcile), and directing: *"make sure
+> you note this decision everywhere and edit accordingly, and all the other decisions you have made in the
+> plan go in short in the relevant places."* This section is the audit trail (§10a).
+>
+> **Changes NOTHING about the pack format, the schema DDL, or the decoupling contract** (§2, §6,
+> `spec/schema.sql` — the edit there is comment-only; verified the DDL still executes and matches the
+> shipped pack byte-for-byte in shape: 23 tables, identical `feed_items` columns, `user_version` 1).
+
+### The fact the spec got wrong (again)
+
+§8 A2 named an **Image** card type, Acceptance #2 demanded *"all six item types"*, and `schema.sql`'s
+comment listed `reel | blob | image | flashcard | mcq | interlink`. **Read from the shipped pack:**
+
+| item_type | rows |
+|---|---|
+| `mcq` | 14,455 |
+| `flashcard` | 9,507 |
+| `reel` | 3,000 |
+| `interlink` | 2,998 |
+| `blob` | 2,997 |
+| **`image`** | **0 — the type has never existed in any pack** |
+
+**Figures are ATTACHMENTS, not feed items** — and that was deliberate in `figures.py`, not an oversight:
+`atoms.figure_id` **3,630** · `mcqs.figure_id` **1** · `topic_pages.figure_ids_json` **1,461**.
+
+### What changed
+
+| § | Was | Now |
+|---|---|---|
+| §8 A2 "Image" bullet | a card type: "figure + caption; pinch-zoom; tap → linked atom" | **Struck.** Not a card type. The figure renders **INLINE on the card that owns it** (flashcard/reel whose atom has a `figure_id`, plus the 1 MCQ) — caption, pinch-zoom and tap→atom all preserved, just attached rather than standalone. |
+| Acceptance #2 | "all **six** item types" | "all **FIVE** item types the pack actually has", named explicitly. |
+| `spec/schema.sql` | comment listed `image` | Comment corrected (**DDL untouched**); notes figures are attachments and that the type set is **not closed** — the app resolves types from actual rows. |
+
+**Reach:** figures appear on ~**564 of 32,957** cards (**1.7%**, ~250 distinct). The other ~870 are
+reachable through dossiers → **A4**, which is where the compiler put them. Nothing is lost; it is a
+different screen.
+
+**Do NOT synthesise image feed rows in the app.** That is the app inventing feed items the pack never
+authored — it breaks "the pack is the exam" and brushes §runtime's no-realtime-generation rule. A figure
+divorced from its question is a quiz with no answer.
+
+### The other A2 decisions, recorded here because they bind future sessions
+
+- **NO markdown library — a tiny in-house renderer that treats `*`, `<`, `>` as LITERAL text.**
+  **This is a clinical-correctness rule, not dependency hygiene.** Measured across **68,893** real
+  markdown fields: the pack's actual vocabulary is newlines (22.7%), `- ` bullets (2.3%), `1. ` numbered
+  (0.04%) — headings, links, images, code fences and strikethrough are **entirely absent**. But medical
+  text is full of characters a renderer would seize: **every `*italic*` hit is multiplication in a lab
+  value** (of the form `<cell count> * 10^9/L`) and **every `>` blockquote is a threshold** (a line of
+  the form `> <N>: <interpretation>`). A markdown renderer eats the asterisks → `<count> 10^9/L`: **a
+  silently wrong lab value on a physician's revision card.** Exposure: `>` in **8.9%** of MCQ
+  explanations, `<` in 6.1%, `*` in 3.6% of stems. *(Forms shown, not pack text — §copyright: docs log
+  counts and decisions, never book content.)* ⚠ **Never "upgrade" this to a markdown library** — it would look like a
+  tidy-up and would silently re-introduce the corruption.
+- **Figures load via `BitmapFactory.decodeFile` + a small LRU — never Coil/Glide.** The files are local,
+  so an image loader's entire value (HTTP fetch, network cache) is moot; worse, **Coil's standard
+  artifact depends on OkHttp and the guard's denylist would fail the build, correctly.** An image loader
+  that *can* fetch URLs has no business in an app that must never touch a network.
+- **Paging: hand-rolled windowing over A1's `FeedReader`, not Paging 3.** The D4 reader already does
+  `LIMIT/OFFSET` on an indexed order and a feed is consumed strictly forwards. **A3 rewrites the ordering
+  anyway** — adopting a paging library now would fit A3's engine around a library chosen before its
+  requirements exist. Revisit at A3, with real requirements and a real-device measurement.
+- **A2 renders and simply orders; the ordering ENGINE is A3.** Standing order #2 — no resequencing.
+
+**Unchanged and still binding:** no exam-specific string may ever enter the app; capability is resolved
+per pack from actual rows (PATCH 03); §11e stays A1-owned (PATCH 02).

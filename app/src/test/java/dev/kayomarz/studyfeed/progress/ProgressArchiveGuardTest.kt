@@ -1,0 +1,131 @@
+package dev.kayomarz.studyfeed.progress
+
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+
+/**
+ * Tests the zip-slip guard **directly** (`ProgressArchive.isWithin`).
+ *
+ * ## Why this exists as a separate, direct test
+ *
+ * §11e's import unpacks a **user-supplied** archive, so path traversal is a real attack, not a
+ * checklist item. The obvious way to test it — feed a malicious zip through `import()` — **does not
+ * work on a modern device**: Android's own `ZipInputStream` throws *"Invalid zip entry path"* before
+ * our guard is ever reached (verified on API 36, 2026-07-17). That is good defence in depth, and it is
+ * exactly what makes the guard dangerous to leave untested: the platform hides it, so it could rot into
+ * broken dead code and every test would still pass.
+ *
+ * **The guard cannot simply be deleted as redundant**, because `minSdk` is **26** — this app runs on
+ * Android versions that predate the platform's check, and there our guard is the *only* thing stopping
+ * a tampered export from overwriting arbitrary app files. So it is tested here, directly, where no
+ * platform layer can intercept the input.
+ *
+ * Pure JVM: `isWithin` is plain file-path logic with no Android dependency, so it is provable in
+ * milliseconds on any machine (plan D7).
+ */
+class ProgressArchiveGuardTest {
+
+    @get:Rule val tmp = TemporaryFolder()
+
+    // ---- the attacks -------------------------------------------------------------------------------
+
+    @Test
+    fun a_parent_traversal_escapes_and_must_be_refused() {
+        val dest = tmp.newFolder("staging")
+        assertFalse(ProgressArchive.isWithin(dest, "../pwned.txt"))
+        assertFalse(ProgressArchive.isWithin(dest, "../../pwned.txt"))
+        assertFalse(ProgressArchive.isWithin(dest, "../../../../data/data/dev.kayomarz.studyfeed/pwned.txt"))
+    }
+
+    @Test
+    fun a_traversal_buried_after_a_legitimate_looking_prefix_is_refused() {
+        // The sneaky shape: it starts with a directory we really do use, so a naive startsWith("db/")
+        // check would wave it straight through. Canonicalisation collapses the "..".
+        val dest = tmp.newFolder("staging")
+        assertFalse(ProgressArchive.isWithin(dest, "db/../../pwned.txt"))
+        assertFalse(ProgressArchive.isWithin(dest, "note_images/../../../pwned.png"))
+        assertFalse(ProgressArchive.isWithin(dest, "db/./../../pwned.txt"))
+    }
+
+    @Test
+    fun an_absolute_entry_name_is_contained_rather_than_escaping() {
+        // ⚠ I originally asserted the OPPOSITE here and the test failed — my belief was wrong, not the
+        // guard. Recording the real semantics so nobody "fixes" the guard to match the wrong intuition:
+        //
+        // java.io.File(File parent, String child) documents that "if child is absolute then it is
+        // converted into a relative pathname in a system-dependent way". So File(staging, "/etc/passwd")
+        // is staging/etc/passwd — resolved UNDER the destination, not at the filesystem root. An
+        // absolute-looking zip entry therefore CANNOT escape via this construction, and isWithin
+        // correctly reports it as contained.
+        //
+        // Allowing it is right: it cannot escape, and rejecting it would refuse archives that other zip
+        // tools legitimately produce. The containment, not the string's shape, is what matters.
+        val dest = tmp.newFolder("staging")
+        assertTrue(ProgressArchive.isWithin(dest, "/etc/passwd"))
+        assertTrue(ProgressArchive.isWithin(dest, "/data/data/dev.kayomarz.studyfeed/databases/progress.db"))
+    }
+
+    @Test
+    fun an_absolute_path_that_also_traverses_is_still_refused() {
+        // The combination that DOES escape: absolute-looking AND containing "..". Absoluteness is
+        // neutralised by File(parent, child); the ".." is what escapes, and the guard catches it.
+        val dest = tmp.newFolder("staging")
+        assertFalse(ProgressArchive.isWithin(dest, "/../../pwned.txt"))
+    }
+
+    @Test
+    fun a_sibling_directory_with_a_shared_prefix_is_refused() {
+        // The classic off-by-one in this guard: a naive startsWith without a trailing separator lets
+        // "/tmp/staging-evil" pass because it starts with "/tmp/staging". The separator is why it can't.
+        val dest = tmp.newFolder("staging")
+        tmp.newFolder("staging-evil")
+        assertFalse(ProgressArchive.isWithin(dest, "../staging-evil/pwned.txt"))
+    }
+
+    // ---- the legitimate entries must still be allowed ----------------------------------------------
+
+    @Test
+    fun the_entries_our_own_export_writes_are_allowed() {
+        // A guard that rejects everything is "secure" and useless. These are exactly what export() emits.
+        val dest = tmp.newFolder("staging")
+        assertTrue(ProgressArchive.isWithin(dest, "export.json"))
+        assertTrue(ProgressArchive.isWithin(dest, "db/progress_TEST_EXAM.db"))
+        assertTrue(ProgressArchive.isWithin(dest, "db/progress_TEST_EXAM.db-wal"))
+        assertTrue(ProgressArchive.isWithin(dest, "db/progress_TEST_EXAM.db-shm"))
+        assertTrue(ProgressArchive.isWithin(dest, "note_images/note1.png"))
+    }
+
+    @Test
+    fun a_harmless_dot_segment_that_stays_inside_is_allowed() {
+        // "./" and an interior ".." that resolves back inside are ugly but not attacks. Rejecting them
+        // would refuse valid archives written by other zip tools.
+        val dest = tmp.newFolder("staging")
+        assertTrue(ProgressArchive.isWithin(dest, "./export.json"))
+        assertTrue(ProgressArchive.isWithin(dest, "db/../export.json"))
+        assertTrue(ProgressArchive.isWithin(dest, "note_images/../db/progress_X.db"))
+    }
+
+    @Test
+    fun nested_depth_inside_the_destination_is_allowed() {
+        val dest = tmp.newFolder("staging")
+        assertTrue(ProgressArchive.isWithin(dest, "a/b/c/d/e.png"))
+    }
+
+    @Test
+    fun the_guard_never_throws_on_hostile_input() {
+        // A guard that throws is a crash, and a crash inside import() would be reported as a generic
+        // failure — indistinguishable from a corrupt file, hiding an attack.
+        val dest = tmp.newFolder("staging")
+        // NOTE: `nul` is built via 0.toChar(), NOT typed as a literal NUL in the source. A
+        // literal one makes git classify this entire file as BINARY -- it would never show a
+        // diff in review again. A permanent loss of reviewability, bought for one test input.
+        val nul = 0.toChar().toString()
+        for (name in listOf("", " ", nul, "..", "../", "//", "\\", "C:\\Windows\\evil",
+            "a".repeat(5000), "../".repeat(500) + "pwned")) {
+            ProgressArchive.isWithin(dest, name) // must return, never throw
+        }
+    }
+}

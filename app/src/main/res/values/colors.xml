@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- True black (#000000), not "very dark grey" — on AMOLED a black pixel is an OFF pixel (§0). -->
+    <color name="amoled_black">#FF000000</color>
+    <color name="ic_launcher_background">#FF000000</color>
+</resources>

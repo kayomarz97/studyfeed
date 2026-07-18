@@ -215,6 +215,10 @@ into an endless, intelligent study session.
   **re-drill** until resolved, plus streak and XP.
 - **A home dashboard.** Due-today, new-left, today's target, streak and per-subject progress —
   the hub every screen returns to.
+- **Named sessions, a mock exam & more.** Save resumable, filtered study runs that remember your
+  place; sit a timed, **blueprint-weighted mock exam** with a scored per-subject report; one-tap
+  **weak-spot drills** + **leech** detection; **custom decks**; and star topics *and individual
+  lines* in the Library, with past-paper / 5★ lines auto-highlighted.
 - **Offline & private by construction.** Zero permissions, zero network, zero background work,
   AMOLED true-black. The build *enforces* this: an APK that gains an INTERNET permission, any
   background component, or a networking dependency **cannot be produced** (see
@@ -280,9 +284,11 @@ codebase — the fastest way in.
 
 - **Compiler — complete.** The full pipeline runs end-to-end and has produced the first pack
   (MRCP Part 1: 32,957 playable items), reproducibly.
-- **App — in active development.** Study feed, FSRS scheduling, pack import, dossiers, concept
-  map, progress/stats and a home dashboard are built and run on-device; design and release
-  hardening are ongoing.
+- **App — feature-complete (A0–A7).** Pack import + the two-DB model (a re-import never wipes
+  progress), the study feed (five item types, FSRS-6, an ordering engine), the topic Library with
+  per-line stars, the concept map, a data-rich Progress screen, named resumable **sessions**, a
+  **mock exam**, weak-spot drills and custom decks — all built and verified on-device. Remaining:
+  release-APK signing polish.
 
 ---
 

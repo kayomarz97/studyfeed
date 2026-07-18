@@ -1,0 +1,102 @@
+# StudyFeed — version catalog. EVERY version is pinned; never use a dynamic "+" or "latest.release".
+# A reproducible build is not a nicety here: the pack is compiled once and studied from for six
+# weeks, and a silently-drifting dependency is a bug you find on exam eve.
+#
+# Versions below were verified against official sources on 2026-07-16 and recorded, with citations,
+# in .claude/PLAYBOOK.md → "Android build toolchain (AGP / Gradle / Kotlin / Compose)".
+# Read that entry before changing anything here. Do not bump versions from memory.
+
+[versions]
+# AGP 9.3.0 requires Gradle >= 9.5.0 (its own default) and JDK >= 17.
+# The wrapper is pinned to Gradle 9.5.0 — the version Google's own `agp-9.3` recipe branch ships,
+# rather than the newest (9.6.1), which Gradle's compat page only claims tested through
+# AGP 9.3.0-alpha06. Best-tested beats newest for a build we depend on.
+agp = "9.3.0"
+kotlin = "2.4.10"
+# Compose BOM 2026.06.01 -> compose-ui/runtime/foundation/animation 1.11.4, material3 1.4.0.
+# The BOM is what keeps those in lockstep; never pin a Compose artifact version by hand.
+composeBom = "2026.06.01"
+androidxCoreKtx = "1.15.0"
+androidxLifecycle = "2.8.7"
+androidxActivityCompose = "1.9.3"
+# FSRS-6. See PLAYBOOK "FSRS-6 for Kotlin/Android": this is `java-fsrs` (MIT, pure Java, JDK 17+),
+# the ONLY published artifact. Do NOT vendor `FSRS-Kotlin` — it is broken, unlicensed app code.
+fsrs = "1.0.0"
+
+# Room owns progress_<EXAM>.db ONLY — never the content pack (plan D1). The pack is read via raw
+# SQLite because Room's value is schema verification + migrations, and only progress has a schema
+# that evolves. See PLAYBOOK "Android app A1 dependencies" for the citations behind these pins.
+#
+# ⚠ Do NOT add `room-ktx`: it was MERGED into `room-runtime` at 2.7.0 and no longer exists as a
+# separate artifact. Adding it cargo-cults a dead dependency.
+room = "2.8.4"
+# KSP2 is MANDATORY here, not a preference:
+#   - kapt is a HARD ERROR under AGP 9's built-in Kotlin;
+#   - KSP1 explicitly does not support Kotlin >= 2.3.0 or AGP >= 9.0 (per KSP's own README).
+# KSP 2.3.10's release notes explicitly fix "R-class resolution in KSP when AGP 9 built-in Kotlin is
+# enabled" — the closest thing to official confirmation this exact combination works.
+#
+# ⚠ VERSIONING CHANGED AT KSP 2.3.0 — DO NOT "correct" this to a `<kotlin>-<ksp>` string.
+# KSP1 was versioned `<kotlin>-<ksp>` and had to track Kotlin exactly (…, 2.2.21-2.0.4, 2.2.21-2.0.5).
+# KSP2 is versioned as PLAIN STANDALONE SEMVER (2.3.0 … 2.3.10) and is decoupled from the Kotlin
+# version — that decoupling is precisely why KSP2 exists and why KSP1 stopped at Kotlin 2.2.x.
+# Verified against Maven Central's maven-metadata.xml on 2026-07-17: no `2.4.10-*` version exists;
+# <latest> and <release> are both 2.3.10. Writing `2.4.10-2.3.10` fails with "plugin not found"
+# (that mistake was made and is in the PLAYBOOK ledger).
+ksp = "2.3.10"
+
+junit = "4.13.2"
+# Instrumented tests. Required because the pack/progress code is SQLite: Android's SQLiteDatabase and
+# Room's connection pool have no JVM implementation, so their behaviour can only be observed on a real
+# Android image (emulator or device). Pure logic stays in JVM tests (plan D7) — these are for the I/O.
+androidxTestRunner = "1.6.2"
+androidxTestExtJunit = "1.2.1"
+androidxTestCore = "1.6.1"
+
+[libraries]
+# Used by buildSrc only, to compile the offline-guarantees plugin against AGP's stable
+# Variant/Artifacts API. Shares the `agp` version so the guard can never be compiled against a
+# different AGP than the one that builds the app.
+android-gradle-api = { group = "com.android.tools.build", name = "gradle-api", version.ref = "agp" }
+
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "androidxCoreKtx" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "androidxLifecycle" }
+# A1 UI. Both share `androidxLifecycle` so they can never drift apart from lifecycle-runtime-ktx —
+# mixing lifecycle artifact versions is a classic source of baffling runtime errors.
+# collectAsStateWithLifecycle: collects the import-progress flow only while the screen is actually
+# shown, which is also what stops a backgrounded import from pretending it is still on screen.
+androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "androidxLifecycle" }
+androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "androidxLifecycle" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "androidxActivityCompose" }
+
+compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+compose-ui = { group = "androidx.compose.ui", name = "ui" }
+compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
+compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+
+fsrs = { group = "io.github.open-spaced-repetition", name = "fsrs", version.ref = "fsrs" }
+
+# room-runtime bundles what room-ktx used to provide (merged at 2.7.0) — coroutines/Flow support is
+# in here, do NOT add room-ktx. room-compiler runs via KSP2 (see the `ksp` version note above).
+room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
+androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExtJunit" }
+androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTestCore" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+# NOTE: there is deliberately no `kotlin-android` entry. AGP 9.0+ compiles Kotlin itself
+# (built-in Kotlin, on by default) and applying org.jetbrains.kotlin.android on top is a hard
+# error. Built-in Kotlin replaces kotlin-android ONLY — the Compose compiler is still its own
+# plugin, below. See PLAYBOOK "AGP 9 built-in Kotlin".
+# Since Kotlin 2.0 the Compose compiler ships inside the Kotlin repo and is versioned identically
+# to Kotlin — there is no separate kotlinCompilerExtensionVersion to keep in sync any more.
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+# KSP2 — Room's annotation processor. See the `ksp` version note: kapt is a hard error under AGP 9's
+# built-in Kotlin, and KSP1 doesn't support Kotlin 2.4.10 / AGP 9.3.0, so this is the only path.
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

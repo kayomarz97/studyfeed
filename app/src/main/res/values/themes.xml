@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Platform dark theme, not a Material Components (View) theme — the UI is Compose Material3,
+      so pulling in com.google.android.material just to inherit a style would be a dependency for
+      nothing.
+
+      windowBackground is pure black on purpose: it is what the system draws BEFORE the first
+      Compose frame. Leave it default and every cold start flashes white, which on an AMOLED panel
+      in a dark room is exactly the thing §0 theme_default: amoled_dark exists to prevent.
+      Real theming/polish is A7; this is the floor.
+    -->
+    <style name="Theme.StudyFeed" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/amoled_black</item>
+        <item name="android:statusBarColor">@color/amoled_black</item>
+        <item name="android:navigationBarColor">@color/amoled_black</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  PLACEHOLDER launcher icon (A0). Three stacked bars = a feed. The real icon is A7.
+  Pure XML vector on purpose: no binary blobs in git, and at minSdk 26 adaptive icons are
+  native, so mipmap-anydpi-v26 alone covers every density — no PNG set needed.
+  108x108 viewport; content kept inside the 66dp centre safe zone so no launcher mask clips it.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M30,34 h48 v9 h-48 z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M30,50 h48 v9 h-48 z" />
+    <path
+        android:fillColor="#FF8AB4F8"
+        android:pathData="M30,66 h30 v9 h-30 z" />
+</vector>
