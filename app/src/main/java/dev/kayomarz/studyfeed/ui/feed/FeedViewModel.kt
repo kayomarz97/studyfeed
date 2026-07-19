@@ -15,6 +15,7 @@ import dev.kayomarz.studyfeed.pack.PackRegistry
 import dev.kayomarz.studyfeed.progress.BlobRead
 import dev.kayomarz.studyfeed.progress.FeedState
 import dev.kayomarz.studyfeed.progress.FsrsBridge
+import dev.kayomarz.studyfeed.progress.FsrsCard
 import dev.kayomarz.studyfeed.progress.ItemTag
 import dev.kayomarz.studyfeed.progress.McqAttempt
 import dev.kayomarz.studyfeed.progress.Mistake
@@ -68,8 +69,15 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
         val advanceAfterRating: Boolean = true,
         /** The name of the session being studied (a named session, or the quick-start label). */
         val sessionName: String? = null,
-        /** The pager index to jump to once this window loads (a filtered-feed resume). Consumed once. */
-        val jumpTo: Int? = null,
+        /** Content types this feed is locked to (a single-type tile/session); null = the mixed feed. */
+        val lockedTypes: List<String>? = null,
+        /** Mirrored user settings for the feed UI (keep screen awake, haptic tick on interaction). */
+        val keepScreenOn: Boolean = false,
+        val haptics: Boolean = true,
+        /** Where the pager should sit after a (re)load — the resume index inside the loaded window. */
+        val startAt: Int = 0,
+        /** Bumped on each (re)load so the screen re-applies [startAt] even within the same session. */
+        val loadToken: Int = 0,
     )
 
     /**
@@ -79,15 +87,6 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
      */
     enum class StudyMode { MIXED, BY_SUBJECT, RECALL, SKIM }
 
-    private fun StudyMode.toQuery(): FeedQuery = when (this) {
-        StudyMode.MIXED -> FeedQuery(sort = FeedQuery.Sort.SMART, filter = FeedFilter())
-        StudyMode.BY_SUBJECT -> FeedQuery(sort = FeedQuery.Sort.SUBJECT, filter = FeedFilter())
-        StudyMode.RECALL -> FeedQuery(sort = FeedQuery.Sort.IMPORTANCE_DESC,
-            filter = FeedFilter(itemTypesIn = listOf("mcq", "flashcard")))
-        StudyMode.SKIM -> FeedQuery(sort = FeedQuery.Sort.IMPORTANCE_DESC,
-            filter = FeedFilter(itemTypesIn = listOf("reel", "blob")))
-    }
-
     data class CardMarks(val starred: Boolean = false, val tagKeys: Set<String> = emptySet())
 
     private val registry = PackRegistry(app)
@@ -95,6 +94,22 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
     private var repo: FeedRepository? = null
     private var examCode: String? = null
     private var loaded = 0
+
+    /** Content types the current feed is locked to (a single-type tile/session); null = mixed. */
+    private var lockedTypes: List<String>? = null
+    /** Bumped each (re)load, surfaced as [Ui.loadToken] so the screen re-applies the resume index. */
+    private var loadSeq = 0
+
+    // ---- tracking: "done" on the primary interaction (2026-07-19) -----------------------------------
+    /** MCQ ids already answered this app-open — makes a scroll-back re-answer idempotent (no double
+     *  attempt/mistake). Cleared with the VM (a new app-open legitimately re-studies a due card). */
+    private val answeredThisOpen = HashSet<Long>()
+    /** Prior FSRS state + review-row id for a card completed this appearance, so an explicit rating can
+     *  refine the SAME review instead of adding a second "done". */
+    private data class Pending(val prior: FsrsCard?, val reviewId: Long)
+    private val pending = HashMap<Pair<String, Long>, Pending>()
+    /** Serialises completion vs refine for one card so they cannot double-insert a review. */
+    private val writeMutex = Mutex()
 
     // ---- A7 cycle 3: session resume namespace -------------------------------------------------------
     /** "mixed" | "mcq" | "cards" | "passages" | "review" | "session:<id>". Keys engine + scroll state. */
@@ -183,10 +198,14 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun bindAndReload(key: String, sid: Long?, query: FeedQuery, label: String) {
         sessionKey = key; sessionId = sid
+        // A single-type tile/session (itemTypesIn set at entry) locks the feed to that type: the Filter
+        // sheet then hides "Content type" and "Clear all" keeps you on the type. The mixed feed = null.
+        lockedTypes = query.filter.itemTypesIn?.takeIf { it.isNotEmpty() }
         // Set loading=true + hasPack=true SYNCHRONOUSLY (before the router swaps to the feed) so the feed
         // shows a spinner — never a bounce back to import — while [reload] self-heals the pack on first
         // entry after a fresh-install import. If there's genuinely no pack, reload flips hasPack back off.
-        _ui.update { it.copy(studyMode = modeForQuery(query), sessionName = label, loading = true, hasPack = true) }
+        _ui.update { it.copy(studyMode = modeForQuery(query), sessionName = label, loading = true,
+            hasPack = true, lockedTypes = lockedTypes) }
         reload(query, resume = true)
     }
 
@@ -202,20 +221,25 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
 
     /** (Re)load the feed for [query]. [resume] restores the saved scroll position (filtered feeds). */
     private fun reload(query: FeedQuery, resume: Boolean = false) = viewModelScope.launch {
-        _ui.update { it.copy(loading = true, query = query, jumpTo = null) }
+        _ui.update { it.copy(loading = true, query = query) }
         if (repo == null) loadPack()   // self-heal if this VM was created before the pack was imported
         val r = repo
         if (r == null) { _ui.update { it.copy(loading = false, hasPack = false) }; return@launch }
         engineExhausted = false
-        data class Loaded(val cards: List<FeedCard>, val total: Int, val offset: Int)
+        // startAt = where the pager should sit after the window loads (the resume index INSIDE it).
+        data class Loaded(val cards: List<FeedCard>, val total: Int, val offset: Int, val startAt: Int)
         val res = withContext(Dispatchers.IO) {
             initEngine() // (re)builds the scheduler reading engine:<sessionKey>
             if (usesEngine(query)) {
-                Loaded(engineWindow(PAGE), r.size(), 0)
+                // The engine streams forward; resume = continue after the saved cursor. No back-buffer.
+                Loaded(engineWindow(PAGE), r.size(), 0, 0)
             } else {
                 val total = r.count(query)
-                val off = if (resume) readPos().coerceIn(0, (total - 1).coerceAtLeast(0)) else 0
-                Loaded(r.page(query, off, PAGE), total, off)
+                val pos = if (resume) readPos().coerceIn(0, (total - 1).coerceAtLeast(0)) else 0
+                // Resume, but keep the last BACK cards ABOVE the resume point loaded, so the user can
+                // swipe UP through what they've already seen (their request) — not just forward.
+                val off = (pos - BACK).coerceAtLeast(0)
+                Loaded(r.page(query, off, BACK + PAGE, shuffleSeed()), total, off, pos - off)
             }
         }
         baseOffset = res.offset
@@ -223,24 +247,31 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
         if (usesEngine(query) && res.cards.size < PAGE) engineExhausted = true
         _ui.update {
             it.copy(loading = false, hasPack = true, cards = res.cards, total = res.total, query = query,
-                // filtered resume: the window starts at baseOffset, so the pager is already at card
-                // #baseOffset — no jump needed (jump is reserved for a future "restore exact index").
-                jumpTo = null)
+                lockedTypes = lockedTypes,
+                startAt = res.startAt.coerceIn(0, (res.cards.size - 1).coerceAtLeast(0)),
+                loadToken = ++loadSeq)
         }
     }
 
     fun setSort(sort: FeedQuery.Sort) = reload(_ui.value.query.copy(sort = sort))
     fun setFilter(filter: FeedFilter) = reload(_ui.value.query.copy(filter = filter))
 
-    fun setStudyMode(mode: StudyMode) {
-        _ui.update { it.copy(studyMode = mode) }
-        reload(mode.toQuery())
-    }
-
     fun reapplySettings() = viewModelScope.launch {
         if (repo == null) return@launch
         withContext(Dispatchers.IO) { loadSettings() }
         reload(_ui.value.query, resume = true)
+    }
+
+    /**
+     * Drop the feed's in-memory caches after the user resets progress in Settings, so the next entry
+     * rebuilds fresh — a new shuffle seed, no stale completion/answer guards, empty engine state.
+     */
+    fun onExternalReset() {
+        cachedSeed = null
+        pending.clear()
+        answeredThisOpen.clear()
+        engineStore.set(FeedScheduler.FeedState())
+        loaded = 0
     }
 
     private suspend fun loadSettings() {
@@ -252,7 +283,26 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
             dueBurst = d?.setting(SettingsKeys.DUE_BURST)?.toIntOrNull()?.coerceIn(10, 300) ?: defaults.dueBurst,
         )
         val advance = d?.setting(SettingsKeys.ADVANCE_AFTER_RATING)?.toBooleanStrictOrNull() ?: true
-        _ui.update { it.copy(advanceAfterRating = advance) }
+        val keepOn = d?.setting(SettingsKeys.KEEP_SCREEN_ON)?.toBooleanStrictOrNull() ?: false
+        val haptics = d?.setting(SettingsKeys.HAPTICS)?.toBooleanStrictOrNull() ?: true
+        _ui.update { it.copy(advanceAfterRating = advance, keepScreenOn = keepOn, haptics = haptics) }
+    }
+
+    /**
+     * The per-feed shuffle seed (keyed by [sessionKey], persisted in `feed_state`). Stable within a feed
+     * so OFFSET windows + resume stay coherent; different per feed; regenerated when the user resets a
+     * feed's place. Drives the "shuffle within importance tiers" order (filtered path + engine pools).
+     */
+    private var cachedSeed: Pair<String, Int>? = null
+    private suspend fun shuffleSeed(): Int {
+        cachedSeed?.let { if (it.first == sessionKey) return it.second }
+        val d = dao
+        val key = "seed:$sessionKey"
+        val existing = d?.feedState(key)?.toIntOrNull()
+        val seed = existing ?: ((System.nanoTime().toInt() and 0x7fffffff).let { if (it == 0) 1 else it })
+        if (existing == null) d?.putFeedState(FeedState(key, seed.toString()))
+        cachedSeed = sessionKey to seed
+        return seed
     }
 
     /** Append the next window when within [PREFETCH] of the end; also persist the resume position. */
@@ -273,7 +323,7 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             if (baseOffset + loaded >= _ui.value.total) return
             viewModelScope.launch {
-                val next = withContext(Dispatchers.IO) { r.page(query, baseOffset + loaded, PAGE) }
+                val next = withContext(Dispatchers.IO) { r.page(query, baseOffset + loaded, PAGE, shuffleSeed()) }
                 if (next.isNotEmpty()) {
                     loaded += next.size
                     _ui.update { it.copy(cards = it.cards + next) }
@@ -305,7 +355,9 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun initEngine() {
         val r = repo ?: return
-        engineStore.set(FeedStateJson.fromJson(dao?.feedState(engineKey())))
+        // Seed the engine's within-tier shuffle once (persisted); reuse the per-feed seed for coherence.
+        val loaded0 = FeedStateJson.fromJson(dao?.feedState(engineKey()))
+        engineStore.set(if (loaded0.shuffleSeed == 0) loaded0.copy(shuffleSeed = shuffleSeed()) else loaded0)
         deadline = resolveDeadline()
         scheduler = FeedScheduler(poolsAdapter(r), engineStore, engineConfig)
     }
@@ -339,8 +391,8 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun poolsAdapter(r: FeedRepository) = object : FeedScheduler.Pools {
         override fun due(nowIso: String, exclude: Set<Long>, limit: Int) = r.duePool(nowIso, exclude, limit)
-        override fun newMcqs(afterScore: Double?, afterId: Long?, limit: Int) = r.newMcqs(afterScore, afterId, limit)
-        override fun newOthers(afterScore: Double?, afterId: Long?, limit: Int) = r.newOthers(afterScore, afterId, limit)
+        override fun newMcqs(afterImp: Int?, afterId: Long?, seed: Int, limit: Int) = r.newMcqs(afterImp, afterId, seed, limit)
+        override fun newOthers(afterImp: Int?, afterId: Long?, seed: Int, limit: Int) = r.newOthers(afterImp, afterId, seed, limit)
         override fun filler(nowIso: String, exclude: Set<Long>, limit: Int) = r.fillerPool(nowIso, exclude, limit)
         override fun remainingNewMcqs() = r.remainingNewMcqs()
         override fun blobRef(blobId: Long) = r.blobRef(blobId)
@@ -356,18 +408,60 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- interactions: write off the main thread, never block the swipe ----------------------------
 
+    /**
+     * An explicit rating. If the card was just auto-completed this appearance (answered/revealed), REFINE
+     * that same review — recompute FSRS from the pre-completion state and update the review row, so there
+     * is exactly one "done" per card. Otherwise (a genuine re-rating later) record a fresh review.
+     */
     fun rate(card: FeedCard, rating: Rating) = viewModelScope.launch(Dispatchers.IO) {
         val d = dao ?: return@launch
+        val key = card.itemType to card.itemId
         val now = Instant.now()
-        val prior = d.card(card.itemType, card.itemId)
-        val updated = fsrs.review(prior, card.itemType, card.itemId, rating.toFsrs(), now)
-        d.upsertCard(updated)
-        d.insertReview(Review(item_type = card.itemType, item_id = card.itemId,
-            rating = rating.ordinal + 1, ts = now.toString(), elapsed_ms = null))
+        writeMutex.withLock {
+            val p = pending[key]
+            val prior = p?.prior ?: d.card(card.itemType, card.itemId)
+            if (card.itemType != "blob") {
+                d.upsertCard(fsrs.review(prior, card.itemType, card.itemId, rating.toFsrs(), now))
+            }
+            if (p != null) d.updateReviewRating(p.reviewId, rating.ordinal + 1, now.toString())
+            else d.insertReview(Review(item_type = card.itemType, item_id = card.itemId,
+                rating = rating.ordinal + 1, ts = now.toString(), elapsed_ms = null))
+        }
     }
+
+    /**
+     * Record a card as *done* the moment its primary interaction happens (MCQ answered, flashcard/reel/
+     * interlink revealed, passage read). Schedules it via FSRS (except blobs, which schedule through
+     * `blob_reads`) and writes ONE review, remembering the prior state so an explicit rating can refine
+     * it. Guarded so a scroll-back re-render of the same card doesn't double-count.
+     */
+    private suspend fun recordCompletion(card: FeedCard, grade: Rating) {
+        val d = dao ?: return
+        val key = card.itemType to card.itemId
+        val now = Instant.now()
+        writeMutex.withLock {
+            if (pending.containsKey(key)) return@withLock  // already recorded this appearance
+            val prior = d.card(card.itemType, card.itemId)
+            if (card.itemType != "blob") {
+                d.upsertCard(fsrs.review(prior, card.itemType, card.itemId, grade.toFsrs(), now))
+            }
+            val reviewId = d.insertReview(Review(item_type = card.itemType, item_id = card.itemId,
+                rating = grade.ordinal + 1, ts = now.toString(), elapsed_ms = null))
+            pending[key] = Pending(prior, reviewId)
+        }
+    }
+
+    /**
+     * A flashcard/reel/interlink was revealed — that reveal is the "done" event (default Good; an explicit
+     * rating afterwards refines it). Idempotent per appearance via [recordCompletion].
+     */
+    fun onSeen(card: FeedCard) = viewModelScope.launch(Dispatchers.IO) { recordCompletion(card, Rating.GOOD) }
 
     fun onMcqAnswered(card: FeedCard.Mcq, chosenIdx: Int, correct: Boolean) = viewModelScope.launch(Dispatchers.IO) {
         val d = dao ?: return@launch
+        // A scroll-back re-render lets the card be answered again; log the answer only once per app-open
+        // so accuracy/mistakes aren't double-counted (the schedule is deduped separately in recordCompletion).
+        if (!answeredThisOpen.add(card.itemId)) return@launch
         val now = Instant.now().toString()
         // A7 cycle 3: log every answer so accuracy (overall / by subject / over time) has a denominator.
         d.insertMcqAttempt(McqAttempt(item_id = card.itemId, subject_id = card.subjectId,
@@ -381,6 +475,10 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
                     chosen_idx = chosenIdx, ts = now, resolved = 0)
             )
         }
+        // The answer IS the "done" event: schedule + record a review NOW, auto-graded from correctness
+        // (right→Good, wrong→Again), so the card counts toward coverage/streak/activity without a second
+        // tap. An explicit rating afterwards refines this same review (see [rate]).
+        recordCompletion(card, if (correct) Rating.GOOD else Rating.AGAIN)
     }
 
     fun markBlobRead(card: FeedCard.Blob) = viewModelScope.launch(Dispatchers.IO) {
@@ -395,6 +493,9 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
             scheduler?.scheduleBlobQuiz(card.itemId)
             flushEngineState()
         }
+        // Reading the passage is its "done" event — record a review so it counts toward activity/streak
+        // (blobs schedule their re-read via blob_reads above, not FSRS, so recordCompletion skips FSRS).
+        recordCompletion(card, Rating.GOOD)
     }
 
     fun toggleStar(card: FeedCard) = viewModelScope.launch(Dispatchers.IO) {
@@ -431,7 +532,6 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
 
     fun showWhy(card: FeedCard) = _ui.update { it.copy(whySheetFor = card) }
     fun dismissWhy() = _ui.update { it.copy(whySheetFor = null) }
-    fun consumeJump() = _ui.update { it.copy(jumpTo = null) }
 
     override fun onCleared() {
         repo?.close()
@@ -441,6 +541,8 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val PAGE = 40
+        /** Cards kept loaded ABOVE the resume point so the user can swipe back up through what they saw. */
+        const val BACK = 40
         const val PREFETCH = 10
         const val DEFAULT_REDRILL_N = 3
     }

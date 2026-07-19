@@ -1582,3 +1582,71 @@ same `ensureLoaded()`/`refresh()` pattern (every data path routes through it; Li
 "Study 32957 items" → Mixed feed loads** (real MCQ, no bounce); no FATAL in logcat. Fixed APK installed on
 the phone. **NOT yet pushed / release not yet refreshed** — the `a7-cycle3` release still holds the pre-fix
 APK; awaiting the user's go to push `dev` + `gh release upload --clobber`.
+
+**[compacted at 2026-07-19T13:08:17Z]** — context compacted; disk state is the truth (§10a).
+
+## 2026-07-19  FEED — the REAL tracking fix, control cleanup, within-tier shuffle, resume+scroll-up, settings
+
+User (after the fresh-install bugfix): progress STILL not tracked, + a set of feed edits. Reviewed the whole
+feed/stats/home stack WITH them (shown a layout map with row IDs), collected answers, then built the
+confirmed set. Plan: `.claude/plans/2026-07-19-feed-tracking-controls-shuffle.md`.
+
+**THE tracking bug — root cause + fix.** Every "done"/coverage/activity/streak/XP aggregate reads
+`fsrs_cards` (a row exists) or `reviews`. Both were written ONLY by `rate()` — an explicit RatingBar tap.
+The natural MCQ flow is answer → read → swipe, which never taps a rating, so only `mcq_attempts` (overall
+accuracy) populated and every "done" read 0. (Blobs never got an `fsrs_cards` row at all → the Passages
+tile's "done" was structurally always 0.) FIX = the PRIMARY interaction records "done":
+`onMcqAnswered` now auto-grades (correct→Good, wrong→Again) → upsert fsrs + ONE review; a new `onSeen`
+does the same (default Good) on a flashcard/reel/interlink reveal; `markBlobRead` writes a review too
+(blobs still schedule their re-read via `blob_reads`, NOT fsrs, so the engine can't double-schedule them).
+An explicit rating REFINES that same review — recompute FSRS from the pre-completion state +
+`updateReviewRating` (one review per card) via an in-memory `pending` map under a `writeMutex`. A per-app-
+open `answeredThisOpen` guard makes a scroll-back re-answer idempotent (no double attempt/mistake).
+`progressByType` counts blob "done" from `blob_reads`. `insertReview` now returns the row id.
+
+**Removed FEED-T2 + T4 (user: "in feed remove T2 and T4").** Deleted the `Study: Mixed ▾` dropdown
+(`StudyModeMenu`) and the `Clear all ✕`/token row (`ActiveFilterTokens`) — EVERYWHERE, not just single-type.
+Top row is now `‹ Home … ⚙ Filter`; clearing still lives in the Filter sheet (nothing stranded). Dead code
+removed: StudyModeMenu/modeLabel, ActiveFilterTokens/clearOne/typeKey, VM setStudyMode/toQuery,
+jumpTo/consumeJump.
+
+**Single-type feeds stay on their type.** `Ui.lockedTypes` (from the entry query's `itemTypesIn` at
+`bindAndReload`; null = mixed). The Filter sheet hides "Content type" when locked and "Clear all" keeps the
+type; the badge counts refinements only (`refinementCount`, excludes the locked type). So the MCQs tile
+refines by Subject/Importance/Focus, never switches away from MCQs.
+
+**Shuffle within importance tiers.** Order = `importance DESC, ((id*A+seed) % M), id` — 5★ still precede
+4★, but the within-tier order is a seeded permutation: per-feed (`seed:<sessionKey>` in `feed_state`),
+stable within a feed (OFFSET windows + resume stay coherent), fresh on an explicit reset. The A3 engine's
+new-item keyset moved from `(importance_score, id)` to `(importance tier, prkey)` — gap-free under the
+shuffle: `FeedScheduler.FeedState` cursors `…CursorScore`→`…CursorImp` + a `shuffleSeed`;
+`Pools.newMcqs/newOthers(afterImp, afterId, seed, limit)`; `FeedStateJson` + `FeedSchedulerTest`
+(fakes + tier assertions) updated; the VM seeds the engine when its state has none.
+
+**Resume + scroll-up.** The filtered path loads a `BACK=40` back-buffer ABOVE the resume point
+(`page(query, pos-BACK, BACK+PAGE)`) and the pager starts at `Ui.startAt` — you land where you left off AND
+can swipe UP through what you've already seen. (The engine feed already accumulates a scroll-up-able list;
+resume there = continue after the cursor.)
+
+**Settings (user Q4 + note).** Reader text size (S/M/L/XL → scales `LocalDensity.fontScale` on the DOSSIER +
+passage bodies only, via `LocalReaderScale` provided at `Root` — MCQ/flashcard layouts untouched); keep
+screen on while studying (a `View.keepScreenOn` flag — no wake-lock/permission); haptic tick on
+answer/reveal/rate (`View.performHapticFeedback` — no VIBRATE permission); and the GRANULAR reset the user
+asked for — 5 categories (Feed positions & shuffle · Study history & schedule · Mistakes · Stars/tags/
+highlights · Everything), each behind a confirm, ROWS-ONLY (never DROPs a table; preferences kept even by
+"Everything"). New DAO `clear*` deletes; multi-table resets run in `db.withTransaction`. After a reset the
+feed drops its in-memory caches (`onExternalReset`) so the next entry rebuilds fresh (new seed).
+
+**Verified (real output):** `assembleDebug` green + `verifyOfflineGuarantees` green (no network permission,
+no background component — haptics/keep-awake are View affordances; reader-scale/reset add no dep);
+`testDebugUnitTest` **73/73** (incl. rewritten `FeedSchedulerTest` 10/10 + the FSRS oracle 3/3);
+`assembleDebugAndroidTest` compiles (instrumented sources incl. the updated `FeedSchedulerRealPackTest`).
+**Zero new runtime deps. NO schema-version bump** — every new table/column already existed at v3; reset
+deletes rows, never DROPs. Debug APK built. **Instrumented tests NOT run (no device/emulator attached now)**
+— migration is unchanged so its tests still hold; the changed ordering logic is JVM-covered. Awaiting the
+user's on-device check (S23) + any push.
+
+**Deferred/owed (honest):** keep-screen-on applies to the Feed only (not the Mock exam); reader scale is
+scoped to dossier + passage bodies (dossier headings scale too; MCQ/flashcard deliberately don't);
+release-APK signing still owed (§11d); `NewSessionScreen` still uses the (now display-only) `studyMode`
+plumbing, left in place to avoid churn.

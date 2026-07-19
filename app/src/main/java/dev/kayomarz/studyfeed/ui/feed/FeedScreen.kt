@@ -26,6 +26,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +37,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -62,49 +65,62 @@ fun FeedScreen(
     onOpenLibrary: () -> Unit = {},
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-
-    when {
-        // Bounce to import ONLY when there is genuinely no pack — never mid-load, or a feed entered right
-        // after import (while the pack self-heals) would flick back to the import screen.
-        !ui.hasPack && !ui.loading -> LaunchedEffect(Unit) { onNoPack() }
-        else -> Column(Modifier.fillMaxSize()) {
-            var showFilter by remember { mutableStateOf(false) }
-            // A7 one-row controls: Home · Study ▾ (mode) · Filter. Everything fine-grained is in the
-            // Filter sheet; active filters show as removable tokens just below.
-            Row(
-                Modifier.statusBarsPadding().padding(top = 4.dp, start = 4.dp, end = 8.dp).fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(onClick = onHome) { Text("‹ Home") }
-                StudyModeMenu(ui.studyMode, vm::setStudyMode)
-                Spacer(Modifier.weight(1f))
-                FilterButton(ui.query.filter.activeCount(), onClick = { showFilter = true })
-            }
-            ActiveFilterTokens(ui.query.filter, ui.subjects, ui.tags, vm::setFilter)
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                when {
-                    ui.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                    ui.cards.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                        val labels = ui.query.filter.activeLabels(ui.subjects, ui.tags)
-                        Text(
-                            if (ui.query.filter.isAll) "This pack has no playable items."
-                            else "No items match: ${labels.joinToString(" · ")}.\nRemove a filter to see more.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(32.dp),
-                        )
-                    }
-                    else -> FeedPager(ui, vm, onOpenTopic, onOpenMap, onOpenLibrary)
-                }
-            }
-            if (showFilter) {
-                FilterSheet(ui.query, ui.subjects, ui.tags, ui.total, vm::setFilter,
-                    onDismiss = { showFilter = false })
-            }
-        }
+    val view = LocalView.current
+    // Keep the screen awake while studying, if the user turned it on — a plain View flag (no wake-lock,
+    // no permission), cleared the moment we leave the feed so it can't drain the battery in the background.
+    DisposableEffect(ui.keepScreenOn) {
+        view.keepScreenOn = ui.keepScreenOn
+        onDispose { view.keepScreenOn = false }
+    }
+    // A light haptic tick on a card interaction, gated by the user's setting. `performHapticFeedback` is a
+    // View affordance — it needs NO VIBRATE permission, so the offline guard stays green.
+    val tap: () -> Unit = {
+        if (ui.haptics) view.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
     }
 
-    ui.whySheetFor?.let { WhySheet(it, onDismiss = vm::dismissWhy) }
+    CompositionLocalProvider(LocalTapFeedback provides tap) {
+        when {
+            // Bounce to import ONLY when there is genuinely no pack — never mid-load, or a feed entered
+            // right after import (while the pack self-heals) would flick back to the import screen.
+            !ui.hasPack && !ui.loading -> LaunchedEffect(Unit) { onNoPack() }
+            else -> Column(Modifier.fillMaxSize()) {
+                var showFilter by remember { mutableStateOf(false) }
+                // A7 (2026-07-19): one-row controls = Home · Filter. The Study-mode menu and the
+                // active-filter token row were removed — the mixed feed is the only "mode", and clearing
+                // filters lives inside the Filter sheet.
+                Row(
+                    Modifier.statusBarsPadding().padding(top = 4.dp, start = 4.dp, end = 8.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onHome) { Text("‹ Home") }
+                    Spacer(Modifier.weight(1f))
+                    FilterButton(ui.query.filter.refinementCount(ui.lockedTypes), onClick = { showFilter = true })
+                }
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    when {
+                        ui.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+                        ui.cards.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+                            val labels = ui.query.filter.activeLabels(ui.subjects, ui.tags)
+                            Text(
+                                if (ui.query.filter.isAll) "This pack has no playable items."
+                                else "No items match: ${labels.joinToString(" · ")}.\nRemove a filter to see more.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(32.dp),
+                            )
+                        }
+                        else -> FeedPager(ui, vm, onOpenTopic, onOpenMap, onOpenLibrary)
+                    }
+                }
+                if (showFilter) {
+                    FilterSheet(ui.query, ui.subjects, ui.tags, ui.total, ui.lockedTypes, vm::setFilter,
+                        onDismiss = { showFilter = false })
+                }
+            }
+        }
+
+        ui.whySheetFor?.let { WhySheet(it, onDismiss = vm::dismissWhy) }
+    }
 }
 
 @Composable
@@ -115,7 +131,13 @@ private fun FeedPager(
     onOpenMap: (Long) -> Unit,
     onOpenLibrary: () -> Unit,
 ) {
-    val pager = rememberPagerState(pageCount = { ui.cards.size })
+    // Start at the resume index (a fresh FeedPager is composed after every reload, since the loading
+    // spinner briefly replaces it, so initialPage re-applies each time) — the user lands where they left
+    // off, and can swipe UP through the back-buffer of cards they've already seen.
+    val pager = rememberPagerState(
+        initialPage = ui.startAt.coerceIn(0, (ui.cards.size - 1).coerceAtLeast(0)),
+        pageCount = { ui.cards.size },
+    )
     val scope = rememberCoroutineScope()
     LaunchedEffect(pager.currentPage) { vm.onReachedIndex(pager.currentPage) }
 
@@ -161,6 +183,7 @@ private fun FeedPager(
                     if (card is FeedCard.Mcq) vm.onMcqAnswered(card, chosen, correct)
                 },
                 onRead = { if (card is FeedCard.Blob) vm.markBlobRead(card) },
+                onSeen = { vm.onSeen(card) },
             )
         }
     }
@@ -175,13 +198,14 @@ private fun CardBody(
     onRate: (Rating) -> Unit,
     onAnswered: (chosenIdx: Int, correct: Boolean) -> Unit,
     onRead: () -> Unit,
+    onSeen: () -> Unit,
 ) {
     when (card) {
         is FeedCard.Mcq -> McqCard(card, onWhy, actions, onAnswered, onRate)
-        is FeedCard.Flashcard -> FlashcardCard(card, onWhy, actions, onRate)
-        is FeedCard.Reel -> ReelCard(card, onWhy, actions, onRate)
+        is FeedCard.Flashcard -> FlashcardCard(card, onWhy, actions, onRate, onSeen)
+        is FeedCard.Reel -> ReelCard(card, onWhy, actions, onRate, onSeen)
         is FeedCard.Blob -> BlobCard(card, onWhy, actions, onRead)
-        is FeedCard.Interlink -> InterlinkCard(card, onWhy, actions, onRate)
+        is FeedCard.Interlink -> InterlinkCard(card, onWhy, actions, onRate, onSeen)
     }
 }
 

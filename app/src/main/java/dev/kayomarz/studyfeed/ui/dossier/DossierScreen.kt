@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,7 +32,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -43,6 +46,7 @@ import dev.kayomarz.studyfeed.ui.feed.FigureImage
 import dev.kayomarz.studyfeed.ui.feed.ImportanceIndicator
 import dev.kayomarz.studyfeed.ui.feed.Importance
 import dev.kayomarz.studyfeed.ui.theme.AppColor
+import dev.kayomarz.studyfeed.ui.theme.LocalReaderScale
 import kotlinx.coroutines.launch
 
 /**
@@ -77,7 +81,15 @@ fun DossierScreen(
                     Text("This topic page could not be loaded.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                else -> DossierBody(d, ui, onOpenItem, vm::toggleTopicStar, vm::toggleLineMark)
+                else -> {
+                    // Reader text size: scale the font density for the topic page content (the top bar
+                    // above stays fixed). Scaling fontScale scales sp text only, leaving dp layout intact.
+                    val rs = LocalReaderScale.current
+                    val dens = LocalDensity.current
+                    CompositionLocalProvider(LocalDensity provides Density(dens.density, dens.fontScale * rs)) {
+                        DossierBody(d, ui, onOpenItem, vm::toggleTopicStar, vm::toggleLineMark)
+                    }
+                }
             }
         }
     }

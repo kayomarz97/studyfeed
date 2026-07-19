@@ -30,6 +30,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,6 +69,7 @@ import dev.kayomarz.studyfeed.ui.settings.SettingsScreen
 import dev.kayomarz.studyfeed.ui.settings.SettingsViewModel
 import dev.kayomarz.studyfeed.ui.stats.StatsScreen
 import dev.kayomarz.studyfeed.ui.stats.StatsViewModel
+import dev.kayomarz.studyfeed.ui.theme.LocalReaderScale
 import dev.kayomarz.studyfeed.ui.theme.StudyFeedTheme
 import kotlinx.coroutines.delay
 
@@ -134,6 +136,7 @@ private fun Root() {
     val conceptVm: ConceptMapViewModel = viewModel()
     val statsVm: StatsViewModel = viewModel()
     val settingsVm: SettingsViewModel = viewModel()
+    val settingsUi by settingsVm.ui.collectAsStateWithLifecycle()
     val mockVm: MockExamViewModel = viewModel()
     // Refresh the dashboard's counts whenever we return to it.
     val goHome = { homeVm.load(); screen = Screen.Home }
@@ -152,6 +155,9 @@ private fun Root() {
 
     // A7 cycle 3 (P5): a gentle cross-fade between screens. Rendering keys off the animated state `s`,
     // not the live `screen`, so the outgoing screen stays put until the fade completes.
+    // The reader text-size setting is provided app-wide here; only the reader surfaces (dossier + passages)
+    // consume it, so nothing else is affected.
+    CompositionLocalProvider(LocalReaderScale provides settingsUi.readerScale) {
     androidx.compose.animation.Crossfade(targetState = screen, label = "screen") { s ->
       when (s) {
         Screen.Splash -> SplashScreen(onDone = { screen = Screen.Home })
@@ -208,6 +214,7 @@ private fun Root() {
             onBack = goHome,
             onManagePacks = { screen = Screen.Manage },
             onChanged = { feedVm.reapplySettings() },
+            onReset = { kind -> settingsVm.reset(kind) { feedVm.onExternalReset(); homeVm.load() } },
         )
         Screen.Stats -> StatsScreen(
             vm = statsVm,
@@ -242,6 +249,7 @@ private fun Root() {
             onBack = { screen = Screen.Dossier(currentDossierId) },
         )
       }
+    }
     }
 }
 

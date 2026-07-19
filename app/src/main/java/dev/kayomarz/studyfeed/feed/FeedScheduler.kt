@@ -60,10 +60,10 @@ class FeedScheduler(
     interface Pools {
         /** Due items (`fsrs_cards.due ≤ now` ∪ blob `reread_due ≤ now`), urgency-first, minus [exclude]. */
         fun due(nowIso: String, exclude: Set<Long>, limit: Int): List<Ref>
-        /** Never-seen MCQs strictly after the keyset cursor, importance-first. */
-        fun newMcqs(afterScore: Double?, afterId: Long?, limit: Int): List<Ref>
-        /** Never-seen non-MCQ items strictly after the keyset cursor, importance-first. */
-        fun newOthers(afterScore: Double?, afterId: Long?, limit: Int): List<Ref>
+        /** Never-seen MCQs after the keyset cursor: importance tier first, then the [seed] within-tier order. */
+        fun newMcqs(afterImp: Int?, afterId: Long?, seed: Int, limit: Int): List<Ref>
+        /** Never-seen non-MCQ items after the keyset cursor: importance tier, then the within-tier [seed] order. */
+        fun newOthers(afterImp: Int?, afterId: Long?, seed: Int, limit: Int): List<Ref>
         /** Seen-but-not-yet-due items (only used when due+new run dry, so the feed never dead-ends). */
         fun filler(nowIso: String, exclude: Set<Long>, limit: Int): List<Ref>
         /** Count of never-seen MCQs — the numerator of the deadline pace. */
@@ -83,10 +83,13 @@ class FeedScheduler(
         val dripDate: String? = null,
         val newMcqToday: Int = 0,
         val newOtherToday: Int = 0,
-        val mcqCursorScore: Double? = null,
+        /** Keyset cursor = (importance tier, feed_items.id) of the last new item served, per pool. */
+        val mcqCursorImp: Int? = null,
         val mcqCursorId: Long? = null,
-        val otherCursorScore: Double? = null,
+        val otherCursorImp: Int? = null,
         val otherCursorId: Long? = null,
+        /** Per-feed within-tier shuffle seed (0 = unset; the VM assigns one before first use). */
+        val shuffleSeed: Int = 0,
         val pendingBlobQuizzes: List<Pending> = emptyList(),
         val globalIndex: Int = 0,
     ) {
@@ -273,8 +276,8 @@ class FeedScheduler(
         private val otherBudget = Math.ceil(mcqBudget * config.varietyRatio).toInt()
 
         val due = ArrayDeque(pools.due(nowIso, emitted, size * 3 + 16))
-        val mcq = ArrayDeque(pools.newMcqs(base.mcqCursorScore, base.mcqCursorId, size * 3 + 16))
-        val other = ArrayDeque(pools.newOthers(base.otherCursorScore, base.otherCursorId, size * 3 + 16))
+        val mcq = ArrayDeque(pools.newMcqs(base.mcqCursorImp, base.mcqCursorId, base.shuffleSeed, size * 3 + 16))
+        val other = ArrayDeque(pools.newOthers(base.otherCursorImp, base.otherCursorId, base.shuffleSeed, size * 3 + 16))
 
         val out = ArrayList<Ref>(size)
         private val recent = ArrayDeque(base.recentTypes)
@@ -283,8 +286,9 @@ class FeedScheduler(
         private var otherToday = if (base.dripDate == today) base.newOtherToday else 0
         var globalIndex = base.globalIndex; private set
         var pending = base.pendingBlobQuizzes
-        private var mcqCursorScore = base.mcqCursorScore; private var mcqCursorId = base.mcqCursorId
-        private var otherCursorScore = base.otherCursorScore; private var otherCursorId = base.otherCursorId
+        private var mcqCursorImp = base.mcqCursorImp; private var mcqCursorId = base.mcqCursorId
+        private var otherCursorImp = base.otherCursorImp; private var otherCursorId = base.otherCursorId
+        private val shuffleSeed = base.shuffleSeed
 
         fun mcqEligible() = mcq.isNotEmpty() && mcqToday < mcqBudget
         fun otherEligible() = other.isNotEmpty() && otherToday < otherBudget
@@ -303,17 +307,18 @@ class FeedScheduler(
             globalIndex++
         }
 
-        // Cursor keys on itemId (= feed_items.id) — the SAME column the pool SQL orders/keysets by.
-        fun onMcqChosen(r: Ref) { mcqToday++; mcqCursorScore = r.importanceScore; mcqCursorId = r.itemId }
+        // Cursor keys on (importance tier, itemId) — the SAME columns the pool SQL orders/keysets by.
+        fun onMcqChosen(r: Ref) { mcqToday++; mcqCursorImp = r.importance; mcqCursorId = r.itemId }
         fun onOtherChosen(r: Ref) {
-            otherToday++; otherAcc -= 100; otherCursorScore = r.importanceScore; otherCursorId = r.itemId
+            otherToday++; otherAcc -= 100; otherCursorImp = r.importance; otherCursorId = r.itemId
         }
 
         fun snapshot() = FeedState(
             recentTypes = recent.toList(), dripDate = today,
             newMcqToday = mcqToday, newOtherToday = otherToday,
-            mcqCursorScore = mcqCursorScore, mcqCursorId = mcqCursorId,
-            otherCursorScore = otherCursorScore, otherCursorId = otherCursorId,
+            mcqCursorImp = mcqCursorImp, mcqCursorId = mcqCursorId,
+            otherCursorImp = otherCursorImp, otherCursorId = otherCursorId,
+            shuffleSeed = shuffleSeed,
             pendingBlobQuizzes = pending, globalIndex = globalIndex,
         )
     }

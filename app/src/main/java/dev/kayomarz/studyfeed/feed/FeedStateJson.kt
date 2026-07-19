@@ -18,10 +18,11 @@ object FeedStateJson {
         put("dripDate", s.dripDate ?: JSONObject.NULL)
         put("newMcqToday", s.newMcqToday)
         put("newOtherToday", s.newOtherToday)
-        putOpt("mcqCursorScore", s.mcqCursorScore)
+        putOpt("mcqCursorImp", s.mcqCursorImp)
         putOpt("mcqCursorId", s.mcqCursorId)
-        putOpt("otherCursorScore", s.otherCursorScore)
+        putOpt("otherCursorImp", s.otherCursorImp)
         putOpt("otherCursorId", s.otherCursorId)
+        put("shuffleSeed", s.shuffleSeed)
         put("globalIndex", s.globalIndex)
         put("pendingBlobQuizzes", JSONArray().apply {
             s.pendingBlobQuizzes.forEach { p ->
@@ -39,10 +40,11 @@ object FeedStateJson {
                 dripDate = o.optStringOrNull("dripDate"),
                 newMcqToday = o.optInt("newMcqToday", 0),
                 newOtherToday = o.optInt("newOtherToday", 0),
-                mcqCursorScore = o.optDoubleOrNull("mcqCursorScore"),
+                mcqCursorImp = o.optIntOrNull("mcqCursorImp"),
                 mcqCursorId = o.optLongOrNull("mcqCursorId"),
-                otherCursorScore = o.optDoubleOrNull("otherCursorScore"),
+                otherCursorImp = o.optIntOrNull("otherCursorImp"),
                 otherCursorId = o.optLongOrNull("otherCursorId"),
+                shuffleSeed = o.optInt("shuffleSeed", 0),
                 globalIndex = o.optInt("globalIndex", 0),
                 pendingBlobQuizzes = o.optJSONArray("pendingBlobQuizzes").toPendingList(),
             )
@@ -52,13 +54,13 @@ object FeedStateJson {
         }
     }
 
-    private fun JSONObject.putOpt(key: String, v: Double?) = put(key, v ?: JSONObject.NULL)
+    private fun JSONObject.putOpt(key: String, v: Int?) = put(key, v ?: JSONObject.NULL)
     private fun JSONObject.putOpt(key: String, v: Long?) = put(key, v ?: JSONObject.NULL)
 
     private fun JSONObject.optStringOrNull(key: String): String? =
         if (isNull(key)) null else optString(key).ifBlank { null }
-    private fun JSONObject.optDoubleOrNull(key: String): Double? =
-        if (has(key) && !isNull(key)) optDouble(key) else null
+    private fun JSONObject.optIntOrNull(key: String): Int? =
+        if (has(key) && !isNull(key)) optInt(key) else null
     private fun JSONObject.optLongOrNull(key: String): Long? =
         if (has(key) && !isNull(key)) optLong(key) else null
 

@@ -298,7 +298,15 @@ interface ProgressDao {
     suspend fun cardCount(): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertReview(review: Review)
+    suspend fun insertReview(review: Review): Long
+
+    /**
+     * Refine a just-recorded review's grade in place. A card is marked *done* the moment it is
+     * answered/revealed/read (auto-graded); if the user then taps an explicit rating we UPDATE that
+     * same review row rather than insert a second one, so activity/streak/XP count one event per card.
+     */
+    @Query("UPDATE reviews SET rating = :rating, ts = :ts WHERE id = :id")
+    suspend fun updateReviewRating(id: Long, rating: Int, ts: String)
 
     @Query("SELECT COUNT(*) FROM reviews")
     suspend fun reviewCount(): Int
@@ -443,4 +451,24 @@ interface ProgressDao {
     /** Leech detection (P4): items lapsed at least [n] times — the cards you keep failing. */
     @Query("SELECT COUNT(*) FROM fsrs_cards WHERE lapses >= :n")
     suspend fun leechCount(n: Int): Int
+
+    // ---- Settings → granular reset (2026-07-19) ----------------------------------------------------
+    //
+    // Each clears ONE category (rows only — a reset must NEVER drop a table: the schema and §11e's
+    // export contract have to survive it). A multi-table reset is composed in the ViewModel inside
+    // `db.withTransaction { }`, so it is all-or-nothing. Settings rows (deadline, reader size, …) are
+    // preferences, not progress — they are deliberately NOT cleared, even by "wipe everything".
+
+    @Query("DELETE FROM feed_state") suspend fun clearFeedState()
+    @Query("DELETE FROM fsrs_cards") suspend fun clearFsrsCards()
+    @Query("DELETE FROM reviews") suspend fun clearReviews()
+    @Query("DELETE FROM blob_reads") suspend fun clearBlobReads()
+    @Query("DELETE FROM mcq_attempts") suspend fun clearMcqAttempts()
+    @Query("DELETE FROM mistakes") suspend fun clearMistakes()
+    @Query("DELETE FROM stars") suspend fun clearStars()
+    @Query("DELETE FROM item_tags") suspend fun clearItemTags()
+    @Query("DELETE FROM line_marks") suspend fun clearLineMarks()
+    @Query("DELETE FROM sessions") suspend fun clearSessions()
+    @Query("DELETE FROM decks") suspend fun clearDecks()
+    @Query("DELETE FROM subject_mastery") suspend fun clearSubjectMastery()
 }
