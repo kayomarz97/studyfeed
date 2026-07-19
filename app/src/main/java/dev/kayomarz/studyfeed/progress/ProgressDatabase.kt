@@ -419,6 +419,10 @@ interface ProgressDao {
     @Query("UPDATE sessions SET name = :name, updated = :updated WHERE id = :id")
     suspend fun renameSession(id: Long, name: String, updated: String)
 
+    /** Persist a named session's chosen filter/sort so it resumes exactly that way until changed again. */
+    @Query("UPDATE sessions SET config_json = :config, updated = :updated WHERE id = :id")
+    suspend fun updateSessionConfig(id: Long, config: String, updated: String)
+
     @Query("UPDATE sessions SET archived = 1, updated = :updated WHERE id = :id")
     suspend fun archiveSession(id: Long, updated: String)
 
@@ -451,6 +455,14 @@ interface ProgressDao {
     /** Leech detection (P4): items lapsed at least [n] times — the cards you keep failing. */
     @Query("SELECT COUNT(*) FROM fsrs_cards WHERE lapses >= :n")
     suspend fun leechCount(n: Int): Int
+
+    /** "Hard" deck size — cards missed at least once. */
+    @Query("SELECT COUNT(*) FROM fsrs_cards WHERE lapses >= 1")
+    suspend fun hardCount(): Int
+
+    /** "Easy" deck size — reviewed, never missed, remembered ≥ a week. */
+    @Query("SELECT COUNT(*) FROM fsrs_cards WHERE COALESCE(lapses,0) = 0 AND stability >= 7")
+    suspend fun easyCount(): Int
 
     // ---- Settings → granular reset (2026-07-19) ----------------------------------------------------
     //

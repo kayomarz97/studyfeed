@@ -1650,3 +1650,46 @@ user's on-device check (S23) + any push.
 scoped to dossier + passage bodies (dossier headings scale too; MCQ/flashcard deliberately don't);
 release-APK signing still owed (§11d); `NewSessionScreen` still uses the (now display-only) `studyMode`
 plumbing, left in place to avoid churn.
+
+**Pushed:** commit `608978e` on `dev` (`96937ed..608978e`); GitHub Release **`a7-cycle3.1`** (Latest) with
+`studyfeed-a7-cycle3.1-debug.apk`. Secret-scan: the 21 files clean. (It flagged a PRE-EXISTING real-medical
+fixture in `DossierMarkdownTest.kt` — already on `origin/dev` from commit `a6edbc9`, not in this push —
+offered to redact; awaiting the user's call.)
+
+## 2026-07-19  Round 2 (after on-device use) — 5 fixes/features
+
+User feedback after using `a7-cycle3.1` on the phone. All built + verified; **not pushed yet** (awaiting
+the user's ask — standing rule §11a).
+
+1. **MCQ stays SOLVED when you scroll back up (endless + filtered) + shows your pick vs the right answer.**
+   `McqCard`'s `chosen` lived in `remember(card.itemId)`, so a scroll-back re-render (the pager disposes
+   off-screen pages) reset it to unanswered. FIX: persist the picked option in the VM
+   (`answeredThisOpen: Map<Long,Int>` — the same guard that dedupes attempts now also stores the index),
+   surface it as `Ui.answeredMcqs`, and seed `McqCard`'s `chosen` from it. The revealed state (your wrong
+   pick + correct option + explanation) returns on scroll-up.
+2. **A named session KEEPS its filter until changed.** `reload` now persists the (possibly just-changed)
+   query to the session's `config_json` when `sessionId != null` (new DAO `updateSessionConfig`);
+   `openSession` already restores it, so a session resumes exactly the filter/sort it was left on.
+3. **Home "Decks" → Starred · Hard · Easy (the tag chips were stale "old data").** Added
+   `FeedFilter.hardOnly` (lapses ≥ 1 — missed at least once) + `easyOnly` (reviewed, no lapse, stability
+   ≥ 7 d — mastered) → SQL in `whereClause`; DAO `hardCount`/`easyCount`; Home shows the two decks with
+   live counts (Hard opens PRIORITY-sorted = weakest first, Easy importance-first). Tag chips kept after.
+4. **Library: star ONE sentence, not the whole block.** The dossier rendered one markable block per line;
+   a preamble/paragraph block IS "the whole thing". FIX: new `Sentences.split` (conservative — guards
+   abbreviations / single initials / decimals / `10^9` / allele `*`; splits only on `". "`+capital,
+   8 JVM tests) → the renderer emits ONE markable row per sentence, the mark anchors on the sentence hash,
+   and `buildAuto` (the approximate PYQ/5★ highlight) keys per sentence too so the hashes line up.
+5. **5 star colours on long-press.** Long-press a sentence → a `DropdownMenu` with 5 colour swatches +
+   "Remove". `line_marks.kind` is now `c1..c5` (was the single `"star"`); `DossierMarkdown.colorForMark`
+   maps them to 5 hues; the auto PYQ/5★ highlight stays coral/gold, visually separate. `setLineMark`
+   replaces `toggleLineMark`.
+
+**Verified (real output):** `assembleDebug` green + `verifyOfflineGuarantees` green (no new permission/dep
+— the colour picker + decks + sentence split are pure UI/SQL); `testDebugUnitTest` **81/81** (+8
+`SentencesTest`, incl. the medical-notation cases: `1.5 mg`, `e.g.`, `10^9/L`, `DRB1*04:01` all stay
+whole); `assembleDebugAndroidTest` compiles. NO schema-version bump (kind is a value in the existing
+`line_marks` table; new filter flags are query-only). Debug APK built; on-device check owed.
+
+**Deferred/notes:** the `Sentences` splitter is deliberately conservative (a paragraph that has no clean
+`". "` boundary stays whole — never shatters a lab value); Hard/Easy thresholds (lapses ≥ 1 / stability
+≥ 7 d) are a first sensible cut, easy to retune if the decks feel off.

@@ -241,8 +241,10 @@ fun McqCard(
     actions: CardActionsState,
     onAnswered: (chosenIdx: Int, correct: Boolean) -> Unit,
     onRate: (Rating) -> Unit,
+    /** The option already picked this session (from the VM) — so a scroll-back re-render stays SOLVED. */
+    initialChosen: Int? = null,
 ) {
-    var chosen by remember(card.itemId) { mutableStateOf<Int?>(null) }
+    var chosen by remember(card.itemId) { mutableStateOf(initialChosen) }
     val revealed = chosen != null
 
     CardScaffold(card, actions, revealed, onImportanceClick, onReveal = null,

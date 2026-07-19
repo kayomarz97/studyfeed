@@ -336,6 +336,11 @@ class FeedRepository private constructor(
         // A7 cycle 3 (P4): leeches = cards lapsed ≥ 4 times — the ones you keep failing.
         if (filter.leechesOnly)
             clauses += "EXISTS(SELECT 1 FROM main.fsrs_cards lc WHERE lc.item_type=f.item_type AND lc.item_id=f.id AND lc.lapses >= 4)"
+        // 2026-07-19 decks: Hard = missed at least once; Easy = reviewed, never missed, well-remembered.
+        if (filter.hardOnly)
+            clauses += "EXISTS(SELECT 1 FROM main.fsrs_cards hc WHERE hc.item_type=f.item_type AND hc.item_id=f.id AND hc.lapses >= 1)"
+        if (filter.easyOnly)
+            clauses += "EXISTS(SELECT 1 FROM main.fsrs_cards ec WHERE ec.item_type=f.item_type AND ec.item_id=f.id AND COALESCE(ec.lapses,0) = 0 AND ec.stability >= 7)"
         filter.tagKey?.let {
             clauses += "EXISTS(SELECT 1 FROM main.item_tags t WHERE t.item_type=f.item_type AND t.item_id=f.id AND t.tag_key=?)"
             args += it

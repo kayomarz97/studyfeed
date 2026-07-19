@@ -1,8 +1,12 @@
 package dev.kayomarz.studyfeed.ui.dossier
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,11 +14,20 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -26,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.kayomarz.studyfeed.dossier.LineText
+import dev.kayomarz.studyfeed.dossier.Sentences
 import dev.kayomarz.studyfeed.ui.theme.AppColor
 
 /**
@@ -101,14 +115,31 @@ object DossierMarkdown {
         }
     }
 
-    /** A line mark kind → its accent colour. `star`/`highlight` = the user's; `pyq`/`5star` = auto. */
+    /** Sentinel [DossierText] `sectionOrd` meaning "this text is not markable" (the reference viewer). */
     const val NO_MARKS = Int.MIN_VALUE
+
+    /** The 5 user star/highlight colours (long-press a sentence → pick one). Kinds `c1..c5`. */
+    val USER_MARK_COLORS: List<Pair<String, Color>> = listOf(
+        "c1" to Color(0xFF8E7CF0), "c2" to Color(0xFFFFB74D), "c3" to Color(0xFF66BB6A),
+        "c4" to Color(0xFFEC6A9C), "c5" to Color(0xFF4FC3F7),
+    )
+
+    /** A mark kind → its accent colour. `c1..c5` = the user's own; `pyq`/`5star` = the auto highlight. */
+    fun colorForMark(kind: String): Color = when (kind) {
+        "pyq" -> AppColor.PyqCoral
+        "5star" -> AppColor.Review
+        else -> USER_MARK_COLORS.firstOrNull { it.first == kind }?.second ?: AppColor.Mcq
+    }
 }
 
 /**
- * Renders a dossier `*_md` field via [DossierMarkdown]. When [sectionOrd] is set (not [DossierMarkdown.
- * NO_MARKS]), each body line becomes long-pressable (→ [onLongPressLine] to star it) and shows a coloured
- * left stripe when [markKind] returns a kind for its hash (`star`/`highlight` = yours, `pyq`/`5star` = auto).
+ * Renders a dossier `*_md` field via [DossierMarkdown], **one markable SENTENCE per row** (2026-07-19).
+ * When [sectionOrd] is set (not [DossierMarkdown.NO_MARKS]) each sentence is long-pressable → a 5-colour
+ * picker (or Remove), and shows a coloured left stripe for its mark ([markKind]: `c1..c5` = your colours,
+ * `pyq`/`5star` = the approximate auto-highlight). Splitting a block into sentences ([Sentences]) is what
+ * lets you star ONE sentence instead of the whole paragraph.
+ *
+ * @param onSetMark `(sectionOrd, sentence, kind)` — a `c1..c5` sets that colour, `null` removes the mark.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -118,40 +149,91 @@ fun DossierText(
     style: TextStyle = LocalTextStyle.current,
     sectionOrd: Int = DossierMarkdown.NO_MARKS,
     markKind: (String) -> String? = { null },
-    onLongPressLine: (Int, String) -> Unit = { _, _ -> },
+    onSetMark: (Int, String, String?) -> Unit = { _, _, _ -> },
 ) {
     val citation = MaterialTheme.colorScheme.onSurfaceVariant
     val marksOn = sectionOrd != DossierMarkdown.NO_MARKS
     Column(modifier) {
         DossierMarkdown.blocks(md, citation).forEachIndexed { i, b ->
             if (i > 0) Spacer(Modifier.height(6.dp))
-            val kind = if (!marksOn || b is DossierMarkdown.Block.Heading) null else markKind(LineText.hash(b.raw))
-            val wrap: Modifier = if (!marksOn || b is DossierMarkdown.Block.Heading) Modifier
-            else Modifier.fillMaxWidth()
-                .let { m -> kind?.let { m.leftStripe(colorForMark(it)) } ?: m }
-                .combinedClickable(onClick = {}, onLongClick = { onLongPressLine(sectionOrd, b.raw) })
-                .padding(start = if (kind != null) 10.dp else 0.dp, top = 1.dp, bottom = 1.dp)
             when (b) {
                 is DossierMarkdown.Block.Heading ->
                     Text(b.text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(top = 6.dp))
-                is DossierMarkdown.Block.Bullet -> Row(wrap.padding(start = 2.dp)) {
-                    Text("•  ", style = style)
-                    Text(b.text, style = style)
-                }
-                is DossierMarkdown.Block.Para -> Box(wrap) { Text(b.text, style = style) }
-                is DossierMarkdown.Block.Note -> Box(wrap) {
+                is DossierMarkdown.Block.Bullet ->
+                    SentenceRows(bulletContent(b.raw), true, sectionOrd, marksOn, citation, style, markKind, onSetMark)
+                is DossierMarkdown.Block.Para ->
+                    SentenceRows(b.raw, false, sectionOrd, marksOn, citation, style, markKind, onSetMark)
+                // A whole-line italic subtitle stays one muted unit — not sentence-split, not markable.
+                is DossierMarkdown.Block.Note ->
                     Text(b.text, style = MaterialTheme.typography.bodySmall, color = citation)
-                }
             }
         }
     }
 }
 
-private fun colorForMark(kind: String): Color = when (kind) {
-    "pyq" -> AppColor.PyqCoral
-    "5star" -> AppColor.Review
-    else -> AppColor.Mcq   // the user's own star/highlight (iris)
+private fun bulletContent(raw: String): String = when {
+    raw.startsWith("- ") -> raw.removePrefix("- ")
+    raw.startsWith("* ") -> raw.removePrefix("* ")
+    else -> raw
+}
+
+/** One row per sentence in a block — each independently markable (the point: star a sentence, not a block). */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun SentenceRows(
+    content: String, bullet: Boolean, sectionOrd: Int, marksOn: Boolean, citation: Color, style: TextStyle,
+    markKind: (String) -> String?, onSetMark: (Int, String, String?) -> Unit,
+) {
+    val sentences = Sentences.split(content).ifEmpty { listOf(content.trim()) }
+    Column(Modifier.fillMaxWidth()) {
+        sentences.forEachIndexed { i, sentence ->
+            if (!marksOn) {
+                Row {
+                    if (bullet && i == 0) Text("•  ", style = style)
+                    Text(DossierMarkdown.inline(sentence, citation), style = style)
+                }
+            } else {
+                MarkableLine(sentence, sectionOrd, bullet && i == 0, citation, style, markKind, onSetMark)
+            }
+        }
+    }
+}
+
+/** A single sentence: coloured stripe for its mark, long-press → the 5-colour picker (or Remove). */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MarkableLine(
+    sentence: String, sectionOrd: Int, bullet: Boolean, citation: Color, style: TextStyle,
+    markKind: (String) -> String?, onSetMark: (Int, String, String?) -> Unit,
+) {
+    val kind = markKind(LineText.hash(sentence))
+    var menu by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            Modifier.fillMaxWidth()
+                .let { m -> kind?.let { m.leftStripe(DossierMarkdown.colorForMark(it)) } ?: m }
+                .combinedClickable(onClick = {}, onLongClick = { menu = true })
+                .padding(start = if (kind != null) 10.dp else 2.dp, top = 1.dp, bottom = 1.dp),
+        ) {
+            if (bullet) Text("•  ", style = style)
+            Text(DossierMarkdown.inline(sentence, citation), style = style)
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                DossierMarkdown.USER_MARK_COLORS.forEach { (k, c) ->
+                    Box(
+                        Modifier.size(30.dp).clip(CircleShape).background(c)
+                            .border(BorderStroke(if (kind == k) 3.dp else 0.dp, MaterialTheme.colorScheme.onSurface), CircleShape)
+                            .clickable { onSetMark(sectionOrd, sentence, k); menu = false },
+                    )
+                }
+            }
+            DropdownMenuItem(text = { Text("Remove mark") },
+                onClick = { onSetMark(sectionOrd, sentence, null); menu = false })
+        }
+    }
 }
 
 /** A subtle left accent stripe + faint tint — the "this line matters" affordance. */

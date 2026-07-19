@@ -195,6 +195,16 @@ private fun Root() {
                     FeedQuery(sort = FeedQuery.Sort.IMPORTANCE_DESC, filter = FeedFilter(starredOnly = true)),
                     "Starred"); screen = Screen.Feed
             },
+            onHardDeck = {
+                feedVm.openQuick("deck:hard",
+                    FeedQuery(sort = FeedQuery.Sort.PRIORITY, filter = FeedFilter(hardOnly = true)),
+                    "Hard"); screen = Screen.Feed
+            },
+            onEasyDeck = {
+                feedVm.openQuick("deck:easy",
+                    FeedQuery(sort = FeedQuery.Sort.IMPORTANCE_DESC, filter = FeedFilter(easyOnly = true)),
+                    "Easy"); screen = Screen.Feed
+            },
             onTagDeck = { key ->
                 feedVm.openQuick("deck:$key",
                     FeedQuery(sort = FeedQuery.Sort.IMPORTANCE_DESC, filter = FeedFilter(tagKey = key)),

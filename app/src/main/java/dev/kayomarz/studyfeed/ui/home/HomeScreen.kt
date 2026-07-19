@@ -75,6 +75,8 @@ fun HomeScreen(
     onDrillWeakest: (SubjectCoverage) -> Unit,
     onLeeches: () -> Unit,
     onStarredDeck: () -> Unit,
+    onHardDeck: () -> Unit,
+    onEasyDeck: () -> Unit,
     onTagDeck: (String) -> Unit,
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
@@ -138,7 +140,7 @@ fun HomeScreen(
             }
 
             ToolsSection(ui, onMockExam, onDrillWeakest, onLeeches)
-            DecksSection(ui.tags, onStarredDeck, onTagDeck)
+            DecksSection(ui.tags, ui.hard, ui.easy, onStarredDeck, onHardDeck, onEasyDeck, onTagDeck)
 
             Spacer(Modifier.height(22.dp))
             Text("EXPLORE", fontSize = 10.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold,
@@ -348,14 +350,20 @@ private fun ToolsSection(
 }
 
 @Composable
-private fun DecksSection(tags: List<PackDatabase.TagDef>, onStarred: () -> Unit, onTag: (String) -> Unit) {
+private fun DecksSection(
+    tags: List<PackDatabase.TagDef>, hard: Int, easy: Int,
+    onStarred: () -> Unit, onHard: () -> Unit, onEasy: () -> Unit, onTag: (String) -> Unit,
+) {
     Spacer(Modifier.height(22.dp))
     Text("DECKS", fontSize = 10.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(Modifier.height(8.dp))
+    // Decks reflect YOUR study now: Starred + Hard (missed at least once) + Easy (mastered) + any tags.
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         DeckChip("⭐ Starred", onStarred)
-        tags.forEach { t -> DeckChip(t.label, { onTag(t.key) }); Spacer(Modifier.height(0.dp)) }
+        DeckChip("🔴 Hard" + if (hard > 0) " ($hard)" else "", onHard)
+        DeckChip("🟢 Easy" + if (easy > 0) " ($easy)" else "", onEasy)
+        tags.forEach { t -> DeckChip(t.label, { onTag(t.key) }) }
     }
 }
 

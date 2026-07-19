@@ -78,6 +78,8 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
         val startAt: Int = 0,
         /** Bumped on each (re)load so the screen re-applies [startAt] even within the same session. */
         val loadToken: Int = 0,
+        /** MCQ itemId → the option you picked, so a scroll-back re-render shows it solved again. */
+        val answeredMcqs: Map<Long, Int> = emptyMap(),
     )
 
     /**
@@ -101,9 +103,9 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
     private var loadSeq = 0
 
     // ---- tracking: "done" on the primary interaction (2026-07-19) -----------------------------------
-    /** MCQ ids already answered this app-open — makes a scroll-back re-answer idempotent (no double
-     *  attempt/mistake). Cleared with the VM (a new app-open legitimately re-studies a due card). */
-    private val answeredThisOpen = HashSet<Long>()
+    /** MCQ itemId → the option index you picked this app-open. Makes a scroll-back re-answer idempotent
+     *  (no double attempt/mistake) AND keeps the card SOLVED when you scroll back up. Cleared with the VM. */
+    private val answeredThisOpen = HashMap<Long, Int>()
     /** Prior FSRS state + review-row id for a card completed this appearance, so an explicit rating can
      *  refine the SAME review instead of adding a second "done". */
     private data class Pending(val prior: FsrsCard?, val reviewId: Long)
@@ -250,6 +252,13 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
                 lockedTypes = lockedTypes,
                 startAt = res.startAt.coerceIn(0, (res.cards.size - 1).coerceAtLeast(0)),
                 loadToken = ++loadSeq)
+        }
+        // A named session REMEMBERS its filter: persist the (possibly just-changed) query to config_json,
+        // so resuming it later restores exactly this filter/sort until the user changes it again.
+        sessionId?.let { sid ->
+            withContext(Dispatchers.IO) {
+                dao?.updateSessionConfig(sid, SessionConfig.toJson(query), Instant.now().toString())
+            }
         }
     }
 
@@ -459,9 +468,12 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
 
     fun onMcqAnswered(card: FeedCard.Mcq, chosenIdx: Int, correct: Boolean) = viewModelScope.launch(Dispatchers.IO) {
         val d = dao ?: return@launch
-        // A scroll-back re-render lets the card be answered again; log the answer only once per app-open
-        // so accuracy/mistakes aren't double-counted (the schedule is deduped separately in recordCompletion).
-        if (!answeredThisOpen.add(card.itemId)) return@launch
+        // A scroll-back re-render lets the card be answered again; log the answer only once per app-open so
+        // accuracy/mistakes aren't double-counted, and REMEMBER the picked option so the card stays solved
+        // (your pick + the correct answer + explanation) when you scroll back up.
+        if (answeredThisOpen.containsKey(card.itemId)) return@launch
+        answeredThisOpen[card.itemId] = chosenIdx
+        _ui.update { it.copy(answeredMcqs = answeredThisOpen.toMap()) }
         val now = Instant.now().toString()
         // A7 cycle 3: log every answer so accuracy (overall / by subject / over time) has a denominator.
         d.insertMcqAttempt(McqAttempt(item_id = card.itemId, subject_id = card.subjectId,

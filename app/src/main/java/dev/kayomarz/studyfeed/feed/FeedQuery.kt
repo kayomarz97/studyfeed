@@ -41,9 +41,13 @@ data class FeedFilter(
     val tagKey: String? = null,
     /** Items lapsed ≥ the leech threshold — "the cards you keep failing" (A7 cycle 3, P4). */
     val leechesOnly: Boolean = false,
+    /** "Hard" deck — cards you've missed at least once (lapses ≥ 1). */
+    val hardOnly: Boolean = false,
+    /** "Easy" deck — reviewed, never missed, remembered ≥ a week (lapses 0 · stability ≥ 7d). */
+    val easyOnly: Boolean = false,
 ) {
     val isAll: Boolean
         get() = itemType == null && itemTypesIn.isNullOrEmpty() && importanceExact == null &&
             importanceMin == null && !pyqOnly && !starredOnly && !mistakesOnly && subjectId == null &&
-            tagKey == null && !leechesOnly
+            tagKey == null && !leechesOnly && !hardOnly && !easyOnly
 }

@@ -87,7 +87,7 @@ fun DossierScreen(
                     val rs = LocalReaderScale.current
                     val dens = LocalDensity.current
                     CompositionLocalProvider(LocalDensity provides Density(dens.density, dens.fontScale * rs)) {
-                        DossierBody(d, ui, onOpenItem, vm::toggleTopicStar, vm::toggleLineMark)
+                        DossierBody(d, ui, onOpenItem, vm::toggleTopicStar, vm::setLineMark)
                     }
                 }
             }
@@ -101,7 +101,7 @@ private fun DossierBody(
     ui: DossierViewModel.DossierState,
     onOpenItem: (String, Long) -> Unit,
     onToggleTopicStar: () -> Unit,
-    onToggleLine: (Int, String) -> Unit,
+    onSetMark: (Int, String, String?) -> Unit,
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -130,7 +130,7 @@ private fun DossierBody(
                     }
                 }
                 Spacer(Modifier.height(6.dp))
-                Text("Hold a line to star it · coral = past-paper · gold = 5★",
+                Text("Long-press a sentence to highlight it in a colour · coral = past-paper · gold = 5★",
                     fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -154,13 +154,13 @@ private fun DossierBody(
             Column(Modifier.fillMaxWidth()) {
                 if (d.bodyMd.isNotBlank())
                     DossierText(d.bodyMd, style = MaterialTheme.typography.bodyMedium,
-                        sectionOrd = -1, markKind = markKind, onLongPressLine = onToggleLine)
+                        sectionOrd = -1, markKind = markKind, onSetMark = onSetMark)
                 d.figures.forEach { fig -> Spacer(Modifier.height(12.dp)); FigureImage(fig) }
                 if (hasSections) { Spacer(Modifier.height(8.dp)); HorizontalDivider() }
             }
         }
         // (3+) one collapsible item per section (its index is its stable mark ord)
-        items(d.sections.size) { i -> SectionItem(d.sections[i], i, markKind, onToggleLine) }
+        items(d.sections.size) { i -> SectionItem(d.sections[i], i, markKind, onSetMark) }
 
         if (d.relatedMcqs.isNotEmpty()) {
             item { RelatedHeader("Related questions", d.relatedMcqs.size) }
@@ -176,7 +176,7 @@ private fun DossierBody(
 
 @Composable
 private fun SectionItem(
-    s: DossierSection, sectionOrd: Int, markKind: (String) -> String?, onLongPressLine: (Int, String) -> Unit,
+    s: DossierSection, sectionOrd: Int, markKind: (String) -> String?, onSetMark: (Int, String, String?) -> Unit,
 ) {
     var expanded by remember(s) { mutableStateOf(true) }
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -200,7 +200,7 @@ private fun SectionItem(
         }
         if (expanded) {
             DossierText(s.bodyMd, style = MaterialTheme.typography.bodyMedium,
-                sectionOrd = sectionOrd, markKind = markKind, onLongPressLine = onLongPressLine)
+                sectionOrd = sectionOrd, markKind = markKind, onSetMark = onSetMark)
             s.figures.forEach { fig -> Spacer(Modifier.height(10.dp)); FigureImage(fig) }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))

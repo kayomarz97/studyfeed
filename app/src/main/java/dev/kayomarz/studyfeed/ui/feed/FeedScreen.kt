@@ -184,6 +184,7 @@ private fun FeedPager(
                 },
                 onRead = { if (card is FeedCard.Blob) vm.markBlobRead(card) },
                 onSeen = { vm.onSeen(card) },
+                initialChosen = (card as? FeedCard.Mcq)?.let { ui.answeredMcqs[it.itemId] },
             )
         }
     }
@@ -199,9 +200,10 @@ private fun CardBody(
     onAnswered: (chosenIdx: Int, correct: Boolean) -> Unit,
     onRead: () -> Unit,
     onSeen: () -> Unit,
+    initialChosen: Int?,
 ) {
     when (card) {
-        is FeedCard.Mcq -> McqCard(card, onWhy, actions, onAnswered, onRate)
+        is FeedCard.Mcq -> McqCard(card, onWhy, actions, onAnswered, onRate, initialChosen)
         is FeedCard.Flashcard -> FlashcardCard(card, onWhy, actions, onRate, onSeen)
         is FeedCard.Reel -> ReelCard(card, onWhy, actions, onRate, onSeen)
         is FeedCard.Blob -> BlobCard(card, onWhy, actions, onRead)

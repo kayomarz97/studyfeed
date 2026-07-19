@@ -107,6 +107,33 @@ like the same fixed list).
 (FSRS + scheduler + any new pure tests). Instrumented migration/session tests if an emulator is up.
 Then hand over the debug APK. Journal + INDEX updated in the same pass.
 
+## Round 2 (2026-07-19, after on-device use) — 5 more
+
+1. **MCQ stays solved when you scroll back up (endless + filtered) + shows your pick vs the right answer.**
+   Card `chosen` lives in `remember(card.itemId)`, so a scroll-back re-render (pager disposes/recomposes)
+   resets it to unanswered. FIX: persist the chosen index in the VM (`answeredThisOpen: Map<Long,Int>`,
+   surfaced as `Ui.answeredMcqs`); `McqCard` seeds `chosen` from it → the revealed state (your wrong pick +
+   the correct option + explanation) comes back.
+2. **A named session keeps its filter until you change it.** On `reload` inside a session (`sessionId != null`)
+   persist the current query to the session's `config_json` (new DAO `updateSessionConfig`); `openSession`
+   already restores it.
+3. **Home "Decks" → Hard / Easy (the old tag data was stale).** Add `FeedFilter.hardOnly` (lapses ≥ 1 —
+   you've missed it) + `easyOnly` (reviewed, no lapse, stability ≥ 7 d — you know it) → SQL in `whereClause`;
+   Home shows **★ Starred · Hard (n) · Easy (n)** with counts (new DAO `hardCount`/`easyCount`).
+4. **Library: star a SENTENCE, not the whole block.** The dossier renders one block per line (a bullet or a
+   whole paragraph); a paragraph block = "the whole thing". FIX: split each block into sentences
+   (`Sentences.split`, conservative — guards abbreviations / decimals / `10^9` / allele `*`), render one
+   markable row per sentence, anchor the mark on the sentence hash. `buildAuto` also keys per sentence.
+5. **5 star colours on long-press.** Long-press a sentence → a colour picker (5 swatches + Remove); the mark
+   `kind` becomes `c1..c5` (was the single `"star"`); `colorForMark` maps them to 5 distinct hues; the auto
+   PYQ/5★ highlight stays visually separate (coral/gold). DAO reset already clears `line_marks`.
+
+**Files:** `ui/feed/FeedViewModel.kt` + `ui/feed/FeedCards.kt` + `ui/feed/FeedScreen.kt` (#1); `+progress/
+ProgressDatabase.kt` (#2 `updateSessionConfig`, #3 counts); `feed/FeedQuery.kt` + `feed/FeedRepository.kt`
+(#3 filter); `ui/home/HomeScreen.kt` + `ui/home/HomeViewModel.kt` + `MainActivity.kt` (#3 decks); new
+`dossier/Sentences.kt` + test, `ui/dossier/DossierMarkdown.kt` + `DossierViewModel.kt` + `DossierScreen.kt`
+(#4/#5). Verify: guard + `testDebugUnitTest` (+ `SentencesTest`) + `assembleDebug{,AndroidTest}`.
+
 ## Non-negotiables kept
 
 No new runtime deps (guard denylist). No exam string. Additive only — NO schema-version bump needed

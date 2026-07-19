@@ -57,6 +57,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         /** P4: the weakest subject (for the one-tap drill), leech count, and pack tags (for decks). */
         val weakest: SubjectCoverage? = null,
         val leeches: Int = 0,
+        /** Deck sizes (2026-07-19): Hard = missed at least once; Easy = reviewed, never missed, well-remembered. */
+        val hard: Int = 0,
+        val easy: Int = 0,
         val tags: List<PackDatabase.TagDef> = emptyList(),
     )
 
@@ -82,6 +85,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val starred = dao.starCount()
             val sessions = dao.activeSessions()
             val leeches = dao.leechCount(4)
+            val hard = dao.hardCount()
+            val easy = dao.easyCount()
             pdb.close()
 
             val openedPack = (PackDatabase.open(pack.dbFile) as? PackDatabase.Result.Ok)?.pack
@@ -127,7 +132,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 reviewProgress = if (mistakes + resolvedMistakes > 0)
                     resolvedMistakes.toFloat() / (mistakes + resolvedMistakes) else 0f,
                 sessions = sessions,
-                weakest = weakest, leeches = leeches, tags = tags,
+                weakest = weakest, leeches = leeches, hard = hard, easy = easy, tags = tags,
             )
         }
         _ui.value = ui
