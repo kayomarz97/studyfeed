@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Generic on purpose. The exam name shown in the app bar comes from the PACK MANIFEST at
+      runtime (A1), never from a resource — the app is exam-agnostic (§0, §12 decoupling).
+      Nothing here may ever say "MRCP".
+    -->
+    <string name="app_name">StudyFeed</string>
+</resources>

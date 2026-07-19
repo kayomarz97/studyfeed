@@ -1,0 +1,75 @@
+# ── copyrighted source + anything derived from it ──
+# Archives are dropped at the PROJECT ROOT. These patterns MUST exist before the first commit —
+# a zip committed once lives in git history forever and rewriting history later is miserable.
+*.zip
+*.rar
+*.r00
+*.7z
+*.tar
+*.tar.gz
+*.cbz
+*.epub
+*.djvu
+compiler/sources/
+compiler/sources/inbox/
+compiler/work/
+compiler/dist/
+**/quarantine.jsonl
+*.pdf
+
+# ── build artifacts ──
+*.apk
+*.aab
+app/build/
+build-logic/build/
+# The ROOT project's own build dir. Gradle writes build/reports/ here (e.g. the configuration-cache
+# problems report) even though the root project has no code. Anchored with a LEADING SLASH so it
+# matches ONLY this directory at the repo root — see the warning below for why a bare `build/` is
+# not safe here.
+/build/
+.gradle/
+local.properties
+# ⚠ Do NOT "simplify" the three build lines above into `**/build/` or a bare, unanchored `build/`.
+# The guard's own source lives in build-logic/src/main/kotlin/dev/kayomarz/studyfeed/**build**/ — a
+# package named `build` — and an unanchored rule would match it, silently stopping new files there
+# from ever being committed. `/build/` is anchored to the repo root and does NOT match that package;
+# a bare `build/` would match it at any depth and IS unsafe. List output dirs explicitly, one per
+# module, anchoring where a name collides with real source.
+
+# ── signing: losing these is bad, committing them is worse ──
+*.jks
+*.keystore
+# The real keystore is PKCS12 (.p12) and lives OUTSIDE this repo entirely (§11d). These patterns
+# are belt-and-braces for the day someone copies it in "just for a second".
+*.p12
+*.pfx
+keystore.properties
+
+# ── env / secrets ──
+.env
+*.env
+**/.anthropic_key
+
+# ── python ──
+__pycache__/
+.venv/
+*.egg-info/
+
+# ── Android Studio / IntelliJ ──
+# Generated the moment the project is opened in the IDE. Machine-specific (SDK paths, JDK choice,
+# window layout) — committing them makes the repo depend on one person's IDE setup, which is the
+# opposite of the §8 A0 "buildable from the CLI, no IDE-only config" contract.
+.idea/
+*.iml
+.kotlin/
+captures/
+# local.properties is already ignored above (it holds this machine's sdk.dir).
+
+# ── misc ──
+.DS_Store
+Thumbs.db
+# atomic-write temp files for the state file
+compiler/.compiler_state.*.tmp
+# private build state + session tooling — never on the public branch
+compiler/.compiler_state.json
+.claude/

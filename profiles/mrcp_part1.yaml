@@ -1,0 +1,369 @@
+exam_code: MRCP_PART1
+exam_name: "MRCP(UK) Part 1"
+blueprint_source_url: "https://www.thefederation.uk/examinations/part-1/format"   # 2026 blueprint.
+                                  # Counts below via studymrcp mirror, cross-checked against Federation
+                                  # anchors (Clinical sciences 25, Clinical pharmacology 15, big-four 14);
+                                  # sums to exactly 200. Normalized at scoring (S_blueprint, 7%).
+mcq_style: best_of_five
+negative_marking: false
+
+source_tiers:                      # provenance (which drop) is the prior; per-file classify refines it (C1c)
+  past_papers: {tier: 1, tier_weight: 1.00, default_reliability: recall}   # from Papers.zip
+  qbanks:      {tier: 2, tier_weight: 0.75, default_reliability: unknown}  # from Qbank.rar
+  pearls:      {tier: 3, tier_weight: 0.65, default_reliability: unknown,
+                source_salience: 0.75,       # whole book is high-yield by construction (§7 C1c)
+                exempt_noise_ceiling: true}  # do NOT zero it for flagging ~everything — that's correct
+  textbooks:   {tier: 3, tier_weight: 0.60, default_reliability: unknown}
+  references:  {tier: 4, tier_weight: 0.45, default_reliability: unknown}
+
+drops:                             # globs fixed to the ACTUAL dropped filenames (confirmed 2026-07-15)
+  - {glob: "Textbook*.zip", default_kinds: [textbook, pearls, reference], classify: per_file}
+  - {glob: "Qbank*.rar",    default_kinds: [qbank], subject_from: filename,
+     subject_pattern: '^\d+-(?P<subject>.+)\.pdf$'}   # e.g. "1-Cardiology.pdf" (16 subject-wise files)
+  - {glob: "Papers*.zip",   default_kinds: [past_paper], require: year_per_file}
+                                   # nested archives expected: Papers.zip -> per-year .rars (~34) + loose;
+                                   #   Textbook.zip -> a high-yield .rar (a pearls book)
+
+importance:
+  weights: {pyq: 0.33, corrob: 0.24, freq: 0.07, emphasis: 0.11,
+            blueprint: 0.07, centrality: 0.06, tier: 0.05, trend: 0.07}   # Σ = 1.00
+  emphasis_mix: {my_highlight: 0.6, book_flag: 0.4}   # §5b — both mean "a human marked this"
+  recency_lambda: 0.15             # per-year decay on past-paper hits
+  recent_window_years: 10          # "still live" window — drives the multi-year floor + fading cap
+  thresholds: {five: 0.80, four: 0.62, three: 0.42, two: 0.22}
+  cluster_ambiguous_band: [0.82, 0.92]   # only this cosine band goes to opus adjudication
+  floors:
+    pyq_min_importance: 4
+    multi_year_pyq_forces: 5       # requires >=1 hit inside recent_window_years (see SCORING.md)
+    uncorroborated_max: 3
+    fading_max: 3                  # historically asked, dead since => capped
+
+dossier:                           # §C10 — which canonical concepts get a pre-built "read up on X" page
+  min_atoms: 3                     # build a page when the concept has >= this many constituent atoms ...
+  min_subjects: 2                  # ... OR spans >= this many subjects (cross-subject is the whole point)
+  max_connections: 20             # concept-map edges listed per page (ordered by distinct-source support)
+  max_related_mcqs: 30            # linked questions per page (ordered by MCQ importance)
+  min_name_len: 4                  # ignore concept names shorter than this when phrase-matching MCQ stems
+
+staleness:
+  enabled: true
+  guideline_sensitive_cues: ["first-line", "target", "threshold", "recommended", "guideline",
+                             "management of", "treatment of", "screening", "cut-off"]
+
+data_corrections:                    # web-verified FACTUAL errors in source atoms -> excluded from the pack
+  # keyed by §5j stable_key (content-derived, survives rebuild). Verified 2026-07-17 (NICE/StatPearls/ARUP).
+  # The CORRECT facts remain via other atoms (8 MPA-pANCA, 6 coeliac-DQ2). See JOURNAL [SOURCE-FACTS-VERIFIED].
+  exclude_atom_stable_keys:
+    - "ebf9814ada53c70a"   # "cANCA vs PR3 40% in MPA" — MPA is pANCA/anti-MPO predominant, NOT cANCA
+    - "69593d00e1455bf8"   # "MPA associated with cANCA 40% and pANCA" — the cANCA-for-MPA claim is wrong
+    - "abcec8602d074123"   # "MPA positive for cANCA in 40%" — wrong (that pattern is GPA, not MPA)
+    - "e86811639a1befb8"   # "coeliac most strongly associated with HLA-DR2" — coeliac is HLA-DQ2/DQ8
+
+nomenclature:
+  canonicalize_orthography: true   # deterministic ae/oe->e, -ise->-ize, -our->-or (match key only)
+  display_convention: uk           # ALWAYS display UK spelling — that's what the exam is sat in
+  alias_hints:                     # what no rule can derive. Extend as the compiler proposes.
+    # ── the 2003 BAN->rINN switch: older papers predate it ──
+    - [furosemide, frusemide]
+    - [lidocaine, lignocaine]
+    - [amoxicillin, amoxycillin]
+    - [meticillin, methicillin]
+    - [ciclosporin, cyclosporine, cyclosporin]
+    - [colestyramine, cholestyramine]
+    - [chlorphenamine, chlorpheniramine]
+    - [beclometasone, beclomethasone]
+    - [dosulepin, dothiepin]
+    - [thiopental, thiopentone]
+    - [phenobarbital, phenobarbitone]
+    - [sulfasalazine, salazopyrin]
+    # ── the two rINN exceptions: dual-labelled 2004-2025, single-titled from BNF 92 ──
+    - [adrenaline, epinephrine, "adrenaline/epinephrine"]
+    - [noradrenaline, norepinephrine, "noradrenaline/norepinephrine"]
+    # ── UK<->US divergences (bite if any reference book is US-sourced, e.g. Harrison's) ──
+    - [paracetamol, acetaminophen]
+    - [salbutamol, albuterol]
+    - [glibenclamide, glyburide]
+    - [pethidine, meperidine]
+    - [rifampicin, rifampin]
+    - [isoprenaline, isoproterenol]
+    - [oestrogen, estrogen]
+    - [co-trimoxazole, "trimethoprim-sulfamethoxazole", TMP-SMX]
+    # ── common abbreviation <-> full name ──
+    - [glyceryl trinitrate, GTN, nitroglycerin]
+    # ── C8 alias verification (Opus-adjudicated 2026-07-16: 226 same / 174 kept separate) ──
+    - ["ACE inhibitor", "ACE inhibition", "ACE inhibitors", "ACE-inhibitor", "ACE-inhibitors"]
+    - ["ANCA-associated vasculitis", "ANCA associated vasculitis"]
+    - ["Addison's disease", "Addison disease"]
+    - ["Alport's syndrome", "Alport syndrome"]
+    - ["Alström syndrome", "Alstrom syndrome"]
+    - ["Alzheimer's disease", "Alzheimer disease"]
+    - ["Argyll Robertson pupil", "Argyll-Robertson pupil"]
+    - ["BRCA2 mutation", "BRCA 2 mutation"]
+    - ["Barrett's oesophagus", "Barrett oesophagus"]
+    - ["Bartter's syndrome", "Bartter syndrome"]
+    - ["Behçet's disease", "Behçet disease"]
+    - ["Behçet's syndrome", "Behçet syndrome"]
+    - ["Brown-Séquard syndrome", "Brown-Sequard syndrome"]
+    - ["Burkitt's lymphoma", "Burkitt lymphoma"]
+    - ["Caplan's syndrome", "Caplan syndrome"]
+    - ["Charles Bonnet syndrome", "Charles-Bonnet syndrome"]
+    - ["Crohn's disease", "Crohn disease"]
+    - ["Cushing's syndrome", "Cushing syndrome"]
+    - ["De Quervain's tenosynovitis", "De Quervain tenosynovitis"]
+    - ["De Quervain's thyroiditis", "De Quervain thyroiditis"]
+    - ["Down's syndrome", "Down syndrome"]
+    - ["Dressler's syndrome", "Dressler syndrome"]
+    - ["Edwards syndrome", "Edward syndrome"]
+    - ["Ehlers-Danlos syndrome", "Ehlers Danlos syndrome"]
+    - ["Eisenmenger's complex", "Eisenmenger complex"]
+    - ["Eisenmenger's syndrome", "Eisenmenger syndrome"]
+    - ["Fabry's disease", "Fabry disease"]
+    - ["Felty's syndrome", "Felty syndrome"]
+    - ["Foster-Kennedy syndrome", "Foster Kennedy Syndrome"]
+    - ["Friedreich's ataxia", "Friedreich ataxia"]
+    - ["G-protein-coupled receptor", "G-protein coupled receptor"]
+    - ["Gardner's syndrome", "Gardener syndrome", "Gardner syndrome"]
+    - ["Gaucher's disease", "Gaucher disease"]
+    - ["Gerstmann's syndrome", "Gerstmann syndrome"]
+    - ["Gilbert's syndrome", "Gilbert syndrome"]
+    - ["Gitelman's syndrome", "Gitelman syndrome"]
+    - ["Goodpasture's syndrome", "Goodpasture syndrome"]
+    - ["Graves' disease", "Grave's disease"]
+    - ["Guillain-Barré syndrome", "Guillain-Barre syndrome", "Guillain–Barré syndrome"]
+    - ["Hashimoto's thyroiditis", "Hashimoto thyroiditis"]
+    - ["Heerfordt's syndrome", "Heerfordt syndrome"]
+    - ["Henoch-Schönlein purpura", "Henoch-Schoenlein purpura", "Henoch–Schönlein purpura"]
+    - ["Hirschsprung's disease", "Hirschsprung disease"]
+    - ["Hodgkin's lymphoma", "Hodgkin lymphoma"]
+    - ["Horner's syndrome", "Horner syndrome"]
+    - ["Huntington's disease", "Huntington disease"]
+    - ["IV fluid", "IV fluids"]
+    - ["Kallmann's syndrome", "Kallman syndrome", "Kallman's syndrome", "Kallmann syndrome"]
+    - ["Kaposi's sarcoma", "Kaposi sarcoma"]
+    - ["Kartagener's syndrome", "Kartagener syndrome"]
+    - ["Kearns-Sayre syndrome", "Kearns–Sayre syndrome"]
+    - ["Klinefelter's syndrome", "Klinefelter syndrome"]
+    - ["Korsakoff's syndrome", "Korsakoff syndrome"]
+    - ["Lambert-Eaton myasthenic syndrome", "Lambert–Eaton myasthenic syndrome"]
+    - ["Legionella pneumophila", "Legionella pneumophilia"]
+    - ["Lesch-Nyhan syndrome", "Lesch–Nyhan syndrome"]
+    - ["Liddle's syndrome", "Liddle syndrome"]
+    - ["Löffler's syndrome", "Löffler syndrome"]
+    - ["MEN 1", "MEN I"]
+    - ["MEN 2B", "MEN IIb"]
+    - ["Marfan's syndrome", "Marfan syndrome"]
+    - ["McCune-Albright syndrome", "McCune–Albright syndrome"]
+    - ["abnormal liver function test", "abnormal liver function tests"]
+    - ["absence seizure", "absence seizures"]
+    - ["absent ankle jerk", "absent ankle jerks"]
+    - ["acetylcholinesterase inhibitor", "Acetylcholinesterase inhibitor", "acetylcholinesterase inhibition"]
+    - ["acute angle-closure glaucoma", "acute angle closure glaucoma"]
+    - ["acute myeloid leukaemia", "acute_myeloid_leukaemia"]
+    - ["adult-onset Still's disease", "Adult-onset Still's disease", "adult onset Still's disease"]
+    - ["albumin:creatinine ratio", "albumin-creatinine ratio"]
+    - ["aldosterone antagonist", "aldosterone antagonism"]
+    - ["alpha blocker", "alpha-blocker"]
+    - ["alpha-1 adrenoceptor", "alpha-1 adreceptor"]
+    - ["alpha-1 antitrypsin deficiency", "alpha1-antitrypsin deficiency"]
+    - ["altered mental state", "altered mental status"]
+    - ["aminoglycoside", "aminoglycosides"]
+    - ["amphotericin B", "Amphotericin"]
+    - ["anaemia of chronic kidney disease", "anaemia in chronic kidney disease"]
+    - ["angioid retinal streak", "angioid retinal streaks"]
+    - ["angiokeratoma", "angiokeratomas"]
+    - ["ankle-brachial pressure index", "ankle brachial pressure index"]
+    - ["anthracycline", "anthracyclines"]
+    - ["anti-Jo-1 antibody", "Anti-Jo 1 antibody"]
+    - ["anti-Scl-70 antibody", "anti-Scl70 antibody"]
+    - ["antibiotic", "antibiotics"]
+    - ["anticholinergic", "anticholinergics"]
+    - ["anticoagulant", "anticoagulants"]
+    - ["anticonvulsant", "anticonvulsants"]
+    - ["antidepressant", "antidepressants"]
+    - ["antinuclear antibody", "anti-nuclear antibody"]
+    - ["antiphospholipid syndrome", "anti-phospholipid syndrome"]
+    - ["antipsychotic", "antipsychotics"]
+    - ["aortic root dilatation", "aortic root dilation"]
+    - ["arrhythmia", "arrhythmias"]
+    - ["arterial blood gas", "arterial blood gases"]
+    - ["aspergilloma", "aspergiloma"]
+    - ["ataxia-telangiectasia", "ataxia telangiectasia", "ataxic telangiectasia"]
+    - ["auditory hallucination", "auditory hallucinations"]
+    - ["barbiturate", "Barbiturates"]
+    - ["benign prostatic hyperplasia", "benign prostate hyperplasia"]
+    - ["benzodiazepine", "benzodiazepines"]
+    - ["beta blocker", "beta blockers", "beta-blocker", "beta-blockers"]
+    - ["beta-HCG", "Beta HCG"]
+    - ["beta-thalassaemia major", "beta thalassaemia major"]
+    - ["bile acid malabsorption", "bile-acid malabsorption"]
+    - ["biologic agent", "Biologic agents"]
+    - ["bisphosphonate", "bisphosphonates"]
+    - ["blood test", "blood tests"]
+    - ["bone metastasis", "bone metastases"]
+    - ["breastfeeding", "breast feeding", "breast-feeding"]
+    - ["brisk reflex", "brisk reflexes"]
+    - ["broad-spectrum antibiotic", "broad spectrum antibiotic"]
+    - ["bronchodilator", "bronchodilation", "bronchodilators"]
+    - ["burn", "burns"]
+    - ["busulfan", "busulphan"]
+    - ["calcineurin inhibitor", "calcineurin inhibition"]
+    - ["calcium channel blocker", "calcium channel blockers"]
+    - ["cannon a wave", "cannon 'a' waves", "cannon wave"]
+    - ["cardiac arrhythmia", "cardiac arrhythmias"]
+    - ["cataract", "cataracts"]
+    - ["cephalosporin", "cephalosporins"]
+    - ["chest radiograph", "chest radiography"]
+    - ["chorioretinitis", "choroidoretinitis"]
+    - ["ciclosporin", "ciclosporin A"]
+    - ["class IV lupus nephritis", "Class 4 lupus nephritis"]
+    - ["cold agglutinin", "cold agglutinins"]
+    - ["colon cancer", "colonic cancer"]
+    - ["combined oral contraceptive", "combined oral contraceptives"]
+    - ["community-acquired pneumonia", "community acquired pneumonia"]
+    - ["compression stocking", "compression stockings"]
+    - ["conductive deafness", "Conduction deafness"]
+    - ["corticosteroid", "corticosteroids"]
+    - ["cotton wool spot", "cotton-wool spot"]
+    - ["cryptogenic organising pneumonia", "cryptogenic organizing pneumonia"]
+    - ["cubital tunnel syndrome", "cubital_tunnel_syndrome"]
+    - ["cytopaenia", "cytopenias"]
+    - ["delusion", "delusions"]
+    - ["dilated pupil", "dilated pupils"]
+    - ["direct thrombin inhibitor", "direct thrombin inhibition"]
+    - ["disseminated gonococcal infection", "disseminated gonococcoal infection"]
+    - ["diuretic", "diuretics"]
+    - ["drug", "drugs"]
+    - ["elder abuse", "elder_abuse"]
+    - ["elevated creatine kinase", "elevated creatinine kinase"]
+    - ["elevated transaminase", "elevated transaminases"]
+    - ["emollient", "emollients"]
+    - ["extensor plantar response", "extensor plantar responses"]
+    - ["extrapyramidal sign", "extrapyramidal signs"]
+    - ["exudative pleural effusion", "exudate pleural effusion"]
+    - ["fall", "falls"]
+    - ["fasciculation", "fasciculations"]
+    - ["fibrate", "fibrates"]
+    - ["fibroid", "fibroids"]
+    - ["floater", "floaters"]
+    - ["flu-like symptom", "flu-like symptoms"]
+    - ["foscarnet", "foscamet"]
+    - ["fracture", "fractures"]
+    - ["frontotemporal dementia", "fronto-temporal dementia"]
+    - ["fungus", "Fungi"]
+    - ["further investigation", "further investigations"]
+    - ["gallstone", "gallstones"]
+    - ["generalised anxiety disorder", "generalised_anxiety_disorder"]
+    - ["generalised lymphadenopathy", "generalized lymphadenopathy"]
+    - ["generalised seizure", "generalized seizure"]
+    - ["generalised tonic-clonic seizure", "generalized tonic-clonic seizure"]
+    - ["genital wart", "genital warts"]
+    - ["giant cell arteritis", "Giant-cell arteritis"]
+    - ["glitazone", "Glitazones"]
+    - ["glucocorticoid", "glucocorticoids"]
+    - ["graft-versus-host disease", "graft versus host disease"]
+    - ["haemolytic uraemic syndrome", "haemolytic-uraemic syndrome"]
+    - ["hallucination", "hallucinations"]
+    - ["headache", "headaches"]
+    - ["hemiballismus", "hemiballism"]
+    - ["hepatitis B immunoglobulin", "hepatitis B immune globulin"]
+    - ["hiccup", "hiccups"]
+    - ["high-severity community-acquired pneumonia", "high severity community-acquired pneumonia", "high-severity community acquired pneumonia"]
+    - ["hot flush", "hot flushes"]
+    - ["immunodeficiency", "immune deficiency"]
+    - ["immunoglobulin", "immunoglobulins"]
+    - ["immunosuppressant", "immunosuppressants"]
+    - ["implantable cardioverter-defibrillator", "implantable cardioverter defibrillator"]
+    - ["infantile spasm", "infantile spasms"]
+    - ["inferior vena cava filter", "inferior vena caval filter"]
+    - ["interferon-alpha", "interferon alpha"]
+    - ["interferon-gamma release assay", "interferon gamma release assay"]
+    - ["interleukin-1", "Interleukin-1", "interleukin 1"]
+    - ["interleukin-2", "interleukin 2"]
+    - ["intravenous antibiotic", "intravenous antibiotics"]
+    - ["intravenous fluid", "intravenous fluids"]
+    - ["intravenous immunoglobulin", "Intravenous immunoglobulins"]
+    - ["intubation and ventilation", "intubation_and_ventilation"]
+    - ["iron-deficiency anaemia", "iron deficiency anaemia"]
+    - ["left bundle branch block", "left bundle-branch block"]
+    - ["light-headedness", "lightheadedness"]
+    - ["liver function test", "liver function tests"]
+    - ["long-acting beta-2 agonist", "long-acting beta2-agonist"]
+    - ["loop diuretic", "loop diuretics"]
+    - ["low-molecular-weight heparin", "low-molecular weight heparin"]
+    - ["lower motor neurone sign", "lower motor neuron sign", "lower motor neuron signs"]
+    - ["macrolide", "macrolides"]
+    - ["meglitinide", "meglitinides"]
+    - ["oestrogen", "oestrogens"]
+
+scripts:                           # §5g — allowlist, NOT "strip non-ASCII"
+  drop:  [arabic, bengali]         # the arabic block covers Farsi/Persian/Urdu too — no separate block
+  allow: [latin, latin_ext, greek, punctuation, super_subscript, arrows, math_ops, diacritics]
+  drop_threshold: 0.30             # drop a span when >30% of its letters sit in a dropped block
+  ocr_languages: [eng]             # never point OCR at a script you haven't detected first
+  whole_doc_nonlatin: ask          # a predominantly non-Latin PDF => stop and ask, don't skip silently
+
+dedupe:                            # §5b — the same pdf loose AND inside a zip
+  exact_hash: auto_collapse        # sha256 identical => collapse without asking
+  fingerprint: report              # page count + normalized text hash => report, then ask
+  fuzzy_minhash_threshold: 0.90    # >= this => POSSIBLE dup => ASK. never auto-merge
+  editions_of_same_work: ask       # two editions of one work = one voice. ask before deciding
+  cross_drop_tier_conflict: ask    # same pdf in two drops implying different tiers => human decides (C1b)
+
+archives:                          # §7 C1a — nested archives at mixed depth
+  inbox: sources/inbox/            # drop zone; the compiler unpacks, the human never unpacks by hand
+  formats: [zip, rar, 7z, tar]
+  max_depth: 8                     # nested archive recursion limit
+  max_expanded_gb: 25              # LOWERED from spec default 60: only 37 GB free on this box (§C0)
+  on_password: ask                 # never skip a locked archive silently
+  on_corrupt: ask
+  ignore_globs: ["__MACOSX/*", "*.DS_Store", "Thumbs.db", "*.url", "*.lnk"]
+
+zoning:                            # §5i — the front-matter example trap
+  detect_body_start: [roman_to_arabic_pagination, first_chapter_heading, toc_end]
+  confirm_boundaries: ask          # show page numbers per book before atomizing
+  atomize_zones: [body]            # PROSE only. front_matter is read for conventions, never content
+  mcq_scan_zones: [body, back_matter]    # textbook MCQs: end-of-chapter AND appendix question banks
+  confirm_back_matter_exclusion: ask     # show the page range before fencing off any back matter
+  boilerplate_verbatim_threshold: 0.97   # near-identical wording across works…
+  boilerplate_position_window: 30        # …AND within the first N pages of each => boilerplate
+  exclude_boilerplate_from_pack: true    # not 1★ — gone. a demo MCQ has zero study value
+  book_flag_noise_ceiling: 0.60    # a book flagging >60% of itself as high-yield = noise => tell me
+
+# NOTE(part2_scope): the high-yield pearls textbook covers MRCP Part 1 AND Part 2.
+#   Decision DEFERRED to C2 — show structure, then decide.
+
+subjects:                          # weight = MRCP(UK) Part 1 question count (out of 200); sums to 200.
+                                   # Palliative + Ophthalmology kept SEPARATE (confirmed at C1). Oncology 5
+                                   # stays folded into Haematology (no distinct Oncology source file).
+  - {name: "Cardiology", weight: 14}
+  - {name: "Clinical sciences", weight: 25,
+     subtopics: ["clinical anatomy","biochemistry & metabolism","physiology",
+                 "cell & molecular biology","genetics","immunology","statistics & EBM"]}
+  - {name: "Clinical pharmacology, therapeutics & toxicology", weight: 15}
+  - {name: "Dermatology", weight: 8}
+  - {name: "Endocrinology", weight: 14}
+  - {name: "Gastroenterology & hepatology", weight: 14}
+  - {name: "Geriatric medicine", weight: 8}
+  - {name: "Haematology", weight: 15}                 # haematology 10 + oncology 5 (no distinct onc file)
+  - {name: "Infectious diseases (incl. GUM/HIV)", weight: 14}
+  - {name: "Nephrology", weight: 14}
+  - {name: "Neurology", weight: 14}
+  - {name: "Ophthalmology", weight: 4}
+  - {name: "Palliative medicine", weight: 4}
+  - {name: "Psychiatry", weight: 9}
+  - {name: "Respiratory medicine", weight: 14}
+  - {name: "Rheumatology", weight: 14}
+# Qbank.rar ships 16 subject-wise files. 14 map cleanly (Ophthalmology -> Neurology per taxonomy).
+#   TWO need a human call at C1: "Palliative Medicine" (no distinct Part-1 blueprint subject) and how
+#   granular to keep "Clinical Science"/"Pharmacology". Surfaced at the C1 ⛔ — not guessed here.
+
+highlight_colors: {yellow: true, green: true, pink: true}
+
+tags:                              # the 1-tap tags the app renders (rename freely)
+  - {key: careless, label: "Careless slip",   color: "#FBBF24", description: "Knew it, misread/misclicked"}
+  - {key: gap,      label: "Knowledge gap",    color: "#EF4444", description: "Didn't know the fact"}
+  - {key: confused, label: "Mixed up options", color: "#8B5CF6", description: "Couldn't discriminate"}
+  - {key: guessed,  label: "Guessed",          color: "#3B82F6", description: "Right/wrong by luck"}
+  - {key: revisit,  label: "Must revisit",     color: "#10B981", description: "High-yield / weak, come back"}
+
+alias_hints: []                    # (legacy key kept for compatibility; use nomenclature.alias_hints)
