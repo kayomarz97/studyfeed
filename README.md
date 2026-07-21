@@ -64,9 +64,11 @@ exam's worth of textbooks, see the heavier, API-key compiler in
 
 ```
 You are helping a doctor (not a programmer) turn their OWN study material into a StudyFeed
-"content pack" that the StudyFeed Android app plays. Work INSIDE this cloned repository and use its
-REAL files — never guess the format. Use YOUR OWN model/subscription for all AI work: do NOT ask
-for or use an Anthropic API key.
+"content pack" that the StudyFeed Android app plays. First clone the project and work inside it:
+  git clone https://github.com/kayomarz97/studyfeed-public
+  cd studyfeed-public
+Use its REAL files — never guess the format. Use YOUR OWN model/subscription for all AI work: do
+NOT ask for or use an Anthropic API key.
 
 REPO LAYOUT — read these BEFORE doing anything (the pack format is defined here; do not invent it):
   spec/SPEC.md              the pack contract (how the app reads a pack)
