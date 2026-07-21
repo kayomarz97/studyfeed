@@ -1686,3 +1686,17 @@ gets promoted to a one-line rule in this repo's `CLAUDE.md`.
   (`FOO/BARBAZ`, `Alpha/Omega`); never quote the actual card you verified against, even in prose. A
   pre-existing real fragment also survives in `DossierMarkdownTest.kt` (from A4, already on origin). (seen 3x
   → the rule holds; the gap is *examples in prose/comments*, not just code fixtures.)
+
+- **2026-07 · `assembleDebug` proves nothing about R8 — always test `assembleRelease` before a release.**
+  The FIRST-ever `assembleRelease` (2026-07-21) failed at `minifyReleaseWithR8`: "Missing class
+  lombok.Generated / lombok.NonNull (referenced from io.github.openspacedrepetition.Card ...)". Only
+  debug APKs had been built before (no R8/minify in debug), so this was invisible until release. Root
+  cause: `java-fsrs` (the FSRS-6 dep) was compiled with Lombok; `Card`/`ReviewLog` reference
+  `lombok.Generated`/`lombok.NonNull`, compile-time-only annotations absent from the runtime classpath —
+  R8 treats a missing referenced class as an error.
+  **Fix/prevention:** add `-dontwarn lombok.**` to `app/proguard-rules.pro` (this is exactly what R8's
+  own `build/outputs/mapping/release/missing_rules.txt` suggests) — never a `-keep` rule, never add
+  Lombok as a real dependency. `-dontwarn` only silences the missing-reference check; keeps no code,
+  doesn't weaken shrinking, and Lombok stays non-runtime so `verifyOfflineGuarantees` stays green. Fixed
+  in commit `344260b`. Before any release, run `.\gradlew.bat :app:assembleRelease` — not just
+  `assembleDebug` — and check `missing_rules.txt` if R8 fails. (seen 1x)
