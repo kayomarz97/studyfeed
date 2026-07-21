@@ -1,7 +1,7 @@
 name: Publish public snapshot
 
 # Auto-mirror a clean, redacted, content-free snapshot of this PRIVATE repo to the PUBLIC repo
-# (kayomarz97/studyfeed-public) on every push to dev or main. The snapshot is built by
+# (kayomarz97/studyfeed-public) on every push to main. The snapshot is built by
 # tools/sync-public.sh (whitelist copy + vendor redaction + public-overrides + guard). The private
 # repo's own history, internal docs, secrets, and exam content never leave this repo.
 #
@@ -11,7 +11,7 @@ name: Publish public snapshot
 
 on:
   push:
-    branches: [dev, main]
+    branches: [main]
   workflow_dispatch: {}
 
 concurrency:
