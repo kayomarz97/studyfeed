@@ -39,6 +39,32 @@ uv run python -m studyfeed_compiler.run            # build/resume; stops at each
 
 Needs [uv](https://docs.astral.sh/uv/) (it provisions Python 3.11 itself).
 
+## Build without an API key — subscription mode
+
+Don't have (or want to pay for) an Anthropic API key? The two AI-heavy stages (atomize prose, parse
+MCQs) can run through your **coding-agent subscription** via its CLI (`claude`, `gemini`, or `codex`)
+instead of the paid Batch API. Everything else in the pipeline is already token-free Python. Best for
+**small / personal corpora** — a subscription will throttle at whole-exam scale.
+
+```bash
+cd compiler
+uv sync
+unset ANTHROPIC_API_KEY          # IMPORTANT: a set key hijacks `claude` into API-key auth and 401s
+
+# quick end-to-end check (a few units, uses your subscription):
+uv run python -m studyfeed_compiler.llm_local local-test
+
+# run the LLM stages on your material via your subscription (bounded for a personal pack):
+uv run python -m studyfeed_compiler.llm_local local-atomize 300   # prose -> grounded atoms
+uv run python -m studyfeed_compiler.llm_local local-mcq 300       # question pages -> MCQs
+```
+
+Choose the CLI with `STUDYFEED_LLM_CLI=claude|gemini|codex` (default `claude`); tune parallelism with
+`STUDYFEED_LLM_CONCURRENCY` (default 4). The grounded output (`work/atoms.jsonl`, `work/mcqs.jsonl`)
+is identical in shape to the Batch-API path, so the remaining stages (cluster → score → package) run
+unchanged. *(Folding this into the single `run` command is a planned follow-up — today you run these
+LLM stages, then continue the pipeline.)*
+
 ## How it works
 
 A resumable ~14-stage pipeline: ingest → extract (text + OCR) → atomize & ground → corroborate &
