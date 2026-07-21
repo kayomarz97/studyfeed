@@ -30,38 +30,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.kayomarz.studyfeed.feed.FeedFilter
 import dev.kayomarz.studyfeed.feed.FeedQuery
+import dev.kayomarz.studyfeed.pack.PackCapabilities
 import dev.kayomarz.studyfeed.pack.PackDatabase
 
 /**
- * The A7 feed controls (user-approved redesign). The old three stacked rows (mode chips + Sort + a 12-chip
- * filter rail) collapse to ONE row — a **Study ▾** mode menu and a **Filter** button — plus a row of
- * removable active-filter tokens. Everything fine-grained lives in the [FilterSheet].
+ * The A7 feed controls (user-approved redesign, trimmed 2026-07-19). The top row is now just **Home ·
+ * Filter** — the Study-mode dropdown and the removable active-filter token row were removed (the mixed
+ * feed is the only "mode"; clearing lives inside the sheet). Everything fine-grained lives in [FilterSheet].
  */
-
-/** Study mode presets (how to study) as a compact dropdown: Mixed / By subject / Recall / Skim. */
-@Composable
-fun StudyModeMenu(
-    current: FeedViewModel.StudyMode,
-    onSelect: (FeedViewModel.StudyMode) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var open by remember { mutableStateOf(false) }
-    TextButton(onClick = { open = true }, modifier = modifier) {
-        Text("Study: ${modeLabel(current)} ▾", fontWeight = FontWeight.SemiBold)
-    }
-    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-        FeedViewModel.StudyMode.entries.forEach { m ->
-            DropdownMenuItem(text = { Text(modeLabel(m)) }, onClick = { onSelect(m); open = false })
-        }
-    }
-}
-
-private fun modeLabel(m: FeedViewModel.StudyMode) = when (m) {
-    FeedViewModel.StudyMode.MIXED -> "Mixed"
-    FeedViewModel.StudyMode.BY_SUBJECT -> "By subject"
-    FeedViewModel.StudyMode.RECALL -> "Recall"
-    FeedViewModel.StudyMode.SKIM -> "Skim"
-}
 
 /** The "⚙ Filter" button, showing how many filters are active. */
 @Composable
@@ -85,6 +61,16 @@ fun FeedFilter.activeCount(): Int {
     return n
 }
 
+/**
+ * How many *refinements* are set on a single-type feed — the badge count, excluding the locked content
+ * type itself (a locked MCQ feed shouldn't read "Filter (1)" merely for being MCQs). In the mixed feed
+ * ([lockedTypes] null) this is just [activeCount].
+ */
+fun FeedFilter.refinementCount(lockedTypes: List<String>?): Int {
+    if (lockedTypes == null) return activeCount()
+    return activeCount() - (itemTypesIn?.count { it in lockedTypes } ?: 0)
+}
+
 /** A human phrase for each active filter, for the empty-state message and tokens. */
 fun FeedFilter.activeLabels(subjects: List<PackDatabase.Subject>, tags: List<PackDatabase.TagDef>): List<String> {
     val out = mutableListOf<String>()
@@ -105,55 +91,14 @@ private fun typeLabel(t: String) = when (t) {
     "interlink" -> "Links"; else -> t
 }
 
-/** Removable active-filter tokens shown under the top row (tap ✕ to clear that one). */
-@Composable
-fun ActiveFilterTokens(
-    filter: FeedFilter,
-    subjects: List<PackDatabase.Subject>,
-    tags: List<PackDatabase.TagDef>,
-    onFilter: (FeedFilter) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    if (filter.isAll) return
-    Row(
-        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        FilterChip(selected = true, onClick = { onFilter(FeedFilter()) }, label = { Text("Clear all ✕") })
-        filter.activeLabels(subjects, tags).forEach { label ->
-            FilterChip(selected = true, onClick = { onFilter(clearOne(filter, label, subjects, tags)) },
-                label = { Text("$label ✕") })
-        }
-    }
-}
-
-/** Remove the single filter field that produced [label]. */
-private fun clearOne(f: FeedFilter, label: String, subjects: List<PackDatabase.Subject>, tags: List<PackDatabase.TagDef>): FeedFilter {
-    return when {
-        label == "PYQ" -> f.copy(pyqOnly = false)
-        label == "Starred" -> f.copy(starredOnly = false)
-        label == "Mistakes" -> f.copy(mistakesOnly = false)
-        label.endsWith("★+") -> f.copy(importanceMin = null)
-        label.endsWith("★") -> f.copy(importanceExact = null)
-        label in listOf("MCQs", "Flashcards", "Reels", "Passages", "Links") -> {
-            val t = typeKey(label)
-            f.copy(itemTypesIn = f.itemTypesIn?.filter { it != t }?.ifEmpty { null },
-                itemType = if (f.itemType == t) null else f.itemType)
-        }
-        subjects.any { it.name == label } -> f.copy(subjectId = null)
-        tags.any { it.label == label } -> f.copy(tagKey = null)
-        else -> f
-    }
-}
-
-private fun typeKey(label: String) = when (label) {
-    "MCQs" -> "mcq"; "Flashcards" -> "flashcard"; "Reels" -> "reel"; "Passages" -> "blob"; "Links" -> "interlink"; else -> label
-}
-
 /**
  * The filter sheet — every fine-grained control (content type, importance, focus, subject) in one modal.
  * Changes apply live; the button dismisses. Reused verbatim by the feed, passages and library so the app
  * has one filter model everywhere (user request).
+ *
+ * On a **single-type feed** ([lockedTypes] non-null) the "Content type" group is hidden and "Clear all"
+ * keeps you on the type — you refine *which* of that type you see (Subject / Importance / Focus), never
+ * switch away from it (user request 2026-07-19).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -162,24 +107,39 @@ fun FilterSheet(
     subjects: List<PackDatabase.Subject>,
     tags: List<PackDatabase.TagDef>,
     total: Int,
+    lockedTypes: List<String>?,
+    capabilities: PackCapabilities?,
     onFilter: (FeedFilter) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheet = rememberModalBottomSheetState()
     val f = query.filter
+    // "Clear all" resets to the empty filter — but on a single-type feed it keeps you ON the type.
+    val cleared = if (lockedTypes != null) FeedFilter(itemTypesIn = lockedTypes) else FeedFilter()
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Filter", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                TextButton(onClick = { onFilter(FeedFilter()) }) { Text("Clear all") }
+                TextButton(onClick = { onFilter(cleared) }) { Text("Clear all") }
             }
 
-            Group("Content type")
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("mcq" to "MCQs", "flashcard" to "Flashcards", "reel" to "Reels",
-                    "blob" to "Passages", "interlink" to "Links").forEach { (t, label) ->
-                    val on = f.itemTypesIn?.contains(t) == true || f.itemType == t
-                    Chip(label, on) { onFilter(toggleType(f, t)) }
+            // Content type is switchable only in the mixed feed; a single-type feed stays on its type.
+            if (lockedTypes == null) {
+                Group("Content type")
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("mcq" to "MCQs", "flashcard" to "Flashcards", "reel" to "Reels",
+                        "blob" to "Passages", "interlink" to "Links").forEach { (t, label) ->
+                        val on = f.itemTypesIn?.contains(t) == true || f.itemType == t
+                        // A type the loaded pack doesn't include is DISABLED, not hidden — so the user can
+                        // see the app supports it and this pack simply lacks it (§0 multi_pack). MCQs are
+                        // core (always on); null caps = still loading, so don't grey anything yet.
+                        Chip(label, on, enabled = typePresent(t, capabilities)) { onFilter(toggleType(f, t)) }
+                    }
+                }
+                if (capabilities != null && anyTypeAbsent(capabilities)) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("Greyed types aren't in this pack.", fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
@@ -217,6 +177,23 @@ fun FilterSheet(
     }
 }
 
+/**
+ * Whether the loaded pack contains a given feed content type. MCQs are core (always present); the rest
+ * are resolved from [PackCapabilities] (rows-authoritative). null caps = pack not opened yet → treat as
+ * present so nothing greys out prematurely while loading.
+ */
+private fun typePresent(type: String, caps: PackCapabilities?): Boolean = when (type) {
+    "mcq" -> true
+    "flashcard" -> caps?.hasFlashcards ?: true
+    "reel" -> caps?.hasReels ?: true
+    "blob" -> caps?.hasBlobs ?: true
+    "interlink" -> caps?.hasInterlink ?: true
+    else -> true
+}
+
+private fun anyTypeAbsent(caps: PackCapabilities): Boolean =
+    !caps.hasFlashcards || !caps.hasReels || !caps.hasBlobs || !caps.hasInterlink
+
 private fun toggleType(f: FeedFilter, type: String): FeedFilter {
     val cur = f.itemTypesIn?.toMutableList() ?: mutableListOf()
     if (type in cur) cur.remove(type) else cur.add(type)
@@ -233,8 +210,8 @@ private fun Group(title: String) {
 }
 
 @Composable
-private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
-    FilterChip(selected = selected, onClick = onClick, label = { Text(label) })
+private fun Chip(label: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
+    FilterChip(selected = selected, enabled = enabled, onClick = onClick, label = { Text(label) })
 }
 
 @Composable

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -60,9 +61,11 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onManagePacks: () -> Unit,
     onChanged: () -> Unit,
+    onReset: (SettingsViewModel.ResetKind) -> Unit,
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     var showDatePicker by remember { mutableStateOf(false) }
+    var confirmReset by remember { mutableStateOf<SettingsViewModel.ResetKind?>(null) }
 
     val exportTo = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
@@ -136,6 +139,46 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(20.dp)); HorizontalDivider(); Spacer(Modifier.height(20.dp))
 
+        // ── Reader text size (2026-07-19) ────────────────────────────────────────────────────────────
+        Text("Reader text size", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(4.dp))
+        Text("How large passages and topic pages read. Question cards are left as they are.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("Small" to 0.85f, "Medium" to 1.0f, "Large" to 1.2f, "Extra" to 1.4f).forEach { (label, s) ->
+                FilterChip(selected = kotlin.math.abs(ui.readerScale - s) < 0.01f,
+                    onClick = { vm.setReaderScale(s) }, label = { Text(label) })
+            }
+        }
+
+        Spacer(Modifier.height(20.dp)); HorizontalDivider(); Spacer(Modifier.height(20.dp))
+
+        // ── While studying: keep awake + haptics ─────────────────────────────────────────────────────
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                Text("Keep screen on while studying", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(4.dp))
+                Text("The screen won't dim or lock while the feed is open. Uses a little more battery.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(checked = ui.keepScreenOn, onCheckedChange = { vm.setKeepScreenOn(it) })
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                Text("Haptic feedback", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(4.dp))
+                Text("A gentle tap when you answer, reveal or rate a card.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(checked = ui.haptics, onCheckedChange = { vm.setHaptics(it) })
+        }
+
+        Spacer(Modifier.height(20.dp)); HorizontalDivider(); Spacer(Modifier.height(20.dp))
+
         // ── Progress backup (§11e) ──────────────────────────────────────────────────────────────────
         Text("Your progress", style = MaterialTheme.typography.titleSmall)
         Spacer(Modifier.height(4.dp))
@@ -164,6 +207,24 @@ fun SettingsScreen(
             p.message?.let { Spacer(Modifier.height(12.dp)); Text(it, style = MaterialTheme.typography.bodySmall) }
             p.error?.let { Spacer(Modifier.height(12.dp)); Text(it, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error) }
+        }
+
+        // ── Reset (granular — pick exactly what to clear; each confirms first) ───────────────────────
+        Spacer(Modifier.height(20.dp)); HorizontalDivider(); Spacer(Modifier.height(20.dp))
+        Text("Reset", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(4.dp))
+        Text("Clear part of your progress. Each one asks you to confirm. Your imported pack is never touched.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(10.dp))
+        SettingsViewModel.ResetKind.entries.forEach { kind ->
+            OutlinedButton(onClick = { confirmReset = kind }, modifier = Modifier.fillMaxWidth()) {
+                Text(kind.label, color = if (kind == SettingsViewModel.ResetKind.EVERYTHING)
+                    MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+        ui.message?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         }
 
         // ── Credit (user request 2026-07-18) — tappable → kayomarz.com via the system browser. Opening a
@@ -196,5 +257,15 @@ fun SettingsScreen(
             },
             dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } },
         ) { DatePicker(state = state) }
+    }
+
+    confirmReset?.let { kind ->
+        AlertDialog(
+            onDismissRequest = { confirmReset = null },
+            title = { Text("Reset ${kind.label.lowercase()}?") },
+            text = { Text(kind.confirm) },
+            confirmButton = { TextButton(onClick = { onReset(kind); confirmReset = null }) { Text("Reset") } },
+            dismissButton = { TextButton(onClick = { confirmReset = null }) { Text("Cancel") } },
+        )
     }
 }

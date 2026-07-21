@@ -53,6 +53,8 @@ import dev.kayomarz.studyfeed.concept.ConceptRef
 import dev.kayomarz.studyfeed.concept.ConceptRepository
 import dev.kayomarz.studyfeed.concept.EgoGraph
 import dev.kayomarz.studyfeed.concept.ForceLayout
+import dev.kayomarz.studyfeed.pack.PackCapabilities
+import dev.kayomarz.studyfeed.ui.feed.EmptyState
 import dev.kayomarz.studyfeed.ui.feed.Importance
 import kotlin.math.min
 
@@ -68,6 +70,7 @@ fun ConceptMapScreen(
     vm: ConceptMapViewModel,
     onOpenDossier: (Long) -> Unit,
     onBack: () -> Unit,
+    capabilities: PackCapabilities? = null,
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
     val quiz by vm.quiz.collectAsStateWithLifecycle()
@@ -83,6 +86,13 @@ fun ConceptMapScreen(
             Text(if (ui.browseMode) "Concept map" else (ui.ego?.focus?.name ?: "Concept map"),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        }
+
+        // ABSENT gate: a pack with no concept graph says so plainly. null caps = still loading → fall
+        // through to the normal screen, which has its own "No concept graph in this pack." states.
+        if (capabilities != null && !capabilities.hasConceptMap) {
+            EmptyState("Not in this pack", "This pack doesn't include a concept map.")
+            return@Column
         }
 
         if (ui.browseMode) {

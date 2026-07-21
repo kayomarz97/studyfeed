@@ -9,6 +9,7 @@ import dev.kayomarz.studyfeed.pack.PackDatabase
 import dev.kayomarz.studyfeed.pack.PackImporter
 import dev.kayomarz.studyfeed.pack.PackRegistry
 import dev.kayomarz.studyfeed.pack.SafPackSource
+import dev.kayomarz.studyfeed.pack.ZipPackSource
 import dev.kayomarz.studyfeed.progress.FeedReader
 import dev.kayomarz.studyfeed.progress.ProgressArchive
 import dev.kayomarz.studyfeed.progress.ProgressDatabase
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * State for A1's screen: import a pack, see what it is, switch between exams, export/import progress.
@@ -112,6 +114,48 @@ class PackUiState(app: Application) : AndroidViewModel(app) {
             val result = withContext(Dispatchers.IO) {
                 importer.import(SafPackSource(getApplication(), treeUri)) { p ->
                     _ui.update { it.copy(importing = p) }
+                }
+            }
+            _ui.update { it.copy(importing = null) }
+            when (result) {
+                is PackImporter.Result.Ok -> {
+                    registry.setActive(result.manifest.examCode)
+                    _ui.update { it.copy(message = "Imported ${result.manifest.examName}.") }
+                    refresh()
+                }
+                is PackImporter.Result.Failed -> _ui.update { it.copy(error = result.message) }
+            }
+        }
+    }
+
+    /**
+     * Import a pack from a single `.zip` (2026-07-20) — the easy way to share a pack with a colleague.
+     * A ZIP needs random access (a real File) and a `content://` isn't one, so the archive is copied to
+     * the cache first, then read via [ZipPackSource]. Cancellable; the temp copy is always deleted.
+     */
+    fun importFromZip(uri: Uri) {
+        importJob?.cancel()
+        importJob = viewModelScope.launch {
+            _ui.update { it.copy(error = null, message = null) }
+            val ctx = getApplication<Application>()
+            val result = withContext(Dispatchers.IO) {
+                val tmp = File(ctx.cacheDir, "pack-import-${System.nanoTime()}.zip")
+                try {
+                    _ui.update { it.copy(importing = PackImporter.Progress(
+                        PackImporter.Phase.READING_MANIFEST, 0, 0, "Reading the archive…")) }
+                    ctx.contentResolver.openInputStream(uri)?.use { input ->
+                        tmp.outputStream().use { input.copyTo(it) }
+                    } ?: return@withContext PackImporter.Result.Failed("Could not read that .zip file.")
+                    java.util.zip.ZipFile(tmp).use { zip ->
+                        val prefix = ZipPackSource.rootPrefix(zip) ?: return@withContext PackImporter.Result.Failed(
+                            "That .zip doesn't contain a StudyFeed pack (no manifest.json inside). " +
+                                "Zip the pack folder itself, then pick that .zip.")
+                        importer.import(ZipPackSource(zip, prefix)) { p -> _ui.update { it.copy(importing = p) } }
+                    }
+                } catch (e: java.util.zip.ZipException) {
+                    PackImporter.Result.Failed("That file isn't a valid .zip archive.")
+                } finally {
+                    tmp.delete()
                 }
             }
             _ui.update { it.copy(importing = null) }

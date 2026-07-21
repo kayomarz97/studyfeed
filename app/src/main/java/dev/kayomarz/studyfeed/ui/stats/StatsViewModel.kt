@@ -39,6 +39,9 @@ class StatsViewModel(app: Application) : AndroidViewModel(app) {
     data class Ui(
         val loading: Boolean = true,
         val hasPack: Boolean = true,
+        /** Does the loaded pack contain anything scorable at all? false ⇒ an ABSENT (not "no progress
+         *  yet") empty state — a lean pack the app simply can't build stats from. */
+        val packHasContent: Boolean = true,
         val hasData: Boolean = false,
         val streakDays: Int = 0,
         val reviewsToday: Int = 0,
@@ -120,13 +123,14 @@ class StatsViewModel(app: Application) : AndroidViewModel(app) {
 
             val feedRepo = FeedRepository.open(ProgressDatabase.fileFor(getApplication(), pack.examCode), pack.dbFile)
             val remainingNew = feedRepo?.remainingNewMcqs() ?: 0
+            val packHasContent = (feedRepo?.size() ?: 0) > 0
             feedRepo?.close()
 
             val days = timestamps.mapNotNull { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() }.toHashSet()
             val deadline = deadlineStr?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
             val daysLeft = deadline?.let { ChronoUnit.DAYS.between(today, it).coerceAtLeast(1) } ?: 56L
             Ui(
-                loading = false, hasPack = true,
+                loading = false, hasPack = true, packHasContent = packHasContent,
                 hasData = totalReviews > 0 || (totals?.answered ?: 0) > 0,
                 streakDays = streak(days, today),
                 reviewsToday = timestamps.count { it.take(10) == today.toString() },

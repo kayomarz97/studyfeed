@@ -48,7 +48,8 @@ fun ConceptQuizViewer(quiz: ConceptMapViewModel.QuizState, onClose: () -> Unit) 
                     else -> {
                         val pager = rememberPagerState(pageCount = { quiz.cards.size })
                         VerticalPager(state = pager, modifier = Modifier.fillMaxSize(), pageSize = PageSize.Fill) { page ->
-                            InterlinkCard(quiz.cards[page], onImportanceClick = {}, actions = inert, onRate = {})
+                            // Read-only reference view: onSeen is a no-op (no FSRS write here, A5).
+                            InterlinkCard(quiz.cards[page], onImportanceClick = {}, actions = inert, onRate = {}, onSeen = {})
                         }
                     }
                 }

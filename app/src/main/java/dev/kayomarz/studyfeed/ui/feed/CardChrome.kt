@@ -4,8 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -19,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.kayomarz.studyfeed.feed.FeedCard
@@ -103,6 +107,27 @@ fun CardTopRow(card: FeedCard, onImportanceClick: () -> Unit, modifier: Modifier
     ) {
         PyqBadge(card.pyqYears)
         ImportanceIndicator(card.importance, onImportanceClick)
+    }
+}
+
+/**
+ * The one reusable empty-state for every section (2026-07-21). Centered [title] + muted [body] — used
+ * for both honest cases: **ABSENT** ("this pack doesn't include X") and **NOTHING_DUE / NOTHING_MATCHES**
+ * ("all caught up" / "clear a filter"). Which copy to pass is [EmptyStates.decide]'s job — this only
+ * renders. A section a lean pack can't fill shows this, never a blank screen.
+ */
+@Composable
+fun EmptyState(title: String, body: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxSize().padding(horizontal = 40.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center)
+        Spacer(Modifier.height(8.dp))
+        Text(body, style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
     }
 }
 

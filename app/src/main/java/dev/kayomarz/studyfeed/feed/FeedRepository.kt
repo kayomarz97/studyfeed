@@ -34,6 +34,12 @@ class FeedRepository private constructor(
 
     companion object {
         private const val PACK = "pack"
+        // Within-tier shuffle: a cheap LCG-style permutation of feed_items.id offset by a per-feed seed.
+        // Tier-preserving (5★ before 4★…), varied per feed, stable within a feed so OFFSET windows and
+        // the engine keyset stay gap-free. `seed` is an app-generated int (never user input) → safe to
+        // inline into SQL. The trailing `f.id` breaks any prkey collision so the order is total.
+        private const val LCG_A = 1103515245
+        private const val LCG_M = 2147483647
 
         /**
          * Open progress read-only with the pack attached. Returns null if either DB is missing — a
@@ -111,9 +117,9 @@ class FeedRepository private constructor(
      * Priority sort is computed from the row's own stability + lapses — no clock needed, so the sort is
      * deterministic (A3 may add a time-decay/retrievability term, which would need `now`).
      */
-    fun page(query: FeedQuery, offset: Int, limit: Int): List<FeedCard> {
+    fun page(query: FeedQuery, offset: Int, limit: Int, seed: Int = 0): List<FeedCard> {
         val (where, whereArgs) = whereClause(query.filter)
-        val (join, order) = sortSql(query.sort)
+        val (join, order) = sortSql(query.sort, seed)
         val refs = mutableListOf<FeedRepositoryRef>()
         db.rawQuery(
             """
@@ -180,23 +186,25 @@ class FeedRepository private constructor(
         return rows.filter { it.itemId !in exclude }.take(limit)
     }
 
-    /** Never-seen MCQs after the keyset cursor, importance-first (5★/PYQ earliest). */
-    fun newMcqs(afterScore: Double?, afterId: Long?, limit: Int): List<FeedScheduler.Ref> =
-        newPool(mcqOnly = true, afterScore, afterId, limit, FeedScheduler.Source.NEW_MCQ)
+    /** Never-seen MCQs after the keyset cursor, importance-tier first, shuffled within the tier by [seed]. */
+    fun newMcqs(afterImp: Int?, afterId: Long?, seed: Int, limit: Int): List<FeedScheduler.Ref> =
+        newPool(mcqOnly = true, afterImp, afterId, seed, limit, FeedScheduler.Source.NEW_MCQ)
 
-    /** Never-seen non-MCQ items after the keyset cursor, importance-first. */
-    fun newOthers(afterScore: Double?, afterId: Long?, limit: Int): List<FeedScheduler.Ref> =
-        newPool(mcqOnly = false, afterScore, afterId, limit, FeedScheduler.Source.NEW_OTHER)
+    /** Never-seen non-MCQ items after the keyset cursor, importance-tier first, shuffled within the tier. */
+    fun newOthers(afterImp: Int?, afterId: Long?, seed: Int, limit: Int): List<FeedScheduler.Ref> =
+        newPool(mcqOnly = false, afterImp, afterId, seed, limit, FeedScheduler.Source.NEW_OTHER)
 
     private fun newPool(
-        mcqOnly: Boolean, afterScore: Double?, afterId: Long?, limit: Int, source: FeedScheduler.Source,
+        mcqOnly: Boolean, afterImp: Int?, afterId: Long?, seed: Int, limit: Int, source: FeedScheduler.Source,
     ): List<FeedScheduler.Ref> {
         val typeClause = if (mcqOnly) "f.item_type = 'mcq'" else "f.item_type <> 'mcq'"
+        val prk = "((f.id * $LCG_A + $seed) % $LCG_M)"   // within-tier shuffle key (seed is app-generated)
         val args = mutableListOf<String>()
-        // Keyset: strictly after (importance_score DESC, id ASC). Null cursor = first page.
-        val keyset = if (afterScore != null && afterId != null) {
-            args += afterScore.toString(); args += afterScore.toString(); args += afterId.toString()
-            "AND (f.importance_score < ? OR (f.importance_score = ? AND f.id > ?))"
+        // Keyset: strictly after (importance DESC, prkey ASC). Null cursor = first page. The cursor id's
+        // prkey is recomputed with the SAME seed, so pagination stays gap-free under the shuffle.
+        val keyset = if (afterImp != null && afterId != null) {
+            args += afterImp.toString(); args += afterImp.toString(); args += afterId.toString()
+            "AND (f.importance < ? OR (f.importance = ? AND $prk > ((? * $LCG_A + $seed) % $LCG_M)))"
         } else ""
         args += limit.toString()
         val rows = ArrayList<FeedScheduler.Ref>(limit)
@@ -207,7 +215,7 @@ class FeedRepository private constructor(
             WHERE $typeClause
               AND NOT EXISTS(SELECT 1 FROM main.fsrs_cards c WHERE c.item_type = f.item_type AND c.item_id = f.id)
               $keyset
-            ORDER BY f.importance_score DESC, f.id
+            ORDER BY f.importance DESC, $prk, f.id
             LIMIT ?
             """.trimIndent(),
             args.toTypedArray(),
@@ -259,6 +267,12 @@ class FeedRepository private constructor(
                JOIN $PACK.feed_items f ON f.item_type = crd.item_type AND f.id = crd.item_id
                GROUP BY f.item_type""".trimIndent(), null,
         ).use { c -> while (c.moveToNext()) done[c.getString(0).orEmpty()] = c.getInt(1) }
+        // Blobs never get an fsrs_cards row (they schedule via blob_reads), so their "done" has to be
+        // counted from blob_reads — otherwise the Passages tile is structurally always 0.
+        db.rawQuery(
+            """SELECT COUNT(*) FROM main.blob_reads b
+               JOIN $PACK.feed_items f ON f.item_type = 'blob' AND f.id = b.blob_id""".trimIndent(), null,
+        ).use { c -> if (c.moveToFirst()) done["blob"] = c.getInt(0) }
         return total.mapValues { (type, t) -> TypeProgress(t, done[type] ?: 0) }
     }
 
@@ -322,6 +336,11 @@ class FeedRepository private constructor(
         // A7 cycle 3 (P4): leeches = cards lapsed ≥ 4 times — the ones you keep failing.
         if (filter.leechesOnly)
             clauses += "EXISTS(SELECT 1 FROM main.fsrs_cards lc WHERE lc.item_type=f.item_type AND lc.item_id=f.id AND lc.lapses >= 4)"
+        // 2026-07-19 decks: Hard = missed at least once; Easy = reviewed, never missed, well-remembered.
+        if (filter.hardOnly)
+            clauses += "EXISTS(SELECT 1 FROM main.fsrs_cards hc WHERE hc.item_type=f.item_type AND hc.item_id=f.id AND hc.lapses >= 1)"
+        if (filter.easyOnly)
+            clauses += "EXISTS(SELECT 1 FROM main.fsrs_cards ec WHERE ec.item_type=f.item_type AND ec.item_id=f.id AND COALESCE(ec.lapses,0) = 0 AND ec.stability >= 7)"
         filter.tagKey?.let {
             clauses += "EXISTS(SELECT 1 FROM main.item_tags t WHERE t.item_type=f.item_type AND t.item_id=f.id AND t.tag_key=?)"
             args += it
@@ -331,11 +350,12 @@ class FeedRepository private constructor(
     }
 
     /** @return (JOIN clause, ORDER BY clause) — the JOIN goes before WHERE, the ORDER after it. */
-    private fun sortSql(sort: FeedQuery.Sort): Pair<String, String> = when (sort) {
-        // SMART default = the pack's importance order. A3 replaces this with the real engine.
+    private fun sortSql(sort: FeedQuery.Sort, seed: Int): Pair<String, String> = when (sort) {
+        // SMART / Importance ↓ default: high-yield tier first, but SHUFFLED within the tier by [seed]
+        // (varied per feed, stable within a feed) so it never feels like the same fixed sequence.
         FeedQuery.Sort.SMART,
         FeedQuery.Sort.IMPORTANCE_DESC ->
-            "" to "ORDER BY f.importance DESC, f.importance_score DESC, f.id"
+            "" to "ORDER BY f.importance DESC, ((f.id * $LCG_A + $seed) % $LCG_M), f.id"
         FeedQuery.Sort.IMPORTANCE_ASC ->
             "" to "ORDER BY f.importance ASC, f.importance_score ASC, f.id"
         FeedQuery.Sort.RANDOM -> "" to "ORDER BY RANDOM()"

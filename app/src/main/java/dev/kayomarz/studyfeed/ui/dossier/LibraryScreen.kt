@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.kayomarz.studyfeed.dossier.DossierListItem
 import dev.kayomarz.studyfeed.dossier.DossierRepository
+import dev.kayomarz.studyfeed.pack.PackCapabilities
+import dev.kayomarz.studyfeed.ui.feed.EmptyState
 import dev.kayomarz.studyfeed.ui.feed.ImportanceIndicator
 import dev.kayomarz.studyfeed.ui.theme.AppColor
 
@@ -51,6 +53,7 @@ fun LibraryScreen(
     onOpenDossier: (Long) -> Unit,
     onBack: () -> Unit,
     onOpenMap: (Long) -> Unit = {},
+    capabilities: PackCapabilities? = null,
 ) {
     val ui by vm.library.collectAsStateWithLifecycle()
     val f = ui.filter
@@ -60,6 +63,12 @@ fun LibraryScreen(
             verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("‹ Home") }
             Text("Library", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        }
+        // ABSENT gate: a pack with no topic pages says so plainly, rather than an empty search screen.
+        // null caps = still loading → fall through to the normal screen (which shows its own states).
+        if (capabilities != null && !capabilities.hasDossiers) {
+            EmptyState("Not in this pack", "This pack doesn't include topic pages to read.")
+            return@Column
         }
         OutlinedTextField(
             value = ui.query,

@@ -42,7 +42,7 @@ import java.io.File
         SubjectMastery::class, StudySession::class, BlobRead::class, FeedState::class, Setting::class,
         McqAttempt::class, LineMark::class, Deck::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false, // migrations are hand-written + tested (MigrationTest); no schema-JSON needed.
 )
 abstract class ProgressDatabase : RoomDatabase() {
@@ -102,6 +102,17 @@ abstract class ProgressDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
             }
         }
+
+        /**
+         * v3 → v4 (2026-07-20): `stars.color` — an optional colour on a star (`c1`..`c5`), so a starred
+         * item can be colour-coded (long-press the star). Additive + NULLABLE: a plain star (no colour)
+         * stays valid, and a re-import still never wipes progress.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE stars ADD COLUMN color TEXT")
+            }
+        }
         /**
          * Opens (creating on first use) the progress DB for [examCode].
          *
@@ -112,7 +123,7 @@ abstract class ProgressDatabase : RoomDatabase() {
          */
         fun open(context: Context, examCode: String): ProgressDatabase =
             Room.databaseBuilder(context, ProgressDatabase::class.java, fileName(examCode))
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
 
         /**
@@ -193,7 +204,7 @@ data class Mistake(
 )
 
 @Entity(tableName = "stars", primaryKeys = ["item_type", "item_id"])
-data class Star(val item_type: String, val item_id: Long, val ts: String)
+data class Star(val item_type: String, val item_id: Long, val ts: String, val color: String? = null)
 
 @Entity(tableName = "item_tags", primaryKeys = ["item_type", "item_id", "tag_key"])
 data class ItemTag(val item_type: String, val item_id: Long, val tag_key: String, val ts: String)
@@ -298,7 +309,15 @@ interface ProgressDao {
     suspend fun cardCount(): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertReview(review: Review)
+    suspend fun insertReview(review: Review): Long
+
+    /**
+     * Refine a just-recorded review's grade in place. A card is marked *done* the moment it is
+     * answered/revealed/read (auto-graded); if the user then taps an explicit rating we UPDATE that
+     * same review row rather than insert a second one, so activity/streak/XP count one event per card.
+     */
+    @Query("UPDATE reviews SET rating = :rating, ts = :ts WHERE id = :id")
+    suspend fun updateReviewRating(id: Long, rating: Int, ts: String)
 
     @Query("SELECT COUNT(*) FROM reviews")
     suspend fun reviewCount(): Int
@@ -330,6 +349,10 @@ interface ProgressDao {
 
     @Query("SELECT EXISTS(SELECT 1 FROM stars WHERE item_type = :type AND item_id = :id)")
     suspend fun isStarred(type: String, id: Long): Boolean
+
+    /** The colour on a star (`c1`..`c5`), or null for a plain star / not starred. */
+    @Query("SELECT color FROM stars WHERE item_type = :type AND item_id = :id")
+    suspend fun starColor(type: String, id: Long): String?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addTag(tag: ItemTag)
@@ -411,6 +434,10 @@ interface ProgressDao {
     @Query("UPDATE sessions SET name = :name, updated = :updated WHERE id = :id")
     suspend fun renameSession(id: Long, name: String, updated: String)
 
+    /** Persist a named session's chosen filter/sort so it resumes exactly that way until changed again. */
+    @Query("UPDATE sessions SET config_json = :config, updated = :updated WHERE id = :id")
+    suspend fun updateSessionConfig(id: Long, config: String, updated: String)
+
     @Query("UPDATE sessions SET archived = 1, updated = :updated WHERE id = :id")
     suspend fun archiveSession(id: Long, updated: String)
 
@@ -443,4 +470,32 @@ interface ProgressDao {
     /** Leech detection (P4): items lapsed at least [n] times — the cards you keep failing. */
     @Query("SELECT COUNT(*) FROM fsrs_cards WHERE lapses >= :n")
     suspend fun leechCount(n: Int): Int
+
+    /** "Hard" deck size — cards missed at least once. */
+    @Query("SELECT COUNT(*) FROM fsrs_cards WHERE lapses >= 1")
+    suspend fun hardCount(): Int
+
+    /** "Easy" deck size — reviewed, never missed, remembered ≥ a week. */
+    @Query("SELECT COUNT(*) FROM fsrs_cards WHERE COALESCE(lapses,0) = 0 AND stability >= 7")
+    suspend fun easyCount(): Int
+
+    // ---- Settings → granular reset (2026-07-19) ----------------------------------------------------
+    //
+    // Each clears ONE category (rows only — a reset must NEVER drop a table: the schema and §11e's
+    // export contract have to survive it). A multi-table reset is composed in the ViewModel inside
+    // `db.withTransaction { }`, so it is all-or-nothing. Settings rows (deadline, reader size, …) are
+    // preferences, not progress — they are deliberately NOT cleared, even by "wipe everything".
+
+    @Query("DELETE FROM feed_state") suspend fun clearFeedState()
+    @Query("DELETE FROM fsrs_cards") suspend fun clearFsrsCards()
+    @Query("DELETE FROM reviews") suspend fun clearReviews()
+    @Query("DELETE FROM blob_reads") suspend fun clearBlobReads()
+    @Query("DELETE FROM mcq_attempts") suspend fun clearMcqAttempts()
+    @Query("DELETE FROM mistakes") suspend fun clearMistakes()
+    @Query("DELETE FROM stars") suspend fun clearStars()
+    @Query("DELETE FROM item_tags") suspend fun clearItemTags()
+    @Query("DELETE FROM line_marks") suspend fun clearLineMarks()
+    @Query("DELETE FROM sessions") suspend fun clearSessions()
+    @Query("DELETE FROM decks") suspend fun clearDecks()
+    @Query("DELETE FROM subject_mastery") suspend fun clearSubjectMastery()
 }

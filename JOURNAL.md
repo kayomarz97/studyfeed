@@ -1582,3 +1582,152 @@ same `ensureLoaded()`/`refresh()` pattern (every data path routes through it; Li
 "Study 32957 items" → Mixed feed loads** (real MCQ, no bounce); no FATAL in logcat. Fixed APK installed on
 the phone. **NOT yet pushed / release not yet refreshed** — the `a7-cycle3` release still holds the pre-fix
 APK; awaiting the user's go to push `dev` + `gh release upload --clobber`.
+
+**[compacted at 2026-07-19T13:08:17Z]** — context compacted; disk state is the truth (§10a).
+
+## 2026-07-19  FEED — the REAL tracking fix, control cleanup, within-tier shuffle, resume+scroll-up, settings
+
+User (after the fresh-install bugfix): progress STILL not tracked, + a set of feed edits. Reviewed the whole
+feed/stats/home stack WITH them (shown a layout map with row IDs), collected answers, then built the
+confirmed set. Plan: `.claude/plans/2026-07-19-feed-tracking-controls-shuffle.md`.
+
+**THE tracking bug — root cause + fix.** Every "done"/coverage/activity/streak/XP aggregate reads
+`fsrs_cards` (a row exists) or `reviews`. Both were written ONLY by `rate()` — an explicit RatingBar tap.
+The natural MCQ flow is answer → read → swipe, which never taps a rating, so only `mcq_attempts` (overall
+accuracy) populated and every "done" read 0. (Blobs never got an `fsrs_cards` row at all → the Passages
+tile's "done" was structurally always 0.) FIX = the PRIMARY interaction records "done":
+`onMcqAnswered` now auto-grades (correct→Good, wrong→Again) → upsert fsrs + ONE review; a new `onSeen`
+does the same (default Good) on a flashcard/reel/interlink reveal; `markBlobRead` writes a review too
+(blobs still schedule their re-read via `blob_reads`, NOT fsrs, so the engine can't double-schedule them).
+An explicit rating REFINES that same review — recompute FSRS from the pre-completion state +
+`updateReviewRating` (one review per card) via an in-memory `pending` map under a `writeMutex`. A per-app-
+open `answeredThisOpen` guard makes a scroll-back re-answer idempotent (no double attempt/mistake).
+`progressByType` counts blob "done" from `blob_reads`. `insertReview` now returns the row id.
+
+**Removed FEED-T2 + T4 (user: "in feed remove T2 and T4").** Deleted the `Study: Mixed ▾` dropdown
+(`StudyModeMenu`) and the `Clear all ✕`/token row (`ActiveFilterTokens`) — EVERYWHERE, not just single-type.
+Top row is now `‹ Home … ⚙ Filter`; clearing still lives in the Filter sheet (nothing stranded). Dead code
+removed: StudyModeMenu/modeLabel, ActiveFilterTokens/clearOne/typeKey, VM setStudyMode/toQuery,
+jumpTo/consumeJump.
+
+**Single-type feeds stay on their type.** `Ui.lockedTypes` (from the entry query's `itemTypesIn` at
+`bindAndReload`; null = mixed). The Filter sheet hides "Content type" when locked and "Clear all" keeps the
+type; the badge counts refinements only (`refinementCount`, excludes the locked type). So the MCQs tile
+refines by Subject/Importance/Focus, never switches away from MCQs.
+
+**Shuffle within importance tiers.** Order = `importance DESC, ((id*A+seed) % M), id` — 5★ still precede
+4★, but the within-tier order is a seeded permutation: per-feed (`seed:<sessionKey>` in `feed_state`),
+stable within a feed (OFFSET windows + resume stay coherent), fresh on an explicit reset. The A3 engine's
+new-item keyset moved from `(importance_score, id)` to `(importance tier, prkey)` — gap-free under the
+shuffle: `FeedScheduler.FeedState` cursors `…CursorScore`→`…CursorImp` + a `shuffleSeed`;
+`Pools.newMcqs/newOthers(afterImp, afterId, seed, limit)`; `FeedStateJson` + `FeedSchedulerTest`
+(fakes + tier assertions) updated; the VM seeds the engine when its state has none.
+
+**Resume + scroll-up.** The filtered path loads a `BACK=40` back-buffer ABOVE the resume point
+(`page(query, pos-BACK, BACK+PAGE)`) and the pager starts at `Ui.startAt` — you land where you left off AND
+can swipe UP through what you've already seen. (The engine feed already accumulates a scroll-up-able list;
+resume there = continue after the cursor.)
+
+**Settings (user Q4 + note).** Reader text size (S/M/L/XL → scales `LocalDensity.fontScale` on the DOSSIER +
+passage bodies only, via `LocalReaderScale` provided at `Root` — MCQ/flashcard layouts untouched); keep
+screen on while studying (a `View.keepScreenOn` flag — no wake-lock/permission); haptic tick on
+answer/reveal/rate (`View.performHapticFeedback` — no VIBRATE permission); and the GRANULAR reset the user
+asked for — 5 categories (Feed positions & shuffle · Study history & schedule · Mistakes · Stars/tags/
+highlights · Everything), each behind a confirm, ROWS-ONLY (never DROPs a table; preferences kept even by
+"Everything"). New DAO `clear*` deletes; multi-table resets run in `db.withTransaction`. After a reset the
+feed drops its in-memory caches (`onExternalReset`) so the next entry rebuilds fresh (new seed).
+
+**Verified (real output):** `assembleDebug` green + `verifyOfflineGuarantees` green (no network permission,
+no background component — haptics/keep-awake are View affordances; reader-scale/reset add no dep);
+`testDebugUnitTest` **73/73** (incl. rewritten `FeedSchedulerTest` 10/10 + the FSRS oracle 3/3);
+`assembleDebugAndroidTest` compiles (instrumented sources incl. the updated `FeedSchedulerRealPackTest`).
+**Zero new runtime deps. NO schema-version bump** — every new table/column already existed at v3; reset
+deletes rows, never DROPs. Debug APK built. **Instrumented tests NOT run (no device/emulator attached now)**
+— migration is unchanged so its tests still hold; the changed ordering logic is JVM-covered. Awaiting the
+user's on-device check (S23) + any push.
+
+**Deferred/owed (honest):** keep-screen-on applies to the Feed only (not the Mock exam); reader scale is
+scoped to dossier + passage bodies (dossier headings scale too; MCQ/flashcard deliberately don't);
+release-APK signing still owed (§11d); `NewSessionScreen` still uses the (now display-only) `studyMode`
+plumbing, left in place to avoid churn.
+
+**Pushed:** commit `608978e` on `dev` (`96937ed..608978e`); GitHub Release **`a7-cycle3.1`** (Latest) with
+`studyfeed-a7-cycle3.1-debug.apk`. Secret-scan: the 21 files clean. (It flagged a PRE-EXISTING real-medical
+fixture in `DossierMarkdownTest.kt` — already on `origin/dev` from commit `a6edbc9`, not in this push —
+offered to redact; awaiting the user's call.)
+
+## 2026-07-19  Round 2 (after on-device use) — 5 fixes/features
+
+User feedback after using `a7-cycle3.1` on the phone. All built + verified; **not pushed yet** (awaiting
+the user's ask — standing rule §11a).
+
+1. **MCQ stays SOLVED when you scroll back up (endless + filtered) + shows your pick vs the right answer.**
+   `McqCard`'s `chosen` lived in `remember(card.itemId)`, so a scroll-back re-render (the pager disposes
+   off-screen pages) reset it to unanswered. FIX: persist the picked option in the VM
+   (`answeredThisOpen: Map<Long,Int>` — the same guard that dedupes attempts now also stores the index),
+   surface it as `Ui.answeredMcqs`, and seed `McqCard`'s `chosen` from it. The revealed state (your wrong
+   pick + correct option + explanation) returns on scroll-up.
+2. **A named session KEEPS its filter until changed.** `reload` now persists the (possibly just-changed)
+   query to the session's `config_json` when `sessionId != null` (new DAO `updateSessionConfig`);
+   `openSession` already restores it, so a session resumes exactly the filter/sort it was left on.
+3. **Home "Decks" → Starred · Hard · Easy (the tag chips were stale "old data").** Added
+   `FeedFilter.hardOnly` (lapses ≥ 1 — missed at least once) + `easyOnly` (reviewed, no lapse, stability
+   ≥ 7 d — mastered) → SQL in `whereClause`; DAO `hardCount`/`easyCount`; Home shows the two decks with
+   live counts (Hard opens PRIORITY-sorted = weakest first, Easy importance-first). Tag chips kept after.
+4. **Library: star ONE sentence, not the whole block.** The dossier rendered one markable block per line;
+   a preamble/paragraph block IS "the whole thing". FIX: new `Sentences.split` (conservative — guards
+   abbreviations / single initials / decimals / `10^9` / allele `*`; splits only on `". "`+capital,
+   8 JVM tests) → the renderer emits ONE markable row per sentence, the mark anchors on the sentence hash,
+   and `buildAuto` (the approximate PYQ/5★ highlight) keys per sentence too so the hashes line up.
+5. **5 star colours on long-press.** Long-press a sentence → a `DropdownMenu` with 5 colour swatches +
+   "Remove". `line_marks.kind` is now `c1..c5` (was the single `"star"`); `DossierMarkdown.colorForMark`
+   maps them to 5 hues; the auto PYQ/5★ highlight stays coral/gold, visually separate. `setLineMark`
+   replaces `toggleLineMark`.
+
+**Verified (real output):** `assembleDebug` green + `verifyOfflineGuarantees` green (no new permission/dep
+— the colour picker + decks + sentence split are pure UI/SQL); `testDebugUnitTest` **81/81** (+8
+`SentencesTest`, incl. the medical-notation cases: `1.5 mg`, `e.g.`, `10^9/L`, `DRB1*04:01` all stay
+whole); `assembleDebugAndroidTest` compiles. NO schema-version bump (kind is a value in the existing
+`line_marks` table; new filter flags are query-only). Debug APK built; on-device check owed.
+
+**Deferred/notes:** the `Sentences` splitter is deliberately conservative (a paragraph that has no clean
+`". "` boundary stays whole — never shatters a lab value); Hard/Easy thresholds (lapses ≥ 1 / stability
+≥ 7 d) are a first sensible cut, easy to retune if the decks feel off.
+
+**Pushed:** `fc490d9` (features) + `70fa841` (redact `DossierMarkdownTest` — verified against the real pack:
+the old fixtures matched 20–40 rows, now synthetic) on `dev`; Release **`a7-cycle3.2`** (Latest) with the APK.
+The scanner also caught my own new `SentencesTest` reusing real terms — redacted it too, and rebuilt the
+commits so no real content ever entered the pushed history.
+
+## 2026-07-20  Round 3 — decks cleanup, MCQ star colours, ZIP pack import (for sharing)
+
+More on-device feedback + a sharing question (user chose all three below). Built + verified; **not pushed
+yet** (standing rule §11a).
+
+1. **Home "Decks": dropped the static pack-tag chips.** "Careless slip / Knowledge gap" are pack
+   `tag_defs`, and `DecksSection` rendered EVERY one regardless of whether the user had tagged anything — so
+   they never went away ("removed completely, why still there"). Per the user's choice, removed the tag
+   chips entirely; Decks is now just **Starred · Hard · Easy**. (`HomeViewModel.tags` + the `onTagDeck`
+   plumbing removed.)
+2. **MCQ card star → 5 colours on long-press (tap still toggles).** Additive migration **v3 → v4**:
+   `stars.color` (nullable TEXT — a plain star stays valid, a re-import still never wipes progress). Single
+   tap toggles a default gold star; long-press opens the SAME 5-colour picker as the Library highlights (or
+   "Remove star"); a coloured star renders in its colour. `setStarColor` + `starColor` DAO +
+   `CardMarks.starColor` + `CardActionsState.starColor/onSetStarColor`; `StarButton` now `combinedClickable`.
+3. **Import a pack from a single `.zip`** — the non-technical sharing path. New `ZipPackSource` implements
+   the existing source-agnostic `PackSource` over a `java.util.zip.ZipFile`, so `PackImporter` is UNCHANGED;
+   `PackUiState.importFromZip` copies the picked `content://` zip to cache (a ZIP needs a real File), detects
+   the pack root (`manifest.json` at the archive root OR one folder down), imports, then deletes the temp.
+   Manage + Empty screens gained an **"Import a .zip"** button. Zip-slip-safe: `list()` yields only
+   direct-child base names, so the importer never writes a `../` path. JVM-tested (`ZipPackSourceTest`, 5).
+
+**Verified (real output):** `assembleDebug` + `verifyOfflineGuarantees` green (ZIP import adds NO
+permission/dep — `java.util.zip` is on the platform); `testDebugUnitTest` **86/86** (+5 `ZipPackSourceTest`);
+`assembleDebugAndroidTest` compiles. First schema bump since v3 — `MIGRATION_3_4` is additive + nullable,
+registered, and the fresh-schema column matches the ALTER by construction. **Instrumented migration test for
+3→4 NOT run (no device)** — owed on the next emulator pass.
+
+**Distribution guidance given to the user:** a pack is ~370 MB (135 db + 236 figures/). Zip the pack FOLDER
+→ share the `.zip` via a cloud link (Drive/Dropbox/WeTransfer), not email/chat → the colleague installs the
+APK (GitHub release) and opens StudyFeed → Import a .zip. ⚠ The pack is derived from Passmedicine/Pastest
+(paid subscriptions) — redistributing it is the user's copyright/ToS call; flagged, they accepted it.

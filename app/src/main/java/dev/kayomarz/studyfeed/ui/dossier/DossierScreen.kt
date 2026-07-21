@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,7 +32,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -43,6 +46,7 @@ import dev.kayomarz.studyfeed.ui.feed.FigureImage
 import dev.kayomarz.studyfeed.ui.feed.ImportanceIndicator
 import dev.kayomarz.studyfeed.ui.feed.Importance
 import dev.kayomarz.studyfeed.ui.theme.AppColor
+import dev.kayomarz.studyfeed.ui.theme.LocalReaderScale
 import kotlinx.coroutines.launch
 
 /**
@@ -77,7 +81,15 @@ fun DossierScreen(
                     Text("This topic page could not be loaded.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                else -> DossierBody(d, ui, onOpenItem, vm::toggleTopicStar, vm::toggleLineMark)
+                else -> {
+                    // Reader text size: scale the font density for the topic page content (the top bar
+                    // above stays fixed). Scaling fontScale scales sp text only, leaving dp layout intact.
+                    val rs = LocalReaderScale.current
+                    val dens = LocalDensity.current
+                    CompositionLocalProvider(LocalDensity provides Density(dens.density, dens.fontScale * rs)) {
+                        DossierBody(d, ui, onOpenItem, vm::toggleTopicStar, vm::setLineMark)
+                    }
+                }
             }
         }
     }
@@ -89,7 +101,7 @@ private fun DossierBody(
     ui: DossierViewModel.DossierState,
     onOpenItem: (String, Long) -> Unit,
     onToggleTopicStar: () -> Unit,
-    onToggleLine: (Int, String) -> Unit,
+    onSetMark: (Int, String, String?) -> Unit,
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -118,7 +130,7 @@ private fun DossierBody(
                     }
                 }
                 Spacer(Modifier.height(6.dp))
-                Text("Hold a line to star it · coral = past-paper · gold = 5★",
+                Text("Long-press a sentence to highlight it in a colour · coral = past-paper · gold = 5★",
                     fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -142,13 +154,13 @@ private fun DossierBody(
             Column(Modifier.fillMaxWidth()) {
                 if (d.bodyMd.isNotBlank())
                     DossierText(d.bodyMd, style = MaterialTheme.typography.bodyMedium,
-                        sectionOrd = -1, markKind = markKind, onLongPressLine = onToggleLine)
+                        sectionOrd = -1, markKind = markKind, onSetMark = onSetMark)
                 d.figures.forEach { fig -> Spacer(Modifier.height(12.dp)); FigureImage(fig) }
                 if (hasSections) { Spacer(Modifier.height(8.dp)); HorizontalDivider() }
             }
         }
         // (3+) one collapsible item per section (its index is its stable mark ord)
-        items(d.sections.size) { i -> SectionItem(d.sections[i], i, markKind, onToggleLine) }
+        items(d.sections.size) { i -> SectionItem(d.sections[i], i, markKind, onSetMark) }
 
         if (d.relatedMcqs.isNotEmpty()) {
             item { RelatedHeader("Related questions", d.relatedMcqs.size) }
@@ -164,7 +176,7 @@ private fun DossierBody(
 
 @Composable
 private fun SectionItem(
-    s: DossierSection, sectionOrd: Int, markKind: (String) -> String?, onLongPressLine: (Int, String) -> Unit,
+    s: DossierSection, sectionOrd: Int, markKind: (String) -> String?, onSetMark: (Int, String, String?) -> Unit,
 ) {
     var expanded by remember(s) { mutableStateOf(true) }
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -188,7 +200,7 @@ private fun SectionItem(
         }
         if (expanded) {
             DossierText(s.bodyMd, style = MaterialTheme.typography.bodyMedium,
-                sectionOrd = sectionOrd, markKind = markKind, onLongPressLine = onLongPressLine)
+                sectionOrd = sectionOrd, markKind = markKind, onSetMark = onSetMark)
             s.figures.forEach { fig -> Spacer(Modifier.height(10.dp)); FigureImage(fig) }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))

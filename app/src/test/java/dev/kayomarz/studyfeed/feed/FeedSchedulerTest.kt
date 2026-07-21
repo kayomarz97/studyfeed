@@ -20,7 +20,8 @@ class FeedSchedulerTest {
     private fun ref(type: String, id: Long, imp: Int, score: Double) =
         FeedScheduler.Ref(type, itemId = id, refId = id, importance = imp, importanceScore = score, subjectId = null)
 
-    /** Pools sorted the way the real SQL sorts them; keyset over (importanceScore desc, itemId asc). */
+    /** Pools sorted the way the real SQL sorts them: importance tier DESC, then a seeded within-tier
+     *  permutation (id breaking ties); keyset strictly after (importance, prkey) of the cursor id. */
     private class FakePools(
         val dueItems: List<FeedScheduler.Ref> = emptyList(),
         val mcqItems: List<FeedScheduler.Ref> = emptyList(),
@@ -32,17 +33,22 @@ class FeedSchedulerTest {
         // Each pool stamps `source`, exactly as the real FeedRepository.refFrom does per query.
         override fun due(nowIso: String, exclude: Set<Long>, limit: Int) =
             dueItems.filter { it.itemId !in exclude }.take(limit).map { it.copy(source = FeedScheduler.Source.DUE) }
-        override fun newMcqs(afterScore: Double?, afterId: Long?, limit: Int) =
-            keyset(mcqItems, afterScore, afterId).take(limit).map { it.copy(source = FeedScheduler.Source.NEW_MCQ) }
-        override fun newOthers(afterScore: Double?, afterId: Long?, limit: Int) =
-            keyset(otherItems, afterScore, afterId).take(limit).map { it.copy(source = FeedScheduler.Source.NEW_OTHER) }
+        override fun newMcqs(afterImp: Int?, afterId: Long?, seed: Int, limit: Int) =
+            ordered(mcqItems, seed, afterImp, afterId).take(limit).map { it.copy(source = FeedScheduler.Source.NEW_MCQ) }
+        override fun newOthers(afterImp: Int?, afterId: Long?, seed: Int, limit: Int) =
+            ordered(otherItems, seed, afterImp, afterId).take(limit).map { it.copy(source = FeedScheduler.Source.NEW_OTHER) }
         override fun filler(nowIso: String, exclude: Set<Long>, limit: Int) =
             fillerItems.filter { it.itemId !in exclude }.take(limit).map { it.copy(source = FeedScheduler.Source.FILLER) }
         override fun remainingNewMcqs() = remainingMcqs
         override fun blobRef(blobId: Long) = blobs[blobId]
-        private fun keyset(list: List<FeedScheduler.Ref>, s: Double?, id: Long?): List<FeedScheduler.Ref> {
-            if (s == null || id == null) return list
-            return list.filter { it.importanceScore < s || (it.importanceScore == s && it.itemId > id) }
+        // Mirror FeedRepository's within-tier shuffle key + keyset exactly.
+        private fun prk(id: Long, seed: Int): Long = (id * 1103515245L + seed) % 2147483647L
+        private fun ordered(list: List<FeedScheduler.Ref>, seed: Int, afterImp: Int?, afterId: Long?): List<FeedScheduler.Ref> {
+            val sorted = list.sortedWith(
+                compareByDescending<FeedScheduler.Ref> { it.importance }.thenBy { prk(it.itemId, seed) }.thenBy { it.itemId })
+            if (afterImp == null || afterId == null) return sorted
+            val curPrk = prk(afterId, seed)
+            return sorted.filter { it.importance < afterImp || (it.importance == afterImp && prk(it.itemId, seed) > curPrk) }
         }
     }
 
@@ -88,13 +94,13 @@ class FeedSchedulerTest {
         assertTrue("but reviews lead the blend ($dueCount due vs $newCount new)", dueCount > newCount)
     }
 
-    // ---- importance-first new + keyset (no repeats) -------------------------------------------------
+    // ---- tier-first new (within-tier shuffle) + keyset (no repeats) ---------------------------------
 
-    @Test fun new_items_come_out_importance_first_and_never_repeat_across_windows() {
-        // Only new MCQs: importance strictly descending by id. (Variety must relax since it's all mcq —
-        // that's fine; we're asserting importance order + no repeats, not variety here.)
-        val mcqs = (1L..50L).map { ref("mcq", it, 5, 1.0 - it * 0.01) }
-        val store = FakeStore()
+    @Test fun new_items_come_out_tier_first_and_never_repeat_across_windows() {
+        // Two importance tiers. Within a tier the order is a seeded shuffle, but every 5★ precedes every
+        // 4★, and the keyset cursor must never repeat an item across windows (gap-free under the shuffle).
+        val mcqs = (1L..25L).map { ref("mcq", it, 5, 0.9) } + (26L..50L).map { ref("mcq", it, 4, 0.7) }
+        val store = FakeStore(FeedScheduler.FeedState(shuffleSeed = 12345))
         val sch = FeedScheduler(FakePools(mcqItems = mcqs, remainingMcqs = 50), store)
 
         val w1 = sch.window(20, NOW, TODAY, daysUntilDeadline = 1)
@@ -103,11 +109,11 @@ class FeedSchedulerTest {
 
         val ids1 = w1.map { it.itemId }
         val ids2 = w2.map { it.itemId }
-        assertTrue("importance non-increasing in window 1",
-            w1.zipWithNext().all { (a, b) -> a.importanceScore >= b.importanceScore })
+        assertTrue("importance tier is non-increasing within a window",
+            w1.zipWithNext().all { (a, b) -> a.importance >= b.importance })
         assertTrue("no id repeats across the two windows", (ids1 + ids2).toSet().size == ids1.size + ids2.size)
-        assertTrue("window 2 continues to lower importance than window 1's tail",
-            ids2.isEmpty() || w2.first().importanceScore <= w1.last().importanceScore)
+        assertTrue("window 2 continues into the same-or-lower tier than window 1's tail",
+            ids2.isEmpty() || w2.first().importance <= w1.last().importance)
     }
 
     // ---- deadline-paced daily drip -----------------------------------------------------------------

@@ -22,4 +22,13 @@ object SettingsKeys {
 
     /** After rating a card, advance to the next one (`true`) or just highlight the rating and stay. */
     const val ADVANCE_AFTER_RATING = "feed.advanceAfterRating"
+
+    /** Reader text-size multiplier for passages + topic pages (`reader.textScale`, e.g. "1.0"). */
+    const val READER_TEXT_SCALE = "reader.textScale"
+
+    /** Keep the screen awake while studying (`display.keepScreenOn`, default off). */
+    const val KEEP_SCREEN_ON = "display.keepScreenOn"
+
+    /** A light haptic tick on a card interaction (`display.haptics`, default on). */
+    const val HAPTICS = "display.haptics"
 }

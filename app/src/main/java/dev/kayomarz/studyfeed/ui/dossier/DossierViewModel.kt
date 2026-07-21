@@ -7,6 +7,7 @@ import dev.kayomarz.studyfeed.dossier.Dossier
 import dev.kayomarz.studyfeed.dossier.DossierListItem
 import dev.kayomarz.studyfeed.dossier.DossierRepository
 import dev.kayomarz.studyfeed.dossier.LineText
+import dev.kayomarz.studyfeed.dossier.Sentences
 import dev.kayomarz.studyfeed.feed.FeedCard
 import dev.kayomarz.studyfeed.pack.PackRegistry
 import dev.kayomarz.studyfeed.progress.LineMark
@@ -47,7 +48,7 @@ class DossierViewModel(app: Application) : AndroidViewModel(app) {
         val dossier: Dossier? = null,
         val topicKey: String = "",
         val topicStarred: Boolean = false,
-        /** hash → the user's own mark ("star"). */
+        /** sentence-hash → the user's own colour mark ("c1".."c5"). */
         val userMarks: Map<String, String> = emptyMap(),
         /** hash → approximate auto highlight ("pyq" / "5star"). */
         val autoMarks: Map<String, String> = emptyMap(),
@@ -164,14 +165,17 @@ class DossierViewModel(app: Application) : AndroidViewModel(app) {
                 if (t.isEmpty() || t.startsWith("#")) continue
                 val content = if (t.startsWith("- ")) t.removePrefix("- ")
                     else if (t.startsWith("* ") && !t.startsWith("**")) t.removePrefix("* ") else t
-                val toks = LineText.tokens(content)
-                if (toks.size < 4) continue
-                val kind = when {
-                    hy.pyq.any { (it intersect toks).size >= 4 } -> "pyq"
-                    hy.fiveStar.any { (it intersect toks).size >= 4 } -> "5star"
-                    else -> null
-                } ?: continue
-                out[LineText.hash(t)] = kind
+                // Match per SENTENCE — the same unit the renderer marks, so the hashes line up.
+                for (sentence in Sentences.split(content).ifEmpty { listOf(content.trim()) }) {
+                    val toks = LineText.tokens(sentence)
+                    if (toks.size < 4) continue
+                    val kind = when {
+                        hy.pyq.any { (it intersect toks).size >= 4 } -> "pyq"
+                        hy.fiveStar.any { (it intersect toks).size >= 4 } -> "5star"
+                        else -> null
+                    } ?: continue
+                    out[LineText.hash(sentence)] = kind
+                }
             }
         }
         return out
@@ -190,20 +194,23 @@ class DossierViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun toggleLineMark(sectionOrd: Int, rawLine: String) {
+    /**
+     * Set (or clear) the colour mark on ONE sentence. [kind] `c1..c5` sets that colour; `null` removes it.
+     * Anchored on the sentence's hash + its section, so the mark survives a pack rebuild (§5j).
+     */
+    fun setLineMark(sectionOrd: Int, sentence: String, kind: String?) {
         val st = _dossier.value
         val key = st.topicKey.ifBlank { return }
-        val hash = LineText.hash(rawLine)
-        val exists = st.userMarks.containsKey(hash)
+        val hash = LineText.hash(sentence)
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 val dd = dao ?: return@withContext
-                if (exists) dd.removeLineMark(key, sectionOrd, hash)
-                else dd.addLineMark(LineMark(key, sectionOrd, hash, "star", Instant.now().toString()))
+                if (kind == null) dd.removeLineMark(key, sectionOrd, hash)
+                else dd.addLineMark(LineMark(key, sectionOrd, hash, kind, Instant.now().toString()))
             }
             _dossier.update {
                 val m = it.userMarks.toMutableMap()
-                if (exists) m.remove(hash) else m[hash] = "star"
+                if (kind == null) m.remove(hash) else m[hash] = kind
                 it.copy(userMarks = m)
             }
         }

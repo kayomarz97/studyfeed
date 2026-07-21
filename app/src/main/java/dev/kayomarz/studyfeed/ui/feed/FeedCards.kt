@@ -2,11 +2,14 @@ package dev.kayomarz.studyfeed.ui.feed
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,16 +17,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,10 +40,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.kayomarz.studyfeed.feed.FeedCard
+import dev.kayomarz.studyfeed.ui.dossier.DossierMarkdown
+import dev.kayomarz.studyfeed.ui.theme.LocalReaderScale
 
 /**
  * The five card composables (BUILD_PROMPT §8 A2; **A7 redesign 2026-07-18**) — one per item type the pack
@@ -54,6 +66,9 @@ import dev.kayomarz.studyfeed.feed.FeedCard
  * the user did ([Rating]) and the feed layer writes FSRS + progress off the main thread (D5: a write must
  * never block the swipe). That keeps the cards testable and the DB work where it belongs.
  */
+
+/** A light haptic tick fired on a card interaction, when the user has haptics on (provided by FeedScreen). */
+val LocalTapFeedback = androidx.compose.runtime.staticCompositionLocalOf<() -> Unit> { {} }
 
 /** A user's self-assessment on a card. Maps to FSRS grades in the feed layer (A2 step 8). */
 enum class Rating { AGAIN, HARD, GOOD, EASY }
@@ -80,11 +95,12 @@ private fun CardScaffold(
     // Tap-anywhere-to-reveal: a no-indication, full-card click, active ONLY before reveal. Child
     // clickables (importance pill, star, the explicit Reveal/Mark-read button, MCQ options) hit first,
     // so this only fires on the "empty" areas — exactly the affordance the user asked for (2.6).
+    val tap = LocalTapFeedback.current
     val tapToReveal = if (!revealed && onReveal != null) {
         Modifier.clickable(
             interactionSource = remember { MutableInteractionSource() },
             indication = null,
-            onClick = onReveal,
+            onClick = { tap(); onReveal() },
         )
     } else Modifier
 
@@ -99,7 +115,7 @@ private fun CardScaffold(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             CardTopRow(card, onImportanceClick, Modifier.weight(1f))
-            StarButton(actions.starred, actions.onToggleStar)
+            StarButton(actions.starred, actions.starColor, actions.onToggleStar, actions.onSetStarColor)
         }
         Spacer(Modifier.height(16.dp))
         content()
@@ -133,6 +149,9 @@ data class CardActionsState(
     val tags: List<dev.kayomarz.studyfeed.pack.PackDatabase.TagDef>,
     val onToggleStar: () -> Unit,
     val onToggleTag: (String) -> Unit,
+    /** 2026-07-20: the star's colour (`c1`..`c5`, or null) + the long-press colour setter (null = remove). */
+    val starColor: String? = null,
+    val onSetStarColor: (String?) -> Unit = {},
     /** A7: "Read full topic →" — non-null only when this card resolves to a topic dossier. */
     val onOpenTopic: (() -> Unit)? = null,
     /** A7: "Concept map →" — non-null only when this card's topic has a concept map. */
@@ -145,16 +164,40 @@ data class CardActionsState(
     val onOpenLibrary: (() -> Unit)? = null,
 )
 
+/** The card star (2026-07-20): single tap toggles a star; long-press opens the 5-colour picker (or Remove) —
+ *  the same colour system as the Library sentence highlights. A coloured star renders in its colour. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun StarButton(starred: Boolean, onClick: () -> Unit) {
-    val c = if (starred) Color(0xFFFFD54F) else MaterialTheme.colorScheme.onSurfaceVariant
-    Text(
-        text = if (starred) "★" else "☆",
-        color = c,
-        fontSize = 22.sp,
-        modifier = Modifier.clip(RoundedCornerShape(50)).clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-    )
+private fun StarButton(starred: Boolean, starColor: String?, onToggle: () -> Unit, onSetColor: (String?) -> Unit) {
+    val tap = LocalTapFeedback.current
+    var menu by remember { mutableStateOf(false) }
+    val c = when {
+        starColor != null -> DossierMarkdown.colorForMark(starColor)
+        starred -> Color(0xFFFFD54F)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Box {
+        Text(
+            text = if (starred) "★" else "☆",
+            color = c,
+            fontSize = 22.sp,
+            modifier = Modifier.clip(RoundedCornerShape(50))
+                .combinedClickable(onClick = { tap(); onToggle() }, onLongClick = { tap(); menu = true })
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+        )
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                DossierMarkdown.USER_MARK_COLORS.forEach { (k, col) ->
+                    Box(
+                        Modifier.size(30.dp).clip(CircleShape).background(col)
+                            .border(BorderStroke(if (starColor == k) 3.dp else 0.dp, MaterialTheme.colorScheme.onSurface), CircleShape)
+                            .clickable { onSetColor(k); menu = false },
+                    )
+                }
+            }
+            DropdownMenuItem(text = { Text("Remove star") }, onClick = { onSetColor(null); menu = false })
+        }
+    }
 }
 
 /** A7: the "Read full topic →" and "Concept map →" links, shown when the card resolves to a topic. */
@@ -233,8 +276,10 @@ fun McqCard(
     actions: CardActionsState,
     onAnswered: (chosenIdx: Int, correct: Boolean) -> Unit,
     onRate: (Rating) -> Unit,
+    /** The option already picked this session (from the VM) — so a scroll-back re-render stays SOLVED. */
+    initialChosen: Int? = null,
 ) {
-    var chosen by remember(card.itemId) { mutableStateOf<Int?>(null) }
+    var chosen by remember(card.itemId) { mutableStateOf(initialChosen) }
     val revealed = chosen != null
 
     CardScaffold(card, actions, revealed, onImportanceClick, onReveal = null,
@@ -295,6 +340,7 @@ private fun optionState(idx: Int, chosen: Int?, correctIdx: Int, revealed: Boole
 
 @Composable
 private fun OptionRow(label: String, text: String, state: OptState, enabled: Boolean, onClick: () -> Unit) {
+    val tap = LocalTapFeedback.current
     val correct = Color(0xFF66BB6A)
     val wrong = MaterialTheme.colorScheme.error
     val border = when (state) {
@@ -314,7 +360,7 @@ private fun OptionRow(label: String, text: String, state: OptState, enabled: Boo
                     OptState.NEUTRAL -> Color.Transparent
                 }
             )
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = enabled) { tap(); onClick() }
             .padding(14.dp),
         verticalAlignment = Alignment.Top,
     ) {
@@ -359,6 +405,7 @@ fun FlashcardCard(
     onImportanceClick: () -> Unit,
     actions: CardActionsState,
     onRate: (Rating) -> Unit,
+    onSeen: () -> Unit,
 ) {
     var flipped by remember(card.itemId) { mutableStateOf(false) }
     val cloze = card.isCloze || Cloze.hasCloze(card.frontMd)
@@ -369,7 +416,7 @@ fun FlashcardCard(
         cloze -> Cloze.reveal(card.frontMd)
         else -> card.frontMd
     }
-    CardScaffold(card, actions, revealed = flipped, onImportanceClick, onReveal = { flipped = true }) {
+    CardScaffold(card, actions, revealed = flipped, onImportanceClick, onReveal = { flipped = true; onSeen() }) {
         Eyebrow("RECALL THIS", color = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(12.dp))
         MarkdownText(front, style = MaterialTheme.typography.titleMedium)
@@ -409,9 +456,10 @@ fun ReelCard(
     onImportanceClick: () -> Unit,
     actions: CardActionsState,
     onRate: (Rating) -> Unit,
+    onSeen: () -> Unit,
 ) {
     var revealed by remember(card.itemId) { mutableStateOf(false) }
-    CardScaffold(card, actions, revealed, onImportanceClick, onReveal = { revealed = true }) {
+    CardScaffold(card, actions, revealed, onImportanceClick, onReveal = { revealed = true; onSeen() }) {
         Eyebrow("DID YOU KNOW?", color = MaterialTheme.colorScheme.tertiary)
         Spacer(Modifier.height(12.dp))
         MarkdownText(card.hookMd, style = MaterialTheme.typography.headlineSmall)
@@ -461,7 +509,12 @@ fun BlobCard(
             Text("~${it}s read", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(12.dp))
         }
-        MarkdownText(card.bodyMd, style = MaterialTheme.typography.bodyLarge)
+        // Reader text size applies to the passage body (a reader surface, like the topic pages).
+        val rs = LocalReaderScale.current
+        val dens = LocalDensity.current
+        CompositionLocalProvider(LocalDensity provides Density(dens.density, dens.fontScale * rs)) {
+            MarkdownText(card.bodyMd, style = MaterialTheme.typography.bodyLarge)
+        }
         Spacer(Modifier.height(24.dp))
 
         if (!read) {
@@ -471,7 +524,7 @@ fun BlobCard(
             Spacer(Modifier.height(16.dp))
             Eyebrow("QUICK CHECK")
             Spacer(Modifier.height(8.dp))
-            BlobQuizBack(card.quiz!!)
+            BlobQuizBack(card.quiz)
         } else {
             Text("Read ✓ — you'll see this again next session.", fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -513,9 +566,10 @@ fun InterlinkCard(
     onImportanceClick: () -> Unit,
     actions: CardActionsState,
     onRate: (Rating) -> Unit,
+    onSeen: () -> Unit,
 ) {
     var revealed by remember(card.itemId) { mutableStateOf(false) }
-    CardScaffold(card, actions, revealed, onImportanceClick, onReveal = { revealed = true }) {
+    CardScaffold(card, actions, revealed, onImportanceClick, onReveal = { revealed = true; onSeen() }) {
         Eyebrow("CONNECTION")
         Spacer(Modifier.height(12.dp))
         MarkdownText(card.questionMd, style = MaterialTheme.typography.titleMedium)
@@ -555,14 +609,16 @@ private fun RatingBar(onRate: (Rating) -> Unit) {
 
 @Composable
 private fun RateButton(label: String, color: Color, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val tap = LocalTapFeedback.current
+    val click = { tap(); onClick() }
     if (selected) {
         Button(
-            onClick = onClick, modifier = modifier,
+            onClick = click, modifier = modifier,
             colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color(0xFF0A0B10)),
         ) { Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
     } else {
         OutlinedButton(
-            onClick = onClick, modifier = modifier,
+            onClick = click, modifier = modifier,
             border = BorderStroke(1.dp, color.copy(alpha = 0.7f)),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = color),
         ) { Text(label, fontSize = 13.sp) }

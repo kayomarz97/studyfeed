@@ -44,7 +44,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.kayomarz.studyfeed.feed.FeedRepository
-import dev.kayomarz.studyfeed.pack.PackDatabase
 import dev.kayomarz.studyfeed.progress.StudySession
 import dev.kayomarz.studyfeed.stats.SubjectCoverage
 import dev.kayomarz.studyfeed.ui.theme.AppColor
@@ -75,7 +74,8 @@ fun HomeScreen(
     onDrillWeakest: (SubjectCoverage) -> Unit,
     onLeeches: () -> Unit,
     onStarredDeck: () -> Unit,
-    onTagDeck: (String) -> Unit,
+    onHardDeck: () -> Unit,
+    onEasyDeck: () -> Unit,
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
 
@@ -99,33 +99,31 @@ fun HomeScreen(
             SessionsSection(ui.sessions, onResumeSession, onNewSession,
                 onRename = vm::renameSession, onArchive = vm::archiveSession)
 
+            // Capabilities of the loaded pack (null while loading → treat as present so nothing greys
+            // prematurely). Absent-capability tiles stay visible but disabled with a "not in this pack"
+            // caption. MCQs and Review are core and always primary.
+            val caps = ui.capabilities
+            val cardsPresent = caps?.let { it.hasFlashcards || it.hasReels } ?: true
+            val passagesPresent = caps?.hasBlobs ?: true
+            val dossiersPresent = caps?.hasDossiers ?: true
+            val mapPresent = caps?.hasConceptMap ?: true
+
             Spacer(Modifier.height(18.dp))
-            // Library — promoted to a first-class entry.
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                    .background(AppColor.Mcq.copy(alpha = 0.10f)).clickable(onClick = onOpenLibrary)
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Library", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("Read any topic in detail", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text("→", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            }
+            LibraryEntry(present = dossiersPresent, onOpenLibrary = onOpenLibrary)
 
             Spacer(Modifier.height(18.dp))
             Text("STUDY", fontSize = 10.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ContentTile("MCQs", ui.mcq, AppColor.Mcq, Modifier.weight(1f), onStartMcqs)
-                ContentTile("Flashcards & reels", ui.cards, AppColor.Deck, Modifier.weight(1f), onStartCards)
+                ContentTile("MCQs", ui.mcq, AppColor.Mcq, Modifier.weight(1f), onClick = onStartMcqs)
+                ContentTile("Flashcards & reels", ui.cards, AppColor.Deck, Modifier.weight(1f),
+                    present = cardsPresent, onClick = onStartCards)
             }
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ContentTile("Passages", ui.passages, AppColor.Passage, Modifier.weight(1f), onStartPassages)
+                ContentTile("Passages", ui.passages, AppColor.Passage, Modifier.weight(1f),
+                    present = passagesPresent, onClick = onStartPassages)
                 ReviewTile(ui.dueToday, ui.mistakes, ui.starred, ui.reviewProgress, Modifier.weight(1f), onReview)
             }
 
@@ -138,7 +136,7 @@ fun HomeScreen(
             }
 
             ToolsSection(ui, onMockExam, onDrillWeakest, onLeeches)
-            DecksSection(ui.tags, onStarredDeck, onTagDeck)
+            DecksSection(ui.hard, ui.easy, onStarredDeck, onHardDeck, onEasyDeck)
 
             Spacer(Modifier.height(22.dp))
             Text("EXPLORE", fontSize = 10.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold,
@@ -146,7 +144,11 @@ fun HomeScreen(
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(onClick = onStartMixed, modifier = Modifier.weight(1f)) { Text("Endless mix") }
-                OutlinedButton(onClick = onOpenMap, modifier = Modifier.weight(1f)) { Text("Map") }
+                // The concept map is disabled when this pack has no graph — the app supports it, this pack
+                // just doesn't include it.
+                OutlinedButton(onClick = onOpenMap, enabled = mapPresent, modifier = Modifier.weight(1f)) {
+                    Text(if (mapPresent) "Map" else "Map — not in pack")
+                }
             }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -160,6 +162,29 @@ fun HomeScreen(
     }
 }
 
+/**
+ * The Library entry — a first-class card. When the loaded pack has no topic pages it stays visible but
+ * disabled with a "not in this pack" caption, so the reader knows the feature exists and this pack lacks
+ * it (§0 multi_pack), rather than the card silently vanishing.
+ */
+@Composable
+private fun LibraryEntry(present: Boolean, onOpenLibrary: () -> Unit) {
+    val base = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+        .background(AppColor.Mcq.copy(alpha = if (present) 0.10f else 0.04f))
+    Row(
+        (if (present) base.clickable(onClick = onOpenLibrary) else base).padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Library", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                color = if (present) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(if (present) "Read any topic in detail" else "not in this pack",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (present) Text("→", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+    }
+}
+
 @Composable
 private fun StatInline(value: String, label: String) {
     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -169,20 +194,34 @@ private fun StatInline(value: String, label: String) {
 }
 
 @Composable
-private fun ContentTile(label: String, p: FeedRepository.TypeProgress, color: Color, modifier: Modifier, onClick: () -> Unit) {
+private fun ContentTile(
+    label: String, p: FeedRepository.TypeProgress, color: Color, modifier: Modifier,
+    present: Boolean = true, onClick: () -> Unit,
+) {
+    // A type this pack doesn't include stays VISIBLE but disabled — the user sees the app can play it and
+    // this pack simply lacks it (§0 multi_pack), never a hidden feature.
+    val base = modifier.clip(RoundedCornerShape(16.dp))
+        .background(color.copy(alpha = if (present) 0.10f else 0.04f))
     Column(
-        modifier.clip(RoundedCornerShape(16.dp)).background(color.copy(alpha = 0.10f))
-            .clickable(onClick = onClick).padding(14.dp),
+        (if (present) base.clickable(onClick = onClick) else base).padding(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.height(10.dp).width(10.dp).clip(RoundedCornerShape(3.dp)).background(color))
-            Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+            Box(Modifier.height(10.dp).width(10.dp).clip(RoundedCornerShape(3.dp))
+                .background(if (present) color else color.copy(alpha = 0.4f)))
+            Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold,
+                color = if (present) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(10.dp))
-        Text(fmt(p.done), fontSize = 17.sp, fontWeight = FontWeight.Bold)
-        Text("/ ${fmt(p.total)} done", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(8.dp))
-        ProgressBar(if (p.total > 0) p.done.toFloat() / p.total else 0f, color)
+        if (present) {
+            Text(fmt(p.done), fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text("/ ${fmt(p.total)} done", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+            ProgressBar(if (p.total > 0) p.done.toFloat() / p.total else 0f, color)
+        } else {
+            Text("not in this pack", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+            ProgressBar(0f, color)
+        }
     }
 }
 
@@ -348,14 +387,19 @@ private fun ToolsSection(
 }
 
 @Composable
-private fun DecksSection(tags: List<PackDatabase.TagDef>, onStarred: () -> Unit, onTag: (String) -> Unit) {
+private fun DecksSection(
+    hard: Int, easy: Int, onStarred: () -> Unit, onHard: () -> Unit, onEasy: () -> Unit,
+) {
     Spacer(Modifier.height(22.dp))
     Text("DECKS", fontSize = 10.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(Modifier.height(8.dp))
+    // Decks reflect YOUR study: Starred + Hard (missed at least once) + Easy (mastered). The static
+    // pack-tag chips were removed (2026-07-20) — they showed even when you'd tagged nothing.
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         DeckChip("⭐ Starred", onStarred)
-        tags.forEach { t -> DeckChip(t.label, { onTag(t.key) }); Spacer(Modifier.height(0.dp)) }
+        DeckChip("🔴 Hard" + if (hard > 0) " ($hard)" else "", onHard)
+        DeckChip("🟢 Easy" + if (easy > 0) " ($easy)" else "", onEasy)
     }
 }
 

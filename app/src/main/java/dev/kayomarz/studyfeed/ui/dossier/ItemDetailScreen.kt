@@ -56,8 +56,9 @@ fun ItemDetailScreen(vm: DossierViewModel, onBack: () -> Unit) {
                 }
                 is FeedCard.Mcq -> McqCard(card, onImportanceClick = {}, actions = inertActions,
                     onAnswered = { _, _ -> }, onRate = {})
+                // Read-only reference view: onSeen is a no-op (no FSRS write here, A4).
                 is FeedCard.Flashcard -> FlashcardCard(card, onImportanceClick = {}, actions = inertActions,
-                    onRate = {})
+                    onRate = {}, onSeen = {})
                 else -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                     Text("Unsupported item type.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

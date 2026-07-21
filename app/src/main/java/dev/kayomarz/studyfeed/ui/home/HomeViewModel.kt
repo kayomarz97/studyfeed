@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.kayomarz.studyfeed.feed.FeedRepository
+import dev.kayomarz.studyfeed.pack.PackCapabilities
 import dev.kayomarz.studyfeed.pack.PackDatabase
 import dev.kayomarz.studyfeed.pack.PackRegistry
 import dev.kayomarz.studyfeed.progress.ProgressDao
@@ -37,6 +38,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         val loading: Boolean = true,
         val hasPack: Boolean = true,
         val examName: String? = null,
+        /** What the loaded pack offers — content-type tiles for absent capabilities show DISABLED with a
+         *  "not in this pack" caption rather than hiding (so the user knows the app can play them). */
+        val capabilities: PackCapabilities? = null,
         val dueToday: Int = 0,
         val newRemaining: Int = 0,
         val dailyTarget: Int = 0,
@@ -57,7 +61,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         /** P4: the weakest subject (for the one-tap drill), leech count, and pack tags (for decks). */
         val weakest: SubjectCoverage? = null,
         val leeches: Int = 0,
-        val tags: List<PackDatabase.TagDef> = emptyList(),
+        /** Deck sizes (2026-07-19): Hard = missed at least once; Easy = reviewed, never missed, well-remembered. */
+        val hard: Int = 0,
+        val easy: Int = 0,
     )
 
     private val registry = PackRegistry(app)
@@ -82,11 +88,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val starred = dao.starCount()
             val sessions = dao.activeSessions()
             val leeches = dao.leechCount(4)
+            val hard = dao.hardCount()
+            val easy = dao.easyCount()
             pdb.close()
 
             val openedPack = (PackDatabase.open(pack.dbFile) as? PackDatabase.Result.Ok)?.pack
             val examName = openedPack?.manifest?.examName
-            val tags = openedPack?.tags.orEmpty()
+            val capabilities = openedPack?.capabilities
 
             val feedRepo = FeedRepository.open(ProgressDatabase.fileFor(getApplication(), pack.examCode), pack.dbFile)
             val nowIso = Instant.now().toString()
@@ -116,7 +124,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val deadline = deadlineStr?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
             val daysLeft = deadline?.let { ChronoUnit.DAYS.between(today, it).coerceAtLeast(1) } ?: 56L
             Ui(
-                loading = false, hasPack = true, examName = examName,
+                loading = false, hasPack = true, examName = examName, capabilities = capabilities,
                 dueToday = due, newRemaining = remainingNew,
                 dailyTarget = if (remainingNew <= 0) 0 else ceil(remainingNew / daysLeft.toDouble()).toInt(),
                 streakDays = streak(days, today),
@@ -127,7 +135,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 reviewProgress = if (mistakes + resolvedMistakes > 0)
                     resolvedMistakes.toFloat() / (mistakes + resolvedMistakes) else 0f,
                 sessions = sessions,
-                weakest = weakest, leeches = leeches, tags = tags,
+                weakest = weakest, leeches = leeches, hard = hard, easy = easy,
             )
         }
         _ui.value = ui

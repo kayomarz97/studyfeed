@@ -41,8 +41,8 @@ class FeedSchedulerRealPackTest {
 
     private fun pools(r: FeedRepository) = object : FeedScheduler.Pools {
         override fun due(nowIso: String, exclude: Set<Long>, limit: Int) = r.duePool(nowIso, exclude, limit)
-        override fun newMcqs(afterScore: Double?, afterId: Long?, limit: Int) = r.newMcqs(afterScore, afterId, limit)
-        override fun newOthers(afterScore: Double?, afterId: Long?, limit: Int) = r.newOthers(afterScore, afterId, limit)
+        override fun newMcqs(afterImp: Int?, afterId: Long?, seed: Int, limit: Int) = r.newMcqs(afterImp, afterId, seed, limit)
+        override fun newOthers(afterImp: Int?, afterId: Long?, seed: Int, limit: Int) = r.newOthers(afterImp, afterId, seed, limit)
         override fun filler(nowIso: String, exclude: Set<Long>, limit: Int) = r.fillerPool(nowIso, exclude, limit)
         override fun remainingNewMcqs() = r.remainingNewMcqs()
         override fun blobRef(blobId: Long) = r.blobRef(blobId)
@@ -58,24 +58,25 @@ class FeedSchedulerRealPackTest {
         repo!!.use { r ->
             assertTrue("there are new MCQs to pace", r.remainingNewMcqs() in 1..14455)
 
-            val page1 = r.newMcqs(null, null, 100)
+            val page1 = r.newMcqs(null, null, 0, 100)
             assertEquals("full first page", 100, page1.size)
             assertTrue("MCQs only", page1.all { it.itemType == "mcq" })
-            assertTrue("importance non-increasing", page1.zipWithNext().all { (a, b) -> a.importanceScore >= b.importanceScore })
+            assertTrue("importance TIER non-increasing (within-tier order is shuffled by the seed)",
+                page1.zipWithNext().all { (a, b) -> a.importance >= b.importance })
 
             val last = page1.last()
-            val page2 = r.newMcqs(last.importanceScore, last.itemId, 100)
+            val page2 = r.newMcqs(last.importance, last.itemId, 0, 100)
             val ids1 = page1.map { it.itemId }.toSet()
             assertTrue("keyset page 2 does not repeat page 1", page2.none { it.itemId in ids1 })
-            assertTrue("page 2 continues at or below the cursor importance",
-                page2.all { it.importanceScore <= last.importanceScore })
+            assertTrue("page 2 continues at or below the cursor tier",
+                page2.all { it.importance <= last.importance })
         }
     }
 
     @Test fun the_new_other_pool_excludes_mcqs() {
         val repo = openRepo(); assumeTrue("real pack not pushed — skipping", repo != null)
         repo!!.use { r ->
-            val others = r.newOthers(null, null, 100)
+            val others = r.newOthers(null, null, 0, 100)
             assertTrue("some non-MCQ new items exist", others.isNotEmpty())
             assertTrue("never an MCQ in the 'other' pool", others.none { it.itemType == "mcq" })
         }
@@ -86,7 +87,7 @@ class FeedSchedulerRealPackTest {
         // and the due-led engine must place it early.
         val repo = openRepo(); assumeTrue("real pack not pushed — skipping", repo != null)
         repo!!.use { r ->
-            val victim = r.newMcqs(null, null, 1).first()   // a real, deterministic feed item
+            val victim = r.newMcqs(null, null, 0, 1).first()   // a real, deterministic feed item
             val db = ProgressDatabase.open(ctx(), exam)
             runBlocking {
                 db.dao().upsertCard(FsrsCard(
