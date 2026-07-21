@@ -1693,3 +1693,41 @@ whole); `assembleDebugAndroidTest` compiles. NO schema-version bump (kind is a v
 **Deferred/notes:** the `Sentences` splitter is deliberately conservative (a paragraph that has no clean
 `". "` boundary stays whole — never shatters a lab value); Hard/Easy thresholds (lapses ≥ 1 / stability
 ≥ 7 d) are a first sensible cut, easy to retune if the decks feel off.
+
+**Pushed:** `fc490d9` (features) + `70fa841` (redact `DossierMarkdownTest` — verified against the real pack:
+the old fixtures matched 20–40 rows, now synthetic) on `dev`; Release **`a7-cycle3.2`** (Latest) with the APK.
+The scanner also caught my own new `SentencesTest` reusing real terms — redacted it too, and rebuilt the
+commits so no real content ever entered the pushed history.
+
+## 2026-07-20  Round 3 — decks cleanup, MCQ star colours, ZIP pack import (for sharing)
+
+More on-device feedback + a sharing question (user chose all three below). Built + verified; **not pushed
+yet** (standing rule §11a).
+
+1. **Home "Decks": dropped the static pack-tag chips.** "Careless slip / Knowledge gap" are pack
+   `tag_defs`, and `DecksSection` rendered EVERY one regardless of whether the user had tagged anything — so
+   they never went away ("removed completely, why still there"). Per the user's choice, removed the tag
+   chips entirely; Decks is now just **Starred · Hard · Easy**. (`HomeViewModel.tags` + the `onTagDeck`
+   plumbing removed.)
+2. **MCQ card star → 5 colours on long-press (tap still toggles).** Additive migration **v3 → v4**:
+   `stars.color` (nullable TEXT — a plain star stays valid, a re-import still never wipes progress). Single
+   tap toggles a default gold star; long-press opens the SAME 5-colour picker as the Library highlights (or
+   "Remove star"); a coloured star renders in its colour. `setStarColor` + `starColor` DAO +
+   `CardMarks.starColor` + `CardActionsState.starColor/onSetStarColor`; `StarButton` now `combinedClickable`.
+3. **Import a pack from a single `.zip`** — the non-technical sharing path. New `ZipPackSource` implements
+   the existing source-agnostic `PackSource` over a `java.util.zip.ZipFile`, so `PackImporter` is UNCHANGED;
+   `PackUiState.importFromZip` copies the picked `content://` zip to cache (a ZIP needs a real File), detects
+   the pack root (`manifest.json` at the archive root OR one folder down), imports, then deletes the temp.
+   Manage + Empty screens gained an **"Import a .zip"** button. Zip-slip-safe: `list()` yields only
+   direct-child base names, so the importer never writes a `../` path. JVM-tested (`ZipPackSourceTest`, 5).
+
+**Verified (real output):** `assembleDebug` + `verifyOfflineGuarantees` green (ZIP import adds NO
+permission/dep — `java.util.zip` is on the platform); `testDebugUnitTest` **86/86** (+5 `ZipPackSourceTest`);
+`assembleDebugAndroidTest` compiles. First schema bump since v3 — `MIGRATION_3_4` is additive + nullable,
+registered, and the fresh-schema column matches the ALTER by construction. **Instrumented migration test for
+3→4 NOT run (no device)** — owed on the next emulator pass.
+
+**Distribution guidance given to the user:** a pack is ~370 MB (135 db + 236 figures/). Zip the pack FOLDER
+→ share the `.zip` via a cloud link (Drive/Dropbox/WeTransfer), not email/chat → the colleague installs the
+APK (GitHub release) and opens StudyFeed → Import a .zip. ⚠ The pack is derived from Passmedicine/Pastest
+(paid subscriptions) — redistributing it is the user's copyright/ToS call; flagged, they accepted it.

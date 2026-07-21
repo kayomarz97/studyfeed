@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.kayomarz.studyfeed.feed.FeedFilter
 import dev.kayomarz.studyfeed.feed.FeedQuery
+import dev.kayomarz.studyfeed.pack.PackCapabilities
 import dev.kayomarz.studyfeed.pack.PackDatabase
 
 /**
@@ -107,6 +108,7 @@ fun FilterSheet(
     tags: List<PackDatabase.TagDef>,
     total: Int,
     lockedTypes: List<String>?,
+    capabilities: PackCapabilities?,
     onFilter: (FeedFilter) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -128,8 +130,16 @@ fun FilterSheet(
                     listOf("mcq" to "MCQs", "flashcard" to "Flashcards", "reel" to "Reels",
                         "blob" to "Passages", "interlink" to "Links").forEach { (t, label) ->
                         val on = f.itemTypesIn?.contains(t) == true || f.itemType == t
-                        Chip(label, on) { onFilter(toggleType(f, t)) }
+                        // A type the loaded pack doesn't include is DISABLED, not hidden — so the user can
+                        // see the app supports it and this pack simply lacks it (§0 multi_pack). MCQs are
+                        // core (always on); null caps = still loading, so don't grey anything yet.
+                        Chip(label, on, enabled = typePresent(t, capabilities)) { onFilter(toggleType(f, t)) }
                     }
+                }
+                if (capabilities != null && anyTypeAbsent(capabilities)) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("Greyed types aren't in this pack.", fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
@@ -167,6 +177,23 @@ fun FilterSheet(
     }
 }
 
+/**
+ * Whether the loaded pack contains a given feed content type. MCQs are core (always present); the rest
+ * are resolved from [PackCapabilities] (rows-authoritative). null caps = pack not opened yet → treat as
+ * present so nothing greys out prematurely while loading.
+ */
+private fun typePresent(type: String, caps: PackCapabilities?): Boolean = when (type) {
+    "mcq" -> true
+    "flashcard" -> caps?.hasFlashcards ?: true
+    "reel" -> caps?.hasReels ?: true
+    "blob" -> caps?.hasBlobs ?: true
+    "interlink" -> caps?.hasInterlink ?: true
+    else -> true
+}
+
+private fun anyTypeAbsent(caps: PackCapabilities): Boolean =
+    !caps.hasFlashcards || !caps.hasReels || !caps.hasBlobs || !caps.hasInterlink
+
 private fun toggleType(f: FeedFilter, type: String): FeedFilter {
     val cur = f.itemTypesIn?.toMutableList() ?: mutableListOf()
     if (type in cur) cur.remove(type) else cur.add(type)
@@ -183,8 +210,8 @@ private fun Group(title: String) {
 }
 
 @Composable
-private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
-    FilterChip(selected = selected, onClick = onClick, label = { Text(label) })
+private fun Chip(label: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
+    FilterChip(selected = selected, enabled = enabled, onClick = onClick, label = { Text(label) })
 }
 
 @Composable

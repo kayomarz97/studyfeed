@@ -10,6 +10,7 @@ import dev.kayomarz.studyfeed.feed.FeedRepository
 import dev.kayomarz.studyfeed.feed.FeedScheduler
 import dev.kayomarz.studyfeed.feed.FeedStateJson
 import dev.kayomarz.studyfeed.feed.SessionConfig
+import dev.kayomarz.studyfeed.pack.PackCapabilities
 import dev.kayomarz.studyfeed.pack.PackDatabase
 import dev.kayomarz.studyfeed.pack.PackRegistry
 import dev.kayomarz.studyfeed.progress.BlobRead
@@ -64,6 +65,9 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
         val query: FeedQuery = FeedQuery(),
         val subjects: List<PackDatabase.Subject> = emptyList(),
         val tags: List<PackDatabase.TagDef> = emptyList(),
+        /** What the loaded pack actually offers — greys out filter chips for content it doesn't have.
+         *  null until the pack is opened (never grey prematurely). Rows-authoritative per pack. */
+        val capabilities: PackCapabilities? = null,
         val marks: Map<Pair<String, Long>, CardMarks> = emptyMap(),
         val studyMode: StudyMode = StudyMode.MIXED,
         val advanceAfterRating: Boolean = true,
@@ -89,7 +93,7 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
      */
     enum class StudyMode { MIXED, BY_SUBJECT, RECALL, SKIM }
 
-    data class CardMarks(val starred: Boolean = false, val tagKeys: Set<String> = emptySet())
+    data class CardMarks(val starred: Boolean = false, val starColor: String? = null, val tagKeys: Set<String> = emptySet())
 
     private val registry = PackRegistry(app)
     private val fsrs = FsrsBridge()
@@ -166,7 +170,8 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
         }
         _ui.update {
             it.copy(examName = loadedPack?.manifest?.examName,
-                subjects = loadedPack?.subjects.orEmpty(), tags = loadedPack?.tags.orEmpty())
+                subjects = loadedPack?.subjects.orEmpty(), tags = loadedPack?.tags.orEmpty(),
+                capabilities = loadedPack?.capabilities)
         }
     }
 
@@ -517,7 +522,22 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             d.star(Star(card.itemType, card.itemId, Instant.now().toString())); true
         }
-        updateMarks(card) { it.copy(starred = nowStarred) }
+        updateMarks(card) { it.copy(starred = nowStarred, starColor = null) }
+    }
+
+    /**
+     * Long-press colour pick on a card's star (2026-07-20). [kind] `c1`..`c5` colours the star (starring
+     * it if needed); `null` removes the star entirely — the same 5-colour system as the Library highlights.
+     */
+    fun setStarColor(card: FeedCard, kind: String?) = viewModelScope.launch(Dispatchers.IO) {
+        val d = dao ?: return@launch
+        if (kind == null) {
+            d.unstar(card.itemType, card.itemId)
+            updateMarks(card) { it.copy(starred = false, starColor = null) }
+        } else {
+            d.star(Star(card.itemType, card.itemId, Instant.now().toString(), kind))
+            updateMarks(card) { it.copy(starred = true, starColor = kind) }
+        }
     }
 
     fun toggleTag(card: FeedCard, tagKey: String) = viewModelScope.launch(Dispatchers.IO) {
@@ -533,8 +553,9 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
         if (_ui.value.marks.containsKey(card.itemType to card.itemId)) return@launch
         val d = dao ?: return@launch
         val starred = d.isStarred(card.itemType, card.itemId)
+        val color = d.starColor(card.itemType, card.itemId)
         val tags = d.tagsFor(card.itemType, card.itemId).toSet()
-        updateMarks(card) { CardMarks(starred, tags) }
+        updateMarks(card) { CardMarks(starred, color, tags) }
     }
 
     private fun updateMarks(card: FeedCard, f: (CardMarks) -> CardMarks) {

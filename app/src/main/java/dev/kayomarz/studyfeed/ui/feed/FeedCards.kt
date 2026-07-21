@@ -2,11 +2,14 @@ package dev.kayomarz.studyfeed.ui.feed
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,11 +17,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -39,6 +46,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.kayomarz.studyfeed.feed.FeedCard
+import dev.kayomarz.studyfeed.ui.dossier.DossierMarkdown
 import dev.kayomarz.studyfeed.ui.theme.LocalReaderScale
 
 /**
@@ -107,7 +115,7 @@ private fun CardScaffold(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             CardTopRow(card, onImportanceClick, Modifier.weight(1f))
-            StarButton(actions.starred, actions.onToggleStar)
+            StarButton(actions.starred, actions.starColor, actions.onToggleStar, actions.onSetStarColor)
         }
         Spacer(Modifier.height(16.dp))
         content()
@@ -141,6 +149,9 @@ data class CardActionsState(
     val tags: List<dev.kayomarz.studyfeed.pack.PackDatabase.TagDef>,
     val onToggleStar: () -> Unit,
     val onToggleTag: (String) -> Unit,
+    /** 2026-07-20: the star's colour (`c1`..`c5`, or null) + the long-press colour setter (null = remove). */
+    val starColor: String? = null,
+    val onSetStarColor: (String?) -> Unit = {},
     /** A7: "Read full topic →" — non-null only when this card resolves to a topic dossier. */
     val onOpenTopic: (() -> Unit)? = null,
     /** A7: "Concept map →" — non-null only when this card's topic has a concept map. */
@@ -153,16 +164,40 @@ data class CardActionsState(
     val onOpenLibrary: (() -> Unit)? = null,
 )
 
+/** The card star (2026-07-20): single tap toggles a star; long-press opens the 5-colour picker (or Remove) —
+ *  the same colour system as the Library sentence highlights. A coloured star renders in its colour. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun StarButton(starred: Boolean, onClick: () -> Unit) {
-    val c = if (starred) Color(0xFFFFD54F) else MaterialTheme.colorScheme.onSurfaceVariant
-    Text(
-        text = if (starred) "★" else "☆",
-        color = c,
-        fontSize = 22.sp,
-        modifier = Modifier.clip(RoundedCornerShape(50)).clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-    )
+private fun StarButton(starred: Boolean, starColor: String?, onToggle: () -> Unit, onSetColor: (String?) -> Unit) {
+    val tap = LocalTapFeedback.current
+    var menu by remember { mutableStateOf(false) }
+    val c = when {
+        starColor != null -> DossierMarkdown.colorForMark(starColor)
+        starred -> Color(0xFFFFD54F)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Box {
+        Text(
+            text = if (starred) "★" else "☆",
+            color = c,
+            fontSize = 22.sp,
+            modifier = Modifier.clip(RoundedCornerShape(50))
+                .combinedClickable(onClick = { tap(); onToggle() }, onLongClick = { tap(); menu = true })
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+        )
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                DossierMarkdown.USER_MARK_COLORS.forEach { (k, col) ->
+                    Box(
+                        Modifier.size(30.dp).clip(CircleShape).background(col)
+                            .border(BorderStroke(if (starColor == k) 3.dp else 0.dp, MaterialTheme.colorScheme.onSurface), CircleShape)
+                            .clickable { onSetColor(k); menu = false },
+                    )
+                }
+            }
+            DropdownMenuItem(text = { Text("Remove star") }, onClick = { onSetColor(null); menu = false })
+        }
+    }
 }
 
 /** A7: the "Read full topic →" and "Concept map →" links, shown when the card resolves to a topic. */

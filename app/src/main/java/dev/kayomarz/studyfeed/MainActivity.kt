@@ -138,6 +138,12 @@ private fun Root() {
     val settingsVm: SettingsViewModel = viewModel()
     val settingsUi by settingsVm.ui.collectAsStateWithLifecycle()
     val mockVm: MockExamViewModel = viewModel()
+    // The single source of pack capabilities (the same activity-scoped PackUiState the Manage screen
+    // uses, so an import updates it). Threaded into the section screens so each can honestly say when
+    // the loaded pack doesn't include its content, instead of rendering a blank screen.
+    val packVm: PackUiState = viewModel()
+    val packUi by packVm.ui.collectAsStateWithLifecycle()
+    val capabilities = packUi.active?.capabilities
     // Refresh the dashboard's counts whenever we return to it.
     val goHome = { homeVm.load(); screen = Screen.Home }
 
@@ -205,11 +211,6 @@ private fun Root() {
                     FeedQuery(sort = FeedQuery.Sort.IMPORTANCE_DESC, filter = FeedFilter(easyOnly = true)),
                     "Easy"); screen = Screen.Feed
             },
-            onTagDeck = { key ->
-                feedVm.openQuick("deck:$key",
-                    FeedQuery(sort = FeedQuery.Sort.IMPORTANCE_DESC, filter = FeedFilter(tagKey = key)),
-                    "Deck"); screen = Screen.Feed
-            },
         )
         Screen.Feed -> FeedScreen(
             vm = feedVm,
@@ -235,6 +236,7 @@ private fun Root() {
             vm = conceptVm,
             onOpenDossier = { pid -> currentDossierId = pid; dossierVm.openDossier(pid); screen = Screen.Dossier(pid) },
             onBack = goHome,
+            capabilities = capabilities,
         )
         Screen.NewSession -> NewSessionScreen(
             vm = feedVm,
@@ -248,6 +250,7 @@ private fun Root() {
             onOpenDossier = { id -> currentDossierId = id; dossierVm.openDossier(id); screen = Screen.Dossier(id) },
             onBack = goHome,
             onOpenMap = { cid -> conceptVm.focusOn(cid); screen = Screen.ConceptMap },
+            capabilities = capabilities,
         )
         is Screen.Dossier -> DossierScreen(
             vm = dossierVm,
@@ -298,6 +301,10 @@ private fun PackScreen(onOpenFeed: () -> Unit = {}, vm: PackUiState = viewModel(
     val pickPack = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri?.let { vm.importFrom(it) }
     }
+    // 2026-07-20: import a pack from a single .zip — the easy path for a shared pack (see importFromZip).
+    val pickZip = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { vm.importFromZip(it) }
+    }
     val exportTo = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri -> uri?.let { vm.exportProgress(it) } }
@@ -317,10 +324,14 @@ private fun PackScreen(onOpenFeed: () -> Unit = {}, vm: PackUiState = viewModel(
                 Modifier.fillMaxWidth().padding(top = 40.dp),
                 horizontalArrangement = Arrangement.Center,
             ) { CircularProgressIndicator() }
-            ui.active == null -> EmptyState(onImport = { pickPack.launch(null) })
+            ui.active == null -> EmptyState(
+                onImport = { pickPack.launch(null) },
+                onImportZip = { pickZip.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
+            )
             else -> LoadedPack(
                 ui = ui,
                 onImport = { pickPack.launch(null) },
+                onImportZip = { pickZip.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
                 onSwitch = vm::switchTo,
                 onExport = { exportTo.launch(vm.suggestedExportName()) },
                 onImportProgress = { importFrom.launch(arrayOf("application/zip", "*/*")) },
@@ -354,7 +365,7 @@ private fun PackScreen(onOpenFeed: () -> Unit = {}, vm: PackUiState = viewModel(
 }
 
 @Composable
-private fun EmptyState(onImport: () -> Unit) {
+private fun EmptyState(onImport: () -> Unit, onImportZip: () -> Unit) {
     // A fresh install has no pack. That is a normal state, not an error — so it reads as an invitation,
     // not a failure.
     Column(
@@ -364,14 +375,16 @@ private fun EmptyState(onImport: () -> Unit) {
         Text("StudyFeed", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(12.dp))
         Text(
-            "No study pack yet.\n\nImport a pack folder to begin — the app takes its subjects, tags and " +
-                "labels from whatever pack you give it.",
+            "No study pack yet.\n\nImport a pack to begin — pick its folder, or a .zip a colleague shared " +
+                "with you. The app takes its subjects and labels from whatever pack you give it.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(24.dp))
-        Button(onClick = onImport) { Text("Import a pack") }
+        Button(onClick = onImport) { Text("Import a pack folder") }
+        Spacer(Modifier.height(10.dp))
+        OutlinedButton(onClick = onImportZip) { Text("Import a .zip") }
     }
 }
 
@@ -412,6 +425,7 @@ private fun ImportingCard(p: PackImporter.Progress, onCancel: () -> Unit) {
 private fun LoadedPack(
     ui: PackUiState.Ui,
     onImport: () -> Unit,
+    onImportZip: () -> Unit,
     onSwitch: (String) -> Unit,
     onExport: () -> Unit,
     onImportProgress: () -> Unit,
@@ -505,7 +519,9 @@ private fun LoadedPack(
     Spacer(Modifier.height(20.dp))
     HorizontalDivider()
     Spacer(Modifier.height(12.dp))
-    OutlinedButton(onClick = onImport) { Text("Import another pack") }
+    OutlinedButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("Import another pack (folder)") }
+    Spacer(Modifier.height(10.dp))
+    OutlinedButton(onClick = onImportZip, modifier = Modifier.fillMaxWidth()) { Text("Import a .zip") }
     Spacer(Modifier.height(40.dp))
 }
 

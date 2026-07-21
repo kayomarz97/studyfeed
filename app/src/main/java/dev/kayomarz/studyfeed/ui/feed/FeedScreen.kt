@@ -39,7 +39,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -99,22 +98,30 @@ fun FeedScreen(
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when {
                         ui.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                        ui.cards.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                            val labels = ui.query.filter.activeLabels(ui.subjects, ui.tags)
-                            Text(
-                                if (ui.query.filter.isAll) "This pack has no playable items."
-                                else "No items match: ${labels.joinToString(" · ")}.\nRemove a filter to see more.",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(32.dp),
-                            )
+                        ui.cards.isEmpty() -> {
+                            // Honest empty state: a filter that excludes everything reads differently from a
+                            // pack that has nothing to play (ABSENT). present = "the pack has items to show if
+                            // you drop the filter" — false only when there's no filter AND no items at all.
+                            val filterActive = !ui.query.filter.isAll
+                            val present = filterActive || ui.total > 0
+                            when (EmptyStates.decide(present, filterActive)) {
+                                EmptyCase.ABSENT ->
+                                    EmptyState("Nothing to study", "This pack has no playable items.")
+                                EmptyCase.NOTHING_MATCHES -> {
+                                    val labels = ui.query.filter.activeLabels(ui.subjects, ui.tags)
+                                    EmptyState("Nothing matches",
+                                        "No items match: ${labels.joinToString(" · ")}.\nRemove a filter to see more.")
+                                }
+                                EmptyCase.NOTHING_DUE -> EmptyState("All caught up",
+                                    "Nothing left to study here right now — great work.")
+                            }
                         }
                         else -> FeedPager(ui, vm, onOpenTopic, onOpenMap, onOpenLibrary)
                     }
                 }
                 if (showFilter) {
-                    FilterSheet(ui.query, ui.subjects, ui.tags, ui.total, ui.lockedTypes, vm::setFilter,
-                        onDismiss = { showFilter = false })
+                    FilterSheet(ui.query, ui.subjects, ui.tags, ui.total, ui.lockedTypes, ui.capabilities,
+                        vm::setFilter, onDismiss = { showFilter = false })
                 }
             }
         }
@@ -162,6 +169,8 @@ private fun FeedPager(
             tags = ui.tags,
             onToggleStar = { vm.toggleStar(card) },
             onToggleTag = { vm.toggleTag(card, it) },
+            starColor = marks.starColor,
+            onSetStarColor = { vm.setStarColor(card, it) },
             onOpenTopic = card.topicPageId?.let { tp -> { onOpenTopic(tp) } },
             onOpenMap = card.conceptId?.let { cid -> { onOpenMap(cid) } },
             onOpenLibrary = onOpenLibrary,

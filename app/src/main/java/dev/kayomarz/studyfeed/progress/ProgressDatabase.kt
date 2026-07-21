@@ -42,7 +42,7 @@ import java.io.File
         SubjectMastery::class, StudySession::class, BlobRead::class, FeedState::class, Setting::class,
         McqAttempt::class, LineMark::class, Deck::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false, // migrations are hand-written + tested (MigrationTest); no schema-JSON needed.
 )
 abstract class ProgressDatabase : RoomDatabase() {
@@ -102,6 +102,17 @@ abstract class ProgressDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
             }
         }
+
+        /**
+         * v3 → v4 (2026-07-20): `stars.color` — an optional colour on a star (`c1`..`c5`), so a starred
+         * item can be colour-coded (long-press the star). Additive + NULLABLE: a plain star (no colour)
+         * stays valid, and a re-import still never wipes progress.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE stars ADD COLUMN color TEXT")
+            }
+        }
         /**
          * Opens (creating on first use) the progress DB for [examCode].
          *
@@ -112,7 +123,7 @@ abstract class ProgressDatabase : RoomDatabase() {
          */
         fun open(context: Context, examCode: String): ProgressDatabase =
             Room.databaseBuilder(context, ProgressDatabase::class.java, fileName(examCode))
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
 
         /**
@@ -193,7 +204,7 @@ data class Mistake(
 )
 
 @Entity(tableName = "stars", primaryKeys = ["item_type", "item_id"])
-data class Star(val item_type: String, val item_id: Long, val ts: String)
+data class Star(val item_type: String, val item_id: Long, val ts: String, val color: String? = null)
 
 @Entity(tableName = "item_tags", primaryKeys = ["item_type", "item_id", "tag_key"])
 data class ItemTag(val item_type: String, val item_id: Long, val tag_key: String, val ts: String)
@@ -338,6 +349,10 @@ interface ProgressDao {
 
     @Query("SELECT EXISTS(SELECT 1 FROM stars WHERE item_type = :type AND item_id = :id)")
     suspend fun isStarred(type: String, id: Long): Boolean
+
+    /** The colour on a star (`c1`..`c5`), or null for a plain star / not starred. */
+    @Query("SELECT color FROM stars WHERE item_type = :type AND item_id = :id")
+    suspend fun starColor(type: String, id: Long): String?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addTag(tag: ItemTag)

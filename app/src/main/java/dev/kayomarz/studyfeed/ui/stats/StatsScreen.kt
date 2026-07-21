@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.kayomarz.studyfeed.stats.CurvePoint
 import dev.kayomarz.studyfeed.stats.SubjectCoverage
+import dev.kayomarz.studyfeed.ui.feed.EmptyState
 import dev.kayomarz.studyfeed.ui.theme.AppColor
 
 /**
@@ -58,8 +59,13 @@ fun StatsScreen(vm: StatsViewModel, onReviewMistakes: () -> Unit, onBack: () -> 
         }
         when {
             ui.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-            !ui.hasPack -> Empty("Import a pack to see your progress.")
-            !ui.hasData -> Empty("Answer some questions and your stats will appear here.")
+            !ui.hasPack -> EmptyState("No pack yet", "Import a pack to see your progress.")
+            // ABSENT: a lean pack with nothing scorable — distinct from "you just haven't studied yet".
+            !ui.packHasContent -> EmptyState("Nothing to score",
+                "This pack has no scorable items, so there are no stats to show.")
+            // NOTHING_DUE: the pack has content, you simply haven't answered anything yet — encouraging.
+            !ui.hasData -> EmptyState("No progress yet",
+                "Answer some questions and your stats will appear here.")
             else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
                 TodayCard(ui)
                 Spacer(Modifier.height(20.dp))
@@ -106,9 +112,6 @@ fun StatsScreen(vm: StatsViewModel, onReviewMistakes: () -> Unit, onBack: () -> 
         }
     }
 }
-
-@Composable private fun Empty(msg: String) =
-    Box(Modifier.fillMaxSize(), Alignment.Center) { Text(msg, color = MaterialTheme.colorScheme.onSurfaceVariant) }
 
 @Composable private fun Muted(msg: String) =
     Text(msg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
