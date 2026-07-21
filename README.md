@@ -41,9 +41,11 @@ in, and **neither needs any paid API keys.**
 
 1. Download the latest **`app-release.apk`** from this repo's **[Releases](../../releases)** and
    install it on an Android phone (allow *"install unknown apps"* the first time).
-2. Open it → **Manage packs → Import** → pick a pack folder (a `.db` file + `manifest.json`)
-   you were given or built.
-3. Study. Your progress stays **only on your device**; export it as a ZIP any time to move phones.
+2. Open it → **Manage packs → Import** → pick a pack. The easy way to share one is a single
+   **`.zip`** (just zip the pack folder — the app reads the pack straight out of it); a plain pack
+   **folder** (`.db` + `manifest.json` + optional `figures/`) works too.
+3. Study. Your progress stays **only on your device**; export it as a **`.zip`** any time and import
+   that same zip on another phone to carry your history across devices.
 
 *The app asks for zero permissions — no internet, no accounts, no tracking — and the build
 itself refuses to produce an APK that could break that.*
@@ -62,35 +64,60 @@ exam's worth of textbooks, see the heavier, API-key compiler in
 
 ```
 You are helping a doctor (not a programmer) turn their OWN study material into a StudyFeed
-"content pack" that the StudyFeed Android app can play. Use YOUR OWN model / subscription for all
-the AI work — do NOT use or ask me for an Anthropic API key, and do NOT run the paid Batch-API
-compiler. Explain each step in plain language and do the work for me.
+"content pack" that the StudyFeed Android app plays. Work INSIDE this cloned repository and use its
+REAL files — never guess the format. Use YOUR OWN model/subscription for all AI work: do NOT ask
+for or use an Anthropic API key.
 
-1. Read the pack contract first so the pack is valid: spec/SPEC.md and spec/schema.sql in this
-   repo. The app imports a folder containing a SQLite `.db` (matching that schema) plus a
-   `manifest.json`. Follow the schema exactly, including schema_version and a pack_manifest row
-   (exam name, subjects, feature flags).
-2. Ask me for my study material (paste text, or point to my PDFs/notes). Keep it to MY OWN
-   material — this is a personal, focused pack.
-3. From my material only, generate content grounded in what I gave you (invent nothing new):
-   best-of-five MCQs (stem, five options, correct letter, explanation), flashcards (front/back),
-   and short topic pages. Treat medical values literally — never reformat things like
-   "5 * 10^9/L" or "> 140".
-4. Build the pack: create the SQLite `.db` per spec/schema.sql, populate the feed items, write a
-   matching `manifest.json`, and place both in a folder.
-5. Sanity-check that it opens and the row counts match the manifest, then tell me exactly where
-   the folder is and how to copy it to my phone and import it (StudyFeed → Manage packs → Import).
+REPO LAYOUT — read these BEFORE doing anything (the pack format is defined here; do not invent it):
+  spec/SPEC.md              the pack contract (how the app reads a pack)
+  spec/schema.sql           the exact SQLite schema — the SOURCE OF TRUTH for every table/column
+  spec/manifest.schema.json the shape of manifest.json
+  spec/SCORING.md           how the 1-5 importance ("star") rating works
+  compiler/                 the real pack builder (Python); compiler/README.md has a
+                            "Build without an API key - subscription mode" section
+                            (compiler/studyfeed_compiler/llm_local.py)
+  profiles/mrcp_part1.yaml  an example exam profile to copy
+  app/                      the Android player (don't modify it)
 
-Report what you actually did at each step. If any step truly needs an API key, tell me plainly
-instead of pretending.
+STEP 1 - Read spec/SPEC.md, spec/schema.sql, spec/manifest.schema.json and spec/SCORING.md, then
+tell me in plain words what a valid pack must contain (tables, a pack_manifest row, feed items).
+Do not continue until you have actually read them.
+
+STEP 2 - Ask me for my material (paste text, or point at my PDFs/notes) and which subjects it
+covers. Keep it to MY OWN material - this is a personal, focused pack.
+
+STEP 3 - Pick a build route and tell me which:
+  (A) Rigorous (best if I have PDFs): use the COMPILER in subscription mode - put my files in
+      compiler/sources/inbox/, copy profiles/mrcp_part1.yaml to a profile for my exam, run
+      `unset ANTHROPIC_API_KEY`, then the compiler's extraction plus
+      `python -m studyfeed_compiler.llm_local local-atomize` / `local-mcq` (subscription, no key),
+      then the remaining pure-Python stages. See compiler/README.md.
+  (B) Quick (a little pasted text): build a small pack DIRECTLY against spec/schema.sql.
+  Either route: generate ONLY from my material (invent no facts); treat medical values literally -
+  never reformat "5 * 10^9/L" or "> 140".
+
+STEP 4 - Set each item's importance (the 1-5 STARS = the `importance` column, 1..5). Ask me which:
+  - MANUAL:    I tell you which topics are high-yield; set those to 5, ordinary ones lower.
+  - AUTOMATIC: score them per spec/SCORING.md (past-paper hits, repetition, my own emphasis...).
+  Fill importance_score and importance_signals_json per the schema too.
+
+STEP 5 - Produce the pack folder (`.db` matching spec/schema.sql + a matching manifest.json + any
+figures), then ZIP that folder. The app imports a single `.zip` directly.
+
+STEP 6 - Sanity-check the `.db` opens and row counts match the manifest, then tell me exactly where
+the `.zip` is and how to import it: copy to phone -> StudyFeed -> Manage packs -> Import -> pick it.
+
+Report what you actually did at each step, grounded in the files you read. If a step truly needs an
+API key, say so plainly instead of pretending.
 ```
 
 </details>
 
-> **Who needs what:** *using the app* → nothing. *Building a personal pack with the prompt above*
-> → just your AI-assistant subscription. *Building a large, rigorously-graded exam pack from many
-> textbooks* → the full compiler, which uses a paid API key (see [Getting started](#getting-started)).
-> The **finished app is always free and offline.**
+> **Who needs what:** *using the app* → nothing. *Building a personal pack* → just your AI-assistant
+> subscription (the prompt above, or the compiler's **no-key subscription mode**, see
+> [`compiler/README.md`](compiler/README.md)). *A large, rigorously-graded exam pack from many
+> textbooks* → the full compiler with a paid API key, which is faster at that scale (see
+> [Getting started](#getting-started)). The **finished app is always free and offline.**
 
 ---
 

@@ -59,10 +59,16 @@ no pack, go to Goal 2.
 
 ## Goal 2 — Build a content pack from the user's own PDFs
 
-⚠️ **Cost & key.** This runs large language-model jobs on the Anthropic **Batch API** and needs the
-user's own **paid** `ANTHROPIC_API_KEY`. A subscription will not work here. For a large exam this
-can cost roughly **USD ~100+**. The tool **stops at a budget gate** before spending — never bypass
-it without the user's explicit yes.
+⚠️ **Two ways to run the AI work — pick one:**
+- **(a) API key (Batch API).** Fast and cheap for a *whole-exam* corpus; needs the user's own
+  **paid** `ANTHROPIC_API_KEY`. Roughly **USD ~100+** at MRCP scale; the tool **stops at a budget
+  gate** before spending — never bypass it without the user's explicit yes.
+- **(b) Subscription mode (NO API key).** Route the atomize/MCQ stages through the user's
+  `claude`/`gemini`/`codex` **CLI** on their subscription. Best for a **small / personal pack** (a
+  subscription throttles at whole-exam scale). See `compiler/README.md` → "Build without an API
+  key". **Critical:** `unset ANTHROPIC_API_KEY` first, or a set key hijacks `claude` into API-key
+  auth and 401s. Commands: `uv run python -m studyfeed_compiler.llm_local local-test`, then
+  `local-atomize`/`local-mcq`.
 
 ### 2a. Prerequisites
 
