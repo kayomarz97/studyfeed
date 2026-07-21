@@ -17,6 +17,7 @@ exam's app, with **zero code changes**. MRCP(UK) Part 1 is simply the first pack
 
 ## Contents
 
+- 👉 **[Start here — for clinicians (no coding needed)](#start-here--for-clinicians-no-coding-needed)** — if you just want to study
 1. [How it works (the big picture)](#how-it-works-the-big-picture)
 2. [Feed in your data — any source, any format](#1-feed-in-your-data--any-source-any-format)
 3. [How the data is processed — the compiler](#2-how-the-data-is-processed--the-compiler)
@@ -26,6 +27,70 @@ exam's app, with **zero code changes**. MRCP(UK) Part 1 is simply the first pack
 7. [Status](#status)
 8. [Privacy, offline & licensing](#privacy-offline--licensing)
 9. [Getting started](#getting-started)
+
+---
+
+## Start here — for clinicians (no coding needed)
+
+StudyFeed runs **entirely on your phone**, offline. You give it a **study pack** — one file
+holding questions, flashcards and topic pages — and it turns that into a smart,
+spaced-repetition study feed. **You bring the pack; the app plays it.** There are two easy ways
+in, and **neither needs any paid API keys.**
+
+### 1 · Just use the app
+
+1. Download the latest **`app-release.apk`** from this repo's **[Releases](../../releases)** and
+   install it on an Android phone (allow *"install unknown apps"* the first time).
+2. Open it → **Manage packs → Import** → pick a pack folder (a `.db` file + `manifest.json`)
+   you were given or built.
+3. Study. Your progress stays **only on your device**; export it as a ZIP any time to move phones.
+
+*The app asks for zero permissions — no internet, no accounts, no tracking — and the build
+itself refuses to produce an APK that could break that.*
+
+### 2 · Build your own study set from **your** notes — with your AI assistant, no API key
+
+Have your own revision notes, a question list, or a chapter you want turned into a study pack?
+Open **Claude Code**, **Gemini CLI**, or **Codex** and paste the prompt below. It uses your
+**existing AI subscription** to do the work — **no Anthropic API key and no per-use fees.** This
+is best for **your own, focused material** (a topic, a set of MCQs, a chapter). For a whole
+exam's worth of textbooks, see the heavier, API-key compiler in
+[Getting started](#getting-started).
+
+<details>
+<summary><b>📋 Copy this prompt into your AI assistant</b></summary>
+
+```
+You are helping a doctor (not a programmer) turn their OWN study material into a StudyFeed
+"content pack" that the StudyFeed Android app can play. Use YOUR OWN model / subscription for all
+the AI work — do NOT use or ask me for an Anthropic API key, and do NOT run the paid Batch-API
+compiler. Explain each step in plain language and do the work for me.
+
+1. Read the pack contract first so the pack is valid: spec/SPEC.md and spec/schema.sql in this
+   repo. The app imports a folder containing a SQLite `.db` (matching that schema) plus a
+   `manifest.json`. Follow the schema exactly, including schema_version and a pack_manifest row
+   (exam name, subjects, feature flags).
+2. Ask me for my study material (paste text, or point to my PDFs/notes). Keep it to MY OWN
+   material — this is a personal, focused pack.
+3. From my material only, generate content grounded in what I gave you (invent nothing new):
+   best-of-five MCQs (stem, five options, correct letter, explanation), flashcards (front/back),
+   and short topic pages. Treat medical values literally — never reformat things like
+   "5 * 10^9/L" or "> 140".
+4. Build the pack: create the SQLite `.db` per spec/schema.sql, populate the feed items, write a
+   matching `manifest.json`, and place both in a folder.
+5. Sanity-check that it opens and the row counts match the manifest, then tell me exactly where
+   the folder is and how to copy it to my phone and import it (StudyFeed → Manage packs → Import).
+
+Report what you actually did at each step. If any step truly needs an API key, tell me plainly
+instead of pretending.
+```
+
+</details>
+
+> **Who needs what:** *using the app* → nothing. *Building a personal pack with the prompt above*
+> → just your AI-assistant subscription. *Building a large, rigorously-graded exam pack from many
+> textbooks* → the full compiler, which uses a paid API key (see [Getting started](#getting-started)).
+> The **finished app is always free and offline.**
 
 ---
 
