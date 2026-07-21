@@ -1,0 +1,59 @@
+name: Publish public snapshot
+
+# Auto-mirror a clean, redacted, content-free snapshot of this PRIVATE repo to the PUBLIC repo
+# (kayomarz97/studyfeed-public) on every push to main. The snapshot is built by
+# tools/sync-public.sh (whitelist copy + vendor redaction + public-overrides + guard). The private
+# repo's own history, internal docs, secrets, and exam content never leave this repo.
+#
+# One-time setup (done by the maintainer, not in this file):
+#   • an SSH deploy key with WRITE access is added to studyfeed-public
+#   • its PRIVATE half is stored here as the Actions secret PUBLISH_SSH_KEY
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: publish-public
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout private repo (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch the `public` branch (redaction source for sync-public.sh)
+        run: git fetch origin public:public
+
+      - name: Install the write-scoped deploy key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.PUBLISH_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Clone the public repo (seed public/.git so history is preserved)
+        run: >
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes"
+          git clone git@github.com:kayomarz97/studyfeed-public.git public
+
+      - name: Rebuild the clean public snapshot
+        run: bash tools/sync-public.sh
+
+      - name: Commit & push to the public repo (only if something changed)
+        run: |
+          cd public
+          git config user.name  "kayomarz97"
+          git config user.email "kayomarz97@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to publish."
+            exit 0
+          fi
+          git commit -m "Auto-sync from ${GITHUB_REF_NAME}@${GITHUB_SHA:0:7}"
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" git push origin HEAD:main
