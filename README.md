@@ -60,7 +60,7 @@ is best for **your own, focused material** (a topic, a set of MCQs, a chapter). 
 exam's worth of textbooks, see the heavier, API-key compiler in
 [Getting started](#getting-started).
 
-<details>
+<details open>
 <summary><b>📋 Copy this prompt into your AI assistant</b></summary>
 
 ```
