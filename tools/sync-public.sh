@@ -32,6 +32,7 @@ REDACTED_FROM_BRANCH=(
 # Whitelist — the ONLY things that may ship. Anything absent here never goes public.
 WHITELIST=(
   README.md GET_STARTED.md AGENTS.md
+  docs                       # app screenshots (synthetic demo pack) referenced by README
   .gitignore
   settings.gradle.kts build.gradle.kts gradle.properties
   gradlew gradlew.bat gradle

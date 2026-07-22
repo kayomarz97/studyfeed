@@ -19,7 +19,8 @@ exam's app, with **zero code changes**. MRCP(UK) Part 1 is simply the first pack
 
 - 👉 **[Start here — for clinicians (no coding needed)](#start-here--for-clinicians-no-coding-needed)** — if you just want to study
 1. [How it works (the big picture)](#how-it-works-the-big-picture)
-2. [Feed in your data — any source, any format](#1-feed-in-your-data--any-source-any-format)
+2. [Screenshots](#screenshots)
+3. [Feed in your data — any source, any format](#1-feed-in-your-data--any-source-any-format)
 3. [How the data is processed — the compiler](#2-how-the-data-is-processed--the-compiler)
 4. [The app — what you study with](#3-the-app--what-you-study-with)
 5. [One app, any exam — how packs interchange](#4-one-app-any-exam--how-packs-interchange)
@@ -145,6 +146,42 @@ Three decoupled parts, joined **only** by the pack format:
 
 Tokens (LLM cost) are spent **once, at build time**. The app that reaches a student's phone
 has no API key, no network, no LLM.
+
+---
+
+## Screenshots
+
+*A tour of the running app. These use a small **synthetic demo pack** — generic, made-up
+content (basic textbook facts) purely to show the interface. Real study material comes from
+whatever pack you load; nothing exam-specific is baked into the app.*
+
+<table>
+  <tr>
+    <td width="33%" valign="top"><img src="docs/screenshots/01_home.png" alt="Home dashboard"><br><sub><b>Home</b> — what's left, at a glance</sub></td>
+    <td width="33%" valign="top"><img src="docs/screenshots/02_mcq_question.png" alt="A multiple-choice question"><br><sub><b>Study feed</b> — one card at a time</sub></td>
+    <td width="33%" valign="top"><img src="docs/screenshots/03_mcq_answered.png" alt="Answered question with explanation"><br><sub><b>Answer + explanation</b> with spaced-repetition rating</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/screenshots/04_flashcard.png" alt="Flashcard"><br><sub><b>Flashcard</b> — tap to reveal</sub></td>
+    <td valign="top"><img src="docs/screenshots/05_reel.png" alt="Reel fact card"><br><sub><b>Reel</b> — one fact, one swipe</sub></td>
+    <td valign="top"><img src="docs/screenshots/06_passage.png" alt="Passage to read"><br><sub><b>Passage</b> — a short read</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/screenshots/07_library.png" alt="Library and search"><br><sub><b>Library</b> — search any topic</sub></td>
+    <td valign="top"><img src="docs/screenshots/08_dossier.png" alt="Topic dossier"><br><sub><b>Topic dossier</b> — the full page</sub></td>
+    <td valign="top"><img src="docs/screenshots/11_concept_map.png" alt="Concept map"><br><sub><b>Concept map</b> — walk the connections</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/screenshots/09_why_sheet.png" alt="Why this item is high-yield"><br><sub><b>Why it matters</b> — the yield signals</sub></td>
+    <td valign="top"><img src="docs/screenshots/10_filter.png" alt="Filter the feed"><br><sub><b>Filter</b> — focus the feed</sub></td>
+    <td valign="top"><img src="docs/screenshots/12_progress.png" alt="Progress and analytics"><br><sub><b>Progress</b> — coverage, accuracy, retention</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/screenshots/13_settings.png" alt="Settings"><br><sub><b>Settings</b> — pace and preferences</sub></td>
+    <td></td>
+    <td></td>
+  </tr>
+</table>
 
 ---
 
