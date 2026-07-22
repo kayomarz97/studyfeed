@@ -55,10 +55,15 @@ itself refuses to produce an APK that could break that.*
 
 Have your own revision notes, a question list, or a chapter you want turned into a study pack?
 Open **Claude Code**, **Gemini CLI**, or **Codex** and paste the prompt below. It uses your
-**existing AI subscription** to do the work — **no Anthropic API key and no per-use fees.** This
+**existing AI subscription** to do the work — **no paid API key and no per-use fees.** This
 is best for **your own, focused material** (a topic, a set of MCQs, a chapter). For a whole
 exam's worth of textbooks, see the heavier, API-key compiler in
 [Getting started](#getting-started).
+
+> ⚠️ **Heads-up on usage limits:** this runs on your AI assistant's normal subscription, so a
+> **large file — or many PDFs at once — can use up your plan's usage limit** in a single run (and
+> you may then have to wait for it to reset). Start with a **small chunk** (one topic, a few pages)
+> and build up in batches.
 
 <details open>
 <summary><b>📋 Copy this prompt into your AI assistant</b></summary>
@@ -69,7 +74,12 @@ You are helping a doctor (not a programmer) turn their OWN study material into a
   git clone https://github.com/kayomarz97/studyfeed-public
   cd studyfeed-public
 Use its REAL files — never guess the format. Use YOUR OWN model/subscription for all AI work: do
-NOT ask for or use an Anthropic API key.
+NOT ask for or use ANY paid API key (no Anthropic, OpenAI or Google API key; no per-use billing).
+
+BEFORE you start, WARN me about usage limits: doing this on my subscription consumes my plan's
+usage allowance, and a LARGE file or many PDFs can exhaust my limit in a single run. If my material
+looks large, say so, suggest starting with a small chunk (one topic / a few pages), and work in
+batches rather than all at once.
 
 REPO LAYOUT — read these BEFORE doing anything (the pack format is defined here; do not invent it):
   spec/SPEC.md              the pack contract (how the app reads a pack)
